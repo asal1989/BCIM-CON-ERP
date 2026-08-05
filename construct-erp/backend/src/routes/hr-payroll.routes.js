@@ -88,11 +88,57 @@ const initTable = async () => {
     'reviewed_at TIMESTAMPTZ',
     'review_remarks TEXT',
   ]) {
-    const colName = col.split(' ')[0];
     await query(`ALTER TABLE hr_monthly_payroll ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
   }
 };
 runSchemaInit('hr-payroll', initTable);
+
+// Itemised CTC component columns. Registered as its OWN schema-init task, not
+// appended to initTable above: runSchemaInit records each name in
+// schema_migrations and never re-runs it, so anything added to the already-applied
+// 'hr-payroll' task would silently never execute on an existing deployment.
+//
+// Before this, everything beyond basic/hra/conveyance/medical/special collapsed
+// into the single `other_earnings` bucket, so a payslip could not show what the
+// employee is actually paid for. These mirror the components on
+// hr_employee_salaries and are pro-rated for attendance at run time.
+const initPayrollCtcColumns = async () => {
+  for (const col of [
+    'da NUMERIC(12,2) DEFAULT 0',
+    'washing_allowance NUMERIC(12,2) DEFAULT 0',
+    'lta NUMERIC(12,2) DEFAULT 0',
+    'mobile_allowance NUMERIC(12,2) DEFAULT 0',
+    'project_allowance NUMERIC(12,2) DEFAULT 0',
+    'city_special_allowance NUMERIC(12,2) DEFAULT 0',
+    'accommodation_allowance NUMERIC(12,2) DEFAULT 0',
+    'food_allowance NUMERIC(12,2) DEFAULT 0',
+    'transport_allowance NUMERIC(12,2) DEFAULT 0',
+    'conveyance_allowance NUMERIC(12,2) DEFAULT 0',
+    'incentive NUMERIC(12,2) DEFAULT 0',
+    // Employer-side CTC components. `employer_pf_ctc` is the CTC-charged figure
+    // (PF + EDLI + admin); the pre-existing `pf_employer` stays the statutory
+    // calc and the two are deliberately kept separate.
+    'employer_pf_ctc NUMERIC(12,2) DEFAULT 0',
+    'gratuity NUMERIC(12,2) DEFAULT 0',
+    'edli NUMERIC(12,2) DEFAULT 0',
+    'epf_admin NUMERIC(12,2) DEFAULT 0',
+    // Recoveries that existed on the pay sheet but nowhere in the ERP.
+    'mess_deduction NUMERIC(12,2) DEFAULT 0',
+    'accommodation_deduction NUMERIC(12,2) DEFAULT 0',
+    // Attendance detail, so the payroll row is self-explaining without having
+    // to re-query hr_attendance months later.
+    'absent_days NUMERIC(5,1) DEFAULT 0',
+    'cl_availed NUMERIC(5,1) DEFAULT 0',
+    'sl_availed NUMERIC(5,1) DEFAULT 0',
+    'el_availed NUMERIC(5,1) DEFAULT 0',
+    'total_leave_availed NUMERIC(5,1) DEFAULT 0',
+    // Unprorated gross for this month, for reference against the pro-rated one.
+    'full_gross NUMERIC(12,2) DEFAULT 0',
+  ]) {
+    await query(`ALTER TABLE hr_monthly_payroll ADD COLUMN IF NOT EXISTS ${col}`);
+  }
+};
+runSchemaInit('hr-payroll-ctc-columns', initPayrollCtcColumns);
 
 // ─── Statutory calc helpers ──────────────────────────────────────────────────
 const PF_CEILING  = 15000;
@@ -243,11 +289,21 @@ router.post('/run', async (req, res) => {
               u.name as employee_name,
               es.basic, es.hra, es.conveyance, es.medical,
               es.special_allowance, es.other_allowance, es.gross_monthly,
-              es.pf_applicable, es.esi_applicable, es.pt_applicable
+              es.pf_applicable, es.esi_applicable, es.pt_applicable,
+              es.vda, es.washing_allowance, es.lta, es.mobile_allowance,
+              es.project_allowance, es.city_special_allowance, es.accommodation_allowance,
+              es.food_allowance, es.transport_allowance, es.conveyance_allowance,
+              es.incentive, es.employer_pf, es.gratuity, es.edli, es.epf_admin,
+              es.mess_deduction, es.accommodation_deduction
        FROM users u
        JOIN LATERAL (
          SELECT basic, hra, conveyance, medical, special_allowance, other_allowance,
-                gross_monthly, pf_applicable, esi_applicable, pt_applicable
+                gross_monthly, pf_applicable, esi_applicable, pt_applicable,
+                vda, washing_allowance, lta, mobile_allowance,
+                project_allowance, city_special_allowance, accommodation_allowance,
+                food_allowance, transport_allowance, conveyance_allowance,
+                incentive, employer_pf, gratuity, edli, epf_admin,
+                mess_deduction, accommodation_deduction
          FROM hr_employee_salaries
          WHERE user_id = u.id
            AND effective_from <= make_date($3,$1,1)
@@ -360,6 +416,27 @@ router.post('/run', async (req, res) => {
       );
       const a = att.rows[0];
       const paidDays = parseFloat(a.present || 0) + parseFloat(a.half_day || 0) * 0.5 + parseFloat(a.on_leave || 0);
+      const absentDays = parseFloat(a.absent || 0);
+
+      // CL/SL/EL availed this month — reported on the pay sheet alongside LOP so
+      // the reviewer can see WHY paid days differ from working days. Counted from
+      // approved leave requests overlapping the payroll month rather than from
+      // hr_attendance, which records only a generic 'leave' status without type.
+      const leaveByType = await query(
+        `SELECT lt.code, COALESCE(SUM(lr.days),0) AS days
+           FROM hr_leave_requests lr
+           JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+          WHERE lr.user_id = $1 AND lr.status = 'approved'
+            AND lr.from_date <= make_date($3, $2, 1) + INTERVAL '1 month' - INTERVAL '1 day'
+            AND lr.to_date   >= make_date($3, $2, 1)
+          GROUP BY lt.code`,
+        [emp.user_id, m, y]
+      );
+      const leaveDays = Object.fromEntries(leaveByType.rows.map(r => [r.code, parseFloat(r.days || 0)]));
+      const clAvailed = leaveDays.CL || 0;
+      const slAvailed = leaveDays.SL || 0;
+      const elAvailed = leaveDays.EL || 0;
+      const totalLeaveAvailed = clAvailed + slAvailed + elAvailed;
 
       // Manual LOP adjustments (hr_lop_days) — 'lop'/'retrospective' add extra
       // unpaid days beyond what attendance alone shows; 'reversal' cancels LOP
@@ -382,11 +459,32 @@ router.post('/run', async (req, res) => {
 
       // Pro-rate salary if LOP (cap at 1.0 — Sunday/holiday swipes can push paidDays > workDays)
       const lopFactor = workDays > 0 ? Math.min(1, effectivePaidDays / workDays) : 1;
-      const basic = Math.round(parseFloat(emp.basic || 0) * lopFactor);
-      const hra   = Math.round(parseFloat(emp.hra   || 0) * lopFactor);
-      const conv  = Math.round(parseFloat(emp.conveyance || 0) * lopFactor);
-      const med   = Math.round(parseFloat(emp.medical || 0) * lopFactor);
-      const spec  = Math.round(parseFloat(emp.special_allowance || 0) * lopFactor);
+      const pro   = (v) => Math.round(parseFloat(v || 0) * lopFactor);
+      const basic = pro(emp.basic);
+      const hra   = pro(emp.hra);
+      const conv  = pro(emp.conveyance);
+      const med   = pro(emp.medical);
+      const spec  = pro(emp.special_allowance);
+
+      // Every other CTC component, pro-rated on the same LOP factor so the
+      // itemised payslip lines always reconcile to the pro-rated gross.
+      const da        = pro(emp.vda);
+      const washing   = pro(emp.washing_allowance);
+      const lta       = pro(emp.lta);
+      const mobile    = pro(emp.mobile_allowance);
+      const project   = pro(emp.project_allowance);
+      const citySpec  = pro(emp.city_special_allowance);
+      const accom     = pro(emp.accommodation_allowance);
+      const food      = pro(emp.food_allowance);
+      const transport = pro(emp.transport_allowance);
+      const convAllow = pro(emp.conveyance_allowance);
+      const incentive = pro(emp.incentive);
+      // Employer-side CTC figures — informational on the payslip, never deducted
+      // from the employee, so they follow the same proration as the earnings.
+      const employerPfCtc = pro(emp.employer_pf);
+      const gratuity      = pro(emp.gratuity);
+      const edli          = pro(emp.edli);
+      const epfAdmin      = pro(emp.epf_admin);
       // Gross = the configured monthly gross (gross_monthly), pro-rated for
       // attendance. gross_monthly already includes ALL BCIM earning components
       // (project/accommodation/food/transport/LTA/incentive/etc). Summing only
@@ -397,9 +495,16 @@ router.post('/run', async (req, res) => {
         + Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
       const grossMonthly = Math.round(parseFloat(emp.gross_monthly || 0) * lopFactor);
       const gross = grossMonthly > 0 ? grossMonthly : componentSum;
-      // Remaining allowances (everything beyond the itemised basic/hra/med/spec)
-      // are lumped into "other" so the stored components reconcile to gross.
-      const other = Math.max(0, gross - (basic + hra + conv + med + spec));
+      // Unprorated entitlement, kept for reference so a reviewer can see at a
+      // glance how much LOP cost the employee without recomputing it.
+      const fullGross = Math.round(parseFloat(emp.gross_monthly || 0));
+      // "Other" is now only the genuine remainder — everything the itemised
+      // component columns above don't already account for. Before those columns
+      // existed this bucket absorbed the whole allowance structure, which is why
+      // payslips could not break the pay down.
+      const itemised = basic + hra + conv + med + spec + da + washing + lta + mobile
+        + project + citySpec + accom + food + transport + convAllow + incentive;
+      const other = Math.max(0, gross - itemised);
 
       // Statutory deductions
       // ESI eligibility is assessed on configured gross_monthly (not pro-rated),
@@ -431,26 +536,56 @@ router.post('/run', async (req, res) => {
       const prevAdv = parseFloat(existing.rows[0]?.advance_deduction || 0)
                     + parseFloat(existing.rows[0]?.other_deductions || 0);
 
-      const totalDed = pf.emp + esi.emp + pt + loanDed + prevTds + prevAdv;
+      // Accommodation/mess recoveries are FLAT, never pro-rated: verified on the
+      // Jul-2026 pay sheet, where every employee carrying LOP (3, 6, 2 days …)
+      // was still recovered the full standard ₹4,000–4,500 accommodation and
+      // ₹3,250 mess. They are a fixed facility charge, not an earned amount.
+      const messDed  = parseFloat(emp.mess_deduction || 0);
+      const accomDed = parseFloat(emp.accommodation_deduction || 0);
+
+      const totalDed = pf.emp + esi.emp + pt + loanDed + prevTds + prevAdv + messDed + accomDed;
       const netPay   = gross - totalDed;
 
+      // Built from a keyed map rather than a positional list: this row now carries
+      // 45+ columns, and hand-numbering $1…$45 twice (once for VALUES, once for
+      // the ON CONFLICT SET) is exactly where a silent column-shift bug would hide
+      // in payroll figures. company_id/user_id/month/year are the conflict key and
+      // are written on insert only.
+      const payrollRow = {
+        working_days: workDays, paid_days: effectivePaidDays, lop_days: lopDays,
+        basic, hra, conveyance: conv, medical: med, special_allowance: spec,
+        da, washing_allowance: washing, lta, mobile_allowance: mobile,
+        project_allowance: project, city_special_allowance: citySpec,
+        accommodation_allowance: accom, food_allowance: food,
+        transport_allowance: transport, conveyance_allowance: convAllow,
+        incentive,
+        other_earnings: other, gross_earnings: gross, full_gross: fullGross,
+        employer_pf_ctc: employerPfCtc, gratuity, edli, epf_admin: epfAdmin,
+        pf_employee: pf.emp, pf_employer: pf.er,
+        esi_employee: esi.emp, esi_employer: esi.er, pt,
+        loan_deduction: loanDed,
+        mess_deduction: messDed, accommodation_deduction: accomDed,
+        absent_days: absentDays, cl_availed: clAvailed, sl_availed: slAvailed,
+        el_availed: elAvailed, total_leave_availed: totalLeaveAvailed,
+        total_deductions: totalDed, net_pay: netPay,
+        status: 'draft',
+      };
+      const keyCols = ['company_id', 'user_id', 'month', 'year'];
+      const keyVals = [req.user.company_id, emp.user_id, m, y];
+      const dataCols = Object.keys(payrollRow);
+      const allCols  = [...keyCols, ...dataCols];
+      const allVals  = [...keyVals, ...dataCols.map(c => payrollRow[c])];
+      const placeholders = allCols.map((_, i) => `$${i + 1}`).join(',');
+      const updateSet = dataCols
+        .map(c => `${c}=$${keyCols.length + dataCols.indexOf(c) + 1}`)
+        .join(', ');
+
       const { rows } = await query(
-        `INSERT INTO hr_monthly_payroll
-         (company_id, user_id, month, year, working_days, paid_days, lop_days,
-          basic, hra, conveyance, medical, special_allowance, gross_earnings,
-          pf_employee, pf_employer, esi_employee, esi_employer, pt, loan_deduction,
-          total_deductions, net_pay)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-         ON CONFLICT (user_id, month, year) DO UPDATE SET
-           working_days=$5, paid_days=$6, lop_days=$7,
-           basic=$8, hra=$9, conveyance=$10, medical=$11, special_allowance=$12, gross_earnings=$13,
-           pf_employee=$14, pf_employer=$15, esi_employee=$16, esi_employer=$17, pt=$18,
-           loan_deduction=$19, total_deductions=$20, net_pay=$21, status='draft'
+        `INSERT INTO hr_monthly_payroll (${allCols.join(',')})
+         VALUES (${placeholders})
+         ON CONFLICT (user_id, month, year) DO UPDATE SET ${updateSet}
          RETURNING *`,
-        [req.user.company_id, emp.user_id, m, y, workDays, effectivePaidDays, lopDays,
-         basic, hra, conv, med, spec, gross,
-         pf.emp, pf.er, esi.emp, esi.er, pt, loanDed,
-         totalDed, netPay]
+        allVals
       );
       generated.push(rows[0]);
     }
@@ -697,15 +832,31 @@ router.get('/:id/payslip', async (req, res) => {
     const { rows } = await query(
       `SELECT p.*, u.name as employee_name, u.employee_code, u.email,
               ep.pan_number, ep.uan_number, ep.bank_name, ep.bank_account_number, ep.bank_ifsc,
-              ep.date_of_joining, dep.name as department_name, des.name as designation_name,
-              c.name as company_name
+              ep.date_of_joining, ep.work_location, dep.name as department_name, des.name as designation_name,
+              c.name as company_name,
+              m.basic AS m_basic, m.vda AS m_da, m.hra AS m_hra,
+              m.conveyance_allowance AS m_conveyance_allowance, m.medical AS m_medical,
+              m.washing_allowance AS m_washing_allowance, m.lta AS m_lta,
+              m.mobile_allowance AS m_mobile_allowance, m.project_allowance AS m_project_allowance,
+              m.city_special_allowance AS m_city_special_allowance,
+              m.accommodation_allowance AS m_accommodation_allowance, m.food_allowance AS m_food_allowance,
+              m.transport_allowance AS m_transport_allowance, m.special_allowance AS m_special_allowance,
+              m.incentive AS m_incentive, m.gross_monthly AS m_gross_monthly
        FROM hr_monthly_payroll p
        JOIN users u ON u.id = p.user_id
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        LEFT JOIN hr_departments dep ON dep.id = ep.department_id
        LEFT JOIN hr_designations des ON des.id = ep.designation_id
        LEFT JOIN companies c ON c.id = p.company_id
-       WHERE p.id = $1 AND p.company_id = $2`,
+       -- "Master" figures: the entitled (unprorated) salary in force for this
+       -- payroll month, matching the "Master" column on the real BCIM payslip
+       -- alongside the pro-rated "Actual" figures already on p.*.
+       LEFT JOIN hr_employee_salaries m ON m.user_id = p.user_id
+         AND m.effective_from <= make_date(p.year, p.month, 1) + INTERVAL '1 month' - INTERVAL '1 day'
+         AND (m.effective_to IS NULL OR m.effective_to >= make_date(p.year, p.month, 1))
+       WHERE p.id = $1 AND p.company_id = $2
+       ORDER BY m.effective_from DESC
+       LIMIT 1`,
       [req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Payroll not found' });

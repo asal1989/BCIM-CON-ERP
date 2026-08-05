@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Calculator, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Download, Edit2,
-  Eye, IndianRupee, MoreVertical, Plus, RotateCcw, Search, TrendingUp, Upload, Users, Utensils, Wallet, X,
+  Eye, Home, IndianRupee, MoreVertical, Plus, RotateCcw, Search, TrendingUp, Upload, Users, Utensils, Wallet, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { hrEmployeesAPI, hrSalaryAPI } from '../../api/client';
@@ -24,6 +24,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
     structure_id: editSalary.structure_id || structures[0]?.id || '',
     ctc_monthly: editSalary.ctc_annual ? String(Math.round(Number(editSalary.ctc_annual) / 12)) : '',
     mess_deduction: editSalary.mess_deduction || '',
+    accommodation_deduction: editSalary.accommodation_deduction || '',
     basic_reversal: editSalary.basic_reversal || '',
     pf_applicable: editSalary.pf_applicable ?? true,
     esi_applicable: editSalary.esi_applicable ?? false,
@@ -31,15 +32,17 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
     effective_from: (editSalary.effective_from || today()).slice(0, 10),
   } : {
     user_id:'', structure_id:structures[0]?.id||'',
-    ctc_monthly:'', mess_deduction:'', basic_reversal:'', pf_applicable:true, esi_applicable:false, pt_applicable:true,
+    ctc_monthly:'', mess_deduction:'', accommodation_deduction:'', basic_reversal:'',
+    pf_applicable:true, esi_applicable:false, pt_applicable:true,
     effective_from:today(),
   });
   const [breakup, setBreakup] = useState(null);
   const update = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const messDeduction = Number(form.mess_deduction||0);
+  const accommodationDeduction = Number(form.accommodation_deduction||0);
   const basicReversal = Number(form.basic_reversal||0);
-  const netPayAfterMess = breakup ? breakup.net_pay_monthly - messDeduction + basicReversal : 0;
+  const netPayAfterMess = breakup ? breakup.net_pay_monthly - messDeduction - accommodationDeduction + basicReversal : 0;
 
   const runCalculate = async () => {
     if (!form.ctc_monthly || Number(form.ctc_monthly) <= 0) return toast.error('Enter a monthly CTC to calculate');
@@ -77,7 +80,11 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
       employer_pf:breakup.employer_pf, employee_pf:breakup.employee_pf,
       gratuity:breakup.gratuity, pt_deduction:breakup.pt_deduction,
       incentive:breakup.incentive, edli:breakup.edli, epf_admin:breakup.epf_admin,
-      mess_deduction:messDeduction, basic_reversal:basicReversal, net_pay_monthly:netPayAfterMess,
+      city_special_allowance:breakup.city_special_allowance, conveyance_allowance:breakup.conveyance_allowance,
+      outstation_allowance:breakup.outstation_allowance, fixed_site_allowance:breakup.fixed_site_allowance,
+      variable_site_allowance:breakup.variable_site_allowance, value_of_food_concession:breakup.value_of_food_concession,
+      mess_deduction:messDeduction, accommodation_deduction:accommodationDeduction,
+      basic_reversal:basicReversal, net_pay_monthly:netPayAfterMess,
     });
   };
 
@@ -149,6 +156,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
                   ['Mobile Allowance', breakup.mobile_allowance],
                   ['Incentive', breakup.incentive],
                   ['Washing Allowance', breakup.washing_allowance],
+                  ['City Special Allowance', breakup.city_special_allowance],
                   ['Special Allowance', breakup.special_allowance],
                 ].map(([l,v])=>(
                   <div key={l} className="bg-white px-3 py-2">
@@ -186,6 +194,12 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
                     className="w-full text-sm font-black text-gray-900 border border-gray-200 rounded-lg px-2 py-1 mt-0.5 focus:outline-none focus:border-blue-400"
                     placeholder="0"/>
                 </div>
+                <div className="bg-white px-3 py-2">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">Accommodation Deduction</div>
+                  <input type="number" value={form.accommodation_deduction} onChange={e=>update('accommodation_deduction',e.target.value)}
+                    className="w-full text-sm font-black text-gray-900 border border-gray-200 rounded-lg px-2 py-1 mt-0.5 focus:outline-none focus:border-blue-400"
+                    placeholder="0"/>
+                </div>
               </div>
             </div>
           )}
@@ -208,6 +222,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
             <span className="text-gray-500">Net Pay Monthly: </span>
             <strong className="text-gray-900">₹{fmt(netPayAfterMess)}</strong>
             {messDeduction>0 && <span className="text-gray-400 text-xs ml-1">(after ₹{fmt(messDeduction)} mess)</span>}
+            {accommodationDeduction>0 && <span className="text-gray-400 text-xs ml-1">(after ₹{fmt(accommodationDeduction)} accommodation)</span>}
             {basicReversal>0 && <span className="text-gray-400 text-xs ml-1">(plus ₹{fmt(basicReversal)} reversal)</span>}
             <span className="mx-3 text-gray-200">|</span>
             <span className="text-gray-500">Annual CTC: </span>
@@ -256,7 +271,59 @@ function MessEditModal({ employee, salary, onClose, onSave, saving }) {
               placeholder="0"/>
             <p className="text-xs text-gray-400 mt-1.5">
               Previous: ₹{fmt(salary?.mess_deduction || 0)} &nbsp;|&nbsp;
-              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(amount)||0) + (Number(salary?.basic_reversal)||0))}
+              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(amount)||0) - (Number(salary?.accommodation_deduction)||0) + (Number(salary?.basic_reversal)||0))}
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">
+              Cancel
+            </button>
+            <button onClick={()=>onSave(Number(amount)||0)} disabled={saving}
+              className="flex-1 py-2.5 text-white rounded-xl text-sm font-black disabled:opacity-50 transition-opacity"
+              style={{background:`linear-gradient(135deg,#2563EB,#0A1F5C)`}}>
+              {saving?'Saving…':'Save'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AccommodationDeductionEditModal({ employee, salary, onClose, onSave, saving }) {
+  const [amount, setAmount] = useState(String(salary?.accommodation_deduction ?? 0));
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div initial={{opacity:0,scale:0.97}} animate={{opacity:1,scale:1}} transition={{duration:0.2}}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        <div className="px-6 py-4 flex items-center justify-between"
+          style={{background:`linear-gradient(135deg,#0A1F5C,#1e3a8a)`}}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+              <Home className="w-4 h-4 text-white"/>
+            </div>
+            <div>
+              <p className="font-black text-white text-sm">Accommodation Deduction</p>
+              <p className="text-white/55 text-xs">{employee.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center">
+            <X className="w-4 h-4 text-white"/>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5">
+              Deduction Amount (₹) — this month
+            </label>
+            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+              min="0" autoFocus
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-2xl font-black text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
+              placeholder="0"/>
+            <p className="text-xs text-gray-400 mt-1.5">
+              Previous: ₹{fmt(salary?.accommodation_deduction || 0)} &nbsp;|&nbsp;
+              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) - (Number(amount)||0) + (Number(salary?.basic_reversal)||0))}
             </p>
           </div>
           <div className="flex gap-3 pt-1">
@@ -308,7 +375,7 @@ function BasicReversalEditModal({ employee, salary, onClose, onSave, saving }) {
               placeholder="0"/>
             <p className="text-xs text-gray-400 mt-1.5">
               Previous: ₹{fmt(salary?.basic_reversal || 0)} &nbsp;|&nbsp;
-              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) + (Number(amount)||0))}
+              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) - (Number(salary?.accommodation_deduction)||0) + (Number(amount)||0))}
             </p>
           </div>
           <div className="flex gap-3 pt-1">

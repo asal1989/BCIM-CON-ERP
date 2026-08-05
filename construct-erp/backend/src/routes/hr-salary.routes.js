@@ -119,15 +119,57 @@ const initTables = async () => {
 };
 runSchemaInit('hr-salary', initTables);
 
+// Components present in the GreytHR "CTC Breakup Report" master that had no home
+// in this table. Most are zero across the current 68-employee roster (city
+// special: 6; conveyance/outstation/site allowances: none) but the columns must
+// exist so an import round-trips without silently dropping data.
+//
+// Registered as its own schema-init task rather than appended to initTables:
+// runSchemaInit never re-runs an already-applied name, so additions to the
+// 'hr-salary' task would never execute on an existing deployment.
+const initSalaryCtcColumns = async () => {
+  const cols = [
+    ['city_special_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['conveyance_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['employer_esi', 'NUMERIC(12,2) DEFAULT 0'],
+    ['outstation_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['fixed_site_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['variable_site_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['value_of_food_concession', 'NUMERIC(12,2) DEFAULT 0'],
+    // Accommodation recovery — the counterpart to mess_deduction. Appears on the
+    // monthly pay sheet as a real deduction but had no field anywhere in the ERP.
+    ['accommodation_deduction', 'NUMERIC(12,2) DEFAULT 0'],
+  ];
+  for (const [col, def] of cols) {
+    await query(`ALTER TABLE hr_employee_salaries ADD COLUMN IF NOT EXISTS ${col} ${def}`);
+  }
+};
+runSchemaInit('hr-salary-ctc-columns', initSalaryCtcColumns);
+
 // ─── CTC Breakup calculator — BCIM Salary Structure (from GreytHR extract) ───
-// Basic = max(40% of CTC, ₹15,000). Allowances are % of Basic (with caps),
-// derived from the BCIM GreytHR salary structure for site staff. Special
-// Allowance is a fixed ₹287/month for every staff member (not a CTC-balancing
-// figure) — Basic Reversal is the manual per-employee adjustment instead.
-// Employer side: PF 12%, EDLI ₹75, EPF Admin ₹75, Gratuity 4.81%.
-// Employee deductions: PF 12% (capped at ₹15,000 PF wage), PT ₹200.
+// Basic = max(40% of CTC, ₹15,000). Employer side: PF 12%, EDLI ₹75,
+// EPF Admin ₹75, Gratuity 4.81%. Employee deductions: PF 12% (capped at the
+// ₹15,000 PF wage ceiling), PT ₹200.
+//
+// SCOPE OF THIS FUNCTION — read before "fixing" a percentage below.
+// These figures were checked against the GreytHR "CTC Breakup Report" master
+// for the full 68-employee roster. Only three relationships actually hold:
+//
+//   Gratuity  4.81% of Basic  →  67/67 rows exact
+//   LTA       8.33% of Basic  →  66/66 rows exact
+//   Special   CTC − everything else (a balancing plug) → 58/68 exact, and the
+//             other 10 differ by exactly ₹1,950, the employer-PF constant those
+//             rows carry as 0 while still charging it to CTC.
+//
+// Every other allowance is negotiated per employee and does NOT follow any
+// percentage: HRA lands on 20/25/30/40% of Basic with no derivable rule;
+// washing matches 5% on only 45 of 66 rows (the rest sit at 1–2%); medical
+// 50/66; project special 25/66. The percentages below are therefore SUGGESTED
+// STARTING VALUES for first-time CTC entry only — HR overrides them per
+// employee on the salary screen, and the imported master values are authoritative.
+// Do not "correct" them against a small sample; the full-roster counts above
+// are the evidence, and a sample of ~20 rows will mislead you.
 const PF_WAGE_CEILING = 15000;
-const SPECIAL_ALLOWANCE_FIXED = 287;
 function calculateCTCBreakup(ctcMonthly, opts = {}) {
   const ctc = parseFloat(ctcMonthly) || 0;
   const ptDeduction = opts.pt_deduction ?? 200;
@@ -164,12 +206,31 @@ function calculateCTCBreakup(ctcMonthly, opts = {}) {
   const epfAdmin   = 75;                          // EPF Admin ₹75/month (fixed)
   const gratuity   = Math.round(basic * 0.0481);  // Gratuity 4.81%
 
-  const earningsBeforeSpecial = basic + hra + projectAllowance + accommodationAllowance
-    + foodAllowance + transportAllowance + lta + medicalAllowance
-    + mobileAllowance + incentive + washingAllowance;
+  // Optional components — zero for the current roster but carried through so an
+  // imported master round-trips and the plug below stays balanced.
+  const vda                    = opts.vda ?? 0;
+  const conveyanceAllowance    = opts.conveyance_allowance ?? 0;
+  const citySpecialAllowance   = opts.city_special_allowance ?? 0;
+  const outstationAllowance    = opts.outstation_allowance ?? 0;
+  const fixedSiteAllowance     = opts.fixed_site_allowance ?? 0;
+  const variableSiteAllowance  = opts.variable_site_allowance ?? 0;
+  const valueOfFoodConcession  = opts.value_of_food_concession ?? 0;
 
-  // Special Allowance — fixed ₹287/month for all staff (not CTC-derived)
-  const specialAllowance = SPECIAL_ALLOWANCE_FIXED;
+  const earningsBeforeSpecial = basic + vda + hra + projectAllowance + accommodationAllowance
+    + foodAllowance + transportAllowance + lta + medicalAllowance
+    + mobileAllowance + incentive + washingAllowance + educationAllowance
+    + conveyanceAllowance + citySpecialAllowance + outstationAllowance
+    + fixedSiteAllowance + variableSiteAllowance + valueOfFoodConcession;
+
+  // Special Allowance — the CTC-balancing plug, NOT a fixed amount. It absorbs
+  // whatever is left of monthly CTC after every other component (including the
+  // employer-side contributions, which are part of CTC) is accounted for. This
+  // was previously hardcoded to ₹287, which matched no employee in the master:
+  // real values range from ₹159 to ₹190,891 and track CTC almost perfectly under
+  // this formula. Floored at 0 so an over-specified breakup can't go negative.
+  const specialAllowance = Math.max(0, Math.round(
+    ctc - (earningsBeforeSpecial + employerPf + edli + epfAdmin + gratuity + employerEsic + employerLwf)
+  ));
   // Basic Reversal — manual per-employee earning (Part A), e.g. refunding a
   // previously over-deducted basic. Added to gross/net pay, not subtracted.
   const basicReversal = opts.basic_reversal ?? 0;
@@ -179,12 +240,15 @@ function calculateCTCBreakup(ctcMonthly, opts = {}) {
 
   return {
     ctc_monthly: ctc, ctc_annual: ctc * 12,
-    basic, vda: 0, hra,
+    basic, vda, hra,
     project_allowance: projectAllowance, accommodation_allowance: accommodationAllowance,
     food_allowance: foodAllowance, transport_allowance: transportAllowance,
     lta, medical_allowance: medicalAllowance, mobile_allowance: mobileAllowance,
     incentive, washing_allowance: washingAllowance,
-    education_allowance: 0, special_allowance: specialAllowance,
+    education_allowance: educationAllowance, special_allowance: specialAllowance,
+    conveyance_allowance: conveyanceAllowance, city_special_allowance: citySpecialAllowance,
+    outstation_allowance: outstationAllowance, fixed_site_allowance: fixedSiteAllowance,
+    variable_site_allowance: variableSiteAllowance, value_of_food_concession: valueOfFoodConcession,
     gross_monthly: grossSalary,
     employer_pf: employerPf, edli, epf_admin: epfAdmin, gratuity,
     employer_esic: employerEsic, employer_lwf: employerLwf,
