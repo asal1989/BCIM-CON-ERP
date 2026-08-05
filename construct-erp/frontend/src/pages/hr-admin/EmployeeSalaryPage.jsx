@@ -375,7 +375,7 @@ function BasicReversalEditModal({ employee, salary, onClose, onSave, saving }) {
               placeholder="0"/>
             <p className="text-xs text-gray-400 mt-1.5">
               Previous: ₹{fmt(salary?.basic_reversal || 0)} &nbsp;|&nbsp;
-              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) - (Number(salary?.accommodation_deduction)||0) + (Number(amount)||0))}
+              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) - (Number(salary?.accommodation_deduction)||0) + (Number(amount)||0) + (Number(salary?.incentive)||0))}
             </p>
           </div>
           <div className="flex gap-3 pt-1">
@@ -395,7 +395,59 @@ function BasicReversalEditModal({ employee, salary, onClose, onSave, saving }) {
   );
 }
 
-function RowActionsMenu({ sal, emp, onView, onMess, onReversal }) {
+function IncentiveEditModal({ employee, salary, onClose, onSave, saving }) {
+  const [amount, setAmount] = useState(String(salary?.incentive ?? 0));
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div initial={{opacity:0,scale:0.97}} animate={{opacity:1,scale:1}} transition={{duration:0.2}}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        <div className="px-6 py-4 flex items-center justify-between"
+          style={{background:`linear-gradient(135deg,#0A1F5C,#1e3a8a)`}}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-white"/>
+            </div>
+            <div>
+              <p className="font-black text-white text-sm">Incentive</p>
+              <p className="text-white/55 text-xs">{employee.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center">
+            <X className="w-4 h-4 text-white"/>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5">
+              Incentive Amount (₹) — this month
+            </label>
+            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+              min="0" autoFocus
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-2xl font-black text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
+              placeholder="0"/>
+            <p className="text-xs text-gray-400 mt-1.5">
+              Previous: ₹{fmt(salary?.incentive || 0)} &nbsp;|&nbsp;
+              Net Pay after this change: ₹{fmt((Number(salary?.gross_monthly)||0) - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0) - (Number(salary?.mess_deduction)||0) - (Number(salary?.accommodation_deduction)||0) + (Number(salary?.basic_reversal)||0) + (Number(amount)||0))}
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">
+              Cancel
+            </button>
+            <button onClick={()=>onSave(Number(amount)||0)} disabled={saving}
+              className="flex-1 py-2.5 text-white rounded-xl text-sm font-black disabled:opacity-50 transition-opacity"
+              style={{background:`linear-gradient(135deg,#2563EB,#0A1F5C)`}}>
+              {saving?'Saving…':'Save'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function RowActionsMenu({ sal, emp, onView, onMess, onReversal, onAccommodation, onIncentive }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -414,6 +466,14 @@ function RowActionsMenu({ sal, emp, onView, onMess, onReversal }) {
           <button onClick={() => { onMess(); setOpen(false); }}
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
             <Utensils className="w-3.5 h-3.5 text-gray-400" /> Edit Mess Deduction
+          </button>
+          <button onClick={() => { onAccommodation(); setOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
+            <Home className="w-3.5 h-3.5 text-gray-400" /> Edit Accommodation Deduction
+          </button>
+          <button onClick={() => { onIncentive(); setOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
+            <TrendingUp className="w-3.5 h-3.5 text-gray-400" /> Edit Incentive
           </button>
           <button onClick={() => { onReversal(); setOpen(false); }}
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
@@ -498,6 +558,8 @@ export default function EmployeeSalaryPage() {
   const [editSalary, setEditSalary] = useState(null); // salary row being edited
   const [messEdit,  setMessEdit]  = useState(null); // { employee, salary }
   const [reversalEdit, setReversalEdit] = useState(null); // { employee, salary }
+  const [accommodationEdit, setAccommodationEdit] = useState(null); // { employee, salary }
+  const [incentiveEdit, setIncentiveEdit] = useState(null); // { employee, salary }
   const [importResult, setImportResult] = useState(null); // { total, imported, skipped }
   const importInputRef = useRef(null);
 
@@ -587,6 +649,18 @@ export default function EmployeeSalaryPage() {
     mutationFn:({id, basic_reversal})=>hrSalaryAPI.updateBasicReversal(id, { basic_reversal }),
     onSuccess:()=>{ toast.success('Basic reversal updated'); setReversalEdit(null); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
     onError:(e)=>toast.error(e.response?.data?.error||'Failed to update basic reversal'),
+  });
+
+  const accommodationMut = useMutation({
+    mutationFn:({id, accommodation_deduction})=>hrSalaryAPI.updateAccommodationDeduction(id, { accommodation_deduction }),
+    onSuccess:()=>{ toast.success('Accommodation deduction updated'); setAccommodationEdit(null); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
+    onError:(e)=>toast.error(e.response?.data?.error||'Failed to update accommodation deduction'),
+  });
+
+  const incentiveMut = useMutation({
+    mutationFn:({id, incentive})=>hrSalaryAPI.updateIncentive(id, { incentive }),
+    onSuccess:()=>{ toast.success('Incentive updated'); setIncentiveEdit(null); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
+    onError:(e)=>toast.error(e.response?.data?.error||'Failed to update incentive'),
   });
 
   const importMut = useMutation({
@@ -774,6 +848,8 @@ export default function EmployeeSalaryPage() {
                           sal={sal} emp={emp}
                           onMess={()=>setMessEdit({employee:emp,salary:sal})}
                           onReversal={()=>setReversalEdit({employee:emp,salary:sal})}
+                          onAccommodation={()=>setAccommodationEdit({employee:emp,salary:sal})}
+                          onIncentive={()=>setIncentiveEdit({employee:emp,salary:sal})}
                         />
                       </div>
                     </td>
@@ -845,6 +921,26 @@ export default function EmployeeSalaryPage() {
           saving={reversalMut.isPending}
           onClose={()=>setReversalEdit(null)}
           onSave={(amount)=>reversalMut.mutate({id:reversalEdit.salary.id, basic_reversal:amount})}
+        />
+      )}
+
+      {accommodationEdit && (
+        <AccommodationDeductionEditModal
+          employee={accommodationEdit.employee}
+          salary={accommodationEdit.salary}
+          saving={accommodationMut.isPending}
+          onClose={()=>setAccommodationEdit(null)}
+          onSave={(amount)=>accommodationMut.mutate({id:accommodationEdit.salary.id, accommodation_deduction:amount})}
+        />
+      )}
+
+      {incentiveEdit && (
+        <IncentiveEditModal
+          employee={incentiveEdit.employee}
+          salary={incentiveEdit.salary}
+          saving={incentiveMut.isPending}
+          onClose={()=>setIncentiveEdit(null)}
+          onSave={(amount)=>incentiveMut.mutate({id:incentiveEdit.salary.id, incentive:amount})}
         />
       )}
 

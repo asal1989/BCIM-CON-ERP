@@ -364,7 +364,8 @@ router.patch('/employee-salaries/:id/mess-deduction', async (req, res) => {
     const { rows } = await query(
       `UPDATE hr_employee_salaries
           SET mess_deduction = $1,
-              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0) - $1 + COALESCE(basic_reversal,0)
+              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
+                - $1 - COALESCE(accommodation_deduction,0) + COALESCE(basic_reversal,0) + COALESCE(incentive,0)
         WHERE id = $2
         RETURNING id, mess_deduction, net_pay_monthly`,
       [parseFloat(mess_deduction) || 0, req.params.id]
@@ -386,7 +387,8 @@ router.patch('/employee-salaries/:id/basic-reversal', async (req, res) => {
     const { rows } = await query(
       `UPDATE hr_employee_salaries
           SET basic_reversal = $1,
-              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0) - COALESCE(mess_deduction,0) + $1
+              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
+                - COALESCE(mess_deduction,0) - COALESCE(accommodation_deduction,0) + $1 + COALESCE(incentive,0)
         WHERE id = $2
         RETURNING id, basic_reversal, net_pay_monthly`,
       [parseFloat(basic_reversal) || 0, req.params.id]
@@ -395,6 +397,53 @@ router.patch('/employee-salaries/:id/basic-reversal', async (req, res) => {
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// PATCH /:id/accommodation-deduction — same editable-column pattern as mess
+// deduction (the facility-recovery counterpart to it).
+router.patch('/employee-salaries/:id/accommodation-deduction', async (req, res) => {
+  try {
+    const { accommodation_deduction } = req.body;
+    if (accommodation_deduction === undefined || accommodation_deduction === null) {
+      return res.status(400).json({ error: 'accommodation_deduction is required' });
+    }
+    const { rows } = await query(
+      `UPDATE hr_employee_salaries
+          SET accommodation_deduction = $1,
+              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
+                - COALESCE(mess_deduction,0) - $1 + COALESCE(basic_reversal,0) + COALESCE(incentive,0)
+        WHERE id = $2
+        RETURNING id, accommodation_deduction, net_pay_monthly`,
+      [parseFloat(accommodation_deduction) || 0, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /:id/incentive — manual per-employee earning (Part A), same pattern as
+// basic reversal. Unlike CTC components, incentive is typically a variable
+// month-to-month figure an HR admin enters directly rather than something
+// derived from a CTC formula.
+router.patch('/employee-salaries/:id/incentive', async (req, res) => {
+  try {
+    const { incentive } = req.body;
+    if (incentive === undefined || incentive === null) {
+      return res.status(400).json({ error: 'incentive is required' });
+    }
+    const { rows } = await query(
+      `UPDATE hr_employee_salaries
+          SET incentive = $1,
+              net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
+                - COALESCE(mess_deduction,0) - COALESCE(accommodation_deduction,0)
+                + COALESCE(basic_reversal,0) + $1
+        WHERE id = $2
+        RETURNING id, incentive, net_pay_monthly`,
+      [parseFloat(incentive) || 0, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/employee-salaries', async (req, res) => {
   try {
     const { user_id } = req.query;
