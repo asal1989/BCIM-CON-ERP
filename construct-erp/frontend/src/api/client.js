@@ -2313,6 +2313,8 @@ export const essAPI = {
   requestLoan:          (data)         => api.post('/ess/loans', data),
   reimbursements:       ()             => api.get('/ess/reimbursements'),
   createReimbursement:  (data)         => api.post('/ess/reimbursements', data),
+  itStatement:          (params)       => api.get('/ess/it-statement', { params }),
+  salaryRevisions:      ()             => api.get('/ess/salary-revisions'),
 };
 
 export const notificationsAPI = {

@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Clock, Users, Award, BookOpen,
   Radio, Heart, MessageSquare, Send, Wallet, Receipt, Sparkles,
   CalendarDays, UserCheck, Briefcase, ArrowRight, RotateCcw, Inbox, Sun,
+  BarChart3, FileSpreadsheet, TrendingUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { essAPI, hrAdvancedAPI } from '../../api/client';
@@ -191,9 +192,12 @@ const TAB_ITEMS = [
   { id: 'profile',       label: 'Profile',        Icon: UserRound       },
   { id: 'attendance',    label: 'My Attendance',  Icon: CalendarCheck   },
   { id: 'leave',         label: 'Leave',          Icon: CalendarOff     },
-  { id: 'payslips',      label: 'Payroll',        Icon: BadgeIndianRupee},
-  { id: 'reimbursement', label: 'Reimbursements', Icon: Receipt         },
+  { id: 'payslips',      label: 'Payslips',       Icon: BadgeIndianRupee},
+  { id: 'ytd-reports',   label: 'YTD Reports',    Icon: BarChart3       },
+  { id: 'it-statement',  label: 'IT Statement',   Icon: FileSpreadsheet },
+  { id: 'salary-revision', label: 'Salary Revision', Icon: TrendingUp   },
   { id: 'loans',         label: 'Loans & Advances', Icon: Wallet        },
+  { id: 'reimbursement', label: 'Reimbursements', Icon: Receipt         },
   { id: 'documents',     label: 'My Documents',   Icon: FileText        },
   { id: 'hr-requests',   label: 'My Requests',    Icon: FolderUp        },
   { id: 'manager',       label: 'Manager Desk',   Icon: CheckCircle2    },
@@ -2177,6 +2181,192 @@ function PayslipsTab() {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    DOCUMENTS TAB
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+function YtdReportsTab() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
+  const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+  const ytd = useQuery({ queryKey: ['ess-ytd-reports', year], queryFn: () => essAPI.payrollYtd({ year }).then(r => r.data.data) });
+  const t = ytd.data?.totals || { gross: 0, deductions: 0, net: 0 };
+  const months = ytd.data?.months || [];
+
+  return (
+    <TabShell
+      bg="#F5F3FF"
+      gradient="linear-gradient(145deg,#2E1065 0%,#4C1D95 25%,#6D28D9 60%,#7C3AED 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(124,58,237,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(167,139,250,.15),transparent)"
+      icon={BarChart3}
+      label="Payroll"
+      title="YTD Reports"
+      subtitle={`Month-by-month earnings and deductions for ${year}`}
+      stats={[
+        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'YTD Deductions', value: `₹${t.deductions.toLocaleString('en-IN')}`, color: '#DC2626' },
+        { label: 'YTD Net', value: `₹${t.net.toLocaleString('en-IN')}`, color: '#7C3AED' },
+        { label: 'Months Processed', value: months.length, color: '#0F172A' },
+      ]}
+    >
+      <div style={{ ...GCA, padding:20 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+          <div>
+            <span style={STA}>Monthly Breakdown</span>
+            <p style={{ fontSize:11.5, color:'#64748B' }}>Approved and paid months for the selected year</p>
+          </div>
+          <select className={inputCls} style={{ maxWidth:110 }} value={year} onChange={e => setYear(Number(e.target.value))}>
+            {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <Table
+          columns={[
+            { key: 'month', label: 'Month', render: r => MONTH_NAMES[r.month - 1] || r.month },
+            { key: 'gross_earnings',   label: 'Gross',      render: r => `₹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
+            { key: 'total_deductions', label: 'Deductions', render: r => `₹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
+            { key: 'net_pay', label: 'Net Pay', render: r => (
+              <span style={{ fontWeight:700, color:ACCENT }}>₹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
+            )},
+            { key: 'paid_days', label: 'Paid Days' },
+            { key: 'lop_days',  label: 'LOP Days' },
+          ]}
+          rows={months}
+          empty={`No payroll records for ${year}`}
+        />
+      </div>
+    </TabShell>
+  );
+}
+
+function ITStatementTab() {
+  const now = new Date();
+  const currentFY = now.getMonth() + 1 >= 4 ? now.getFullYear() + 1 : now.getFullYear();
+  const [fy, setFy] = useState(currentFY);
+  const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
+  const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+  const stmt = useQuery({ queryKey: ['ess-it-statement', fy], queryFn: () => essAPI.itStatement({ year: fy }).then(r => r.data) });
+  const d = stmt.data?.data;
+
+  const ROW = { display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(0,0,0,0.05)', fontSize:12.5 };
+
+  return (
+    <TabShell
+      bg="#F5F3FF"
+      gradient="linear-gradient(145deg,#2E1065 0%,#4C1D95 25%,#6D28D9 60%,#7C3AED 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(124,58,237,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(167,139,250,.15),transparent)"
+      icon={FileSpreadsheet}
+      label="Payroll"
+      title="IT Statement"
+      subtitle={`Annual salary & TDS summary — FY ${stmt.data?.financial_year || ''}`}
+      stats={[
+        { label: 'Gross Income', value: `₹${Number(d?.total_gross||0).toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'Total TDS', value: `₹${Number(d?.total_tds||0).toLocaleString('en-IN')}`, color: '#DC2626' },
+        { label: 'Taxable Income', value: `₹${Number(d?.taxable_income||0).toLocaleString('en-IN')}`, color: '#7C3AED' },
+        { label: 'PAN', value: d?.pan_number || '--', color: '#0F172A' },
+      ]}
+    >
+      <div style={{ ...GCA, padding:20 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+          <div>
+            <span style={STA}>Financial Year</span>
+            <p style={{ fontSize:11.5, color:'#64748B' }}>Select the FY to view (April–March)</p>
+          </div>
+          <select className={inputCls} style={{ maxWidth:140 }} value={fy} onChange={e => setFy(Number(e.target.value))}>
+            {[currentFY, currentFY - 1, currentFY - 2].map(y => <option key={y} value={y}>{`FY ${y - 1}-${String(y).slice(-2)}`}</option>)}
+          </select>
+        </div>
+        {!d && !stmt.isLoading && (
+          <p style={{ textAlign:'center', fontSize:11.5, color:'#94A3B8', padding:'24px 0' }}>No processed payroll found for this financial year yet.</p>
+        )}
+        {d && (
+          <>
+            <span style={STA}>Earnings</span>
+            {[
+              ['Basic', d.total_basic], ['HRA', d.total_hra], ['Conveyance', d.total_conveyance],
+              ['Medical', d.total_medical], ['Special Allowance', d.total_special], ['Other Earnings', d.total_other_earnings],
+            ].map(([label, val]) => (
+              <div key={label} style={ROW}><span style={{ color:'#64748B' }}>{label}</span><span style={{ fontWeight:600 }}>₹{Number(val||0).toLocaleString('en-IN')}</span></div>
+            ))}
+            <div style={{ ...ROW, borderTop:'2px solid rgba(0,0,0,0.08)', borderBottom:'none', fontWeight:700 }}>
+              <span>Gross Total</span><span>₹{Number(d.total_gross||0).toLocaleString('en-IN')}</span>
+            </div>
+
+            <span style={{ ...STA, marginTop:20 }}>Deductions</span>
+            {[
+              ['Provident Fund', d.total_pf_employee], ['ESI', d.total_esi_employee],
+              ['Professional Tax', d.total_pt], ['TDS', d.total_tds], ['Loan Deduction', d.total_loan_deduction],
+            ].map(([label, val]) => (
+              <div key={label} style={ROW}><span style={{ color:'#64748B' }}>{label}</span><span style={{ fontWeight:600 }}>₹{Number(val||0).toLocaleString('en-IN')}</span></div>
+            ))}
+            <div style={{ ...ROW, borderTop:'2px solid rgba(0,0,0,0.08)', borderBottom:'none', fontWeight:700 }}>
+              <span>Total Deductions</span><span>₹{Number(d.total_deductions||0).toLocaleString('en-IN')}</span>
+            </div>
+
+            <div style={{ ...ROW, marginTop:20, background:'rgba(124,58,237,0.06)', borderRadius:10, padding:'12px 14px', border:'1px solid rgba(124,58,237,0.15)' }}>
+              <span style={{ fontWeight:700 }}>Standard Deduction</span><span style={{ fontWeight:700 }}>₹{Number(d.standard_deduction||0).toLocaleString('en-IN')}</span>
+            </div>
+            <div style={{ ...ROW, background:'rgba(124,58,237,0.06)', borderRadius:10, padding:'12px 14px', border:'1px solid rgba(124,58,237,0.15)', marginTop:8 }}>
+              <span style={{ fontWeight:700 }}>Taxable Income (approx.)</span><span style={{ fontWeight:700, color:'#7C3AED' }}>₹{Number(d.taxable_income||0).toLocaleString('en-IN')}</span>
+            </div>
+            <p style={{ marginTop:12, fontSize:10.5, color:'#94A3B8' }}>
+              Estimate for reference only — the official Form 16 is issued by HR after year-end reconciliation.
+            </p>
+          </>
+        )}
+      </div>
+    </TabShell>
+  );
+}
+
+const REVISION_REASON_LABEL = {
+  annual_review: 'Annual Review', promotion: 'Promotion', correction: 'Correction',
+  market_correction: 'Market Correction', performance: 'Performance',
+};
+
+function SalaryRevisionTab() {
+  const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
+  const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+  const revisions = useQuery({ queryKey: ['ess-salary-revisions'], queryFn: () => essAPI.salaryRevisions().then(unwrap) });
+  const rows = revisions.data || [];
+  const latest = rows[0];
+
+  return (
+    <TabShell
+      bg="#F5F3FF"
+      gradient="linear-gradient(145deg,#2E1065 0%,#4C1D95 25%,#6D28D9 60%,#7C3AED 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(124,58,237,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(167,139,250,.15),transparent)"
+      icon={TrendingUp}
+      label="Payroll"
+      title="Salary Revision"
+      subtitle="History of your compensation changes"
+      stats={[
+        { label: 'Revisions', value: rows.length, color: '#0F172A' },
+        { label: 'Current Basic', value: latest ? `₹${Number(latest.new_basic||0).toLocaleString('en-IN')}` : '--', color: '#0F172A' },
+        { label: 'Current CTC', value: latest?.new_ctc ? `₹${Number(latest.new_ctc).toLocaleString('en-IN')}` : '--', color: '#7C3AED' },
+        { label: 'Last Revised', value: latest ? String(latest.effective_from).slice(0,10) : '--', color: '#0F172A' },
+      ]}
+    >
+      <div style={{ ...GCA, padding:20 }}>
+        <span style={STA}>Revision History</span>
+        <p style={{ fontSize:11.5, color:'#64748B', marginBottom:14 }}>Most recent first</p>
+        <Table
+          columns={[
+            { key: 'effective_from', label: 'Effective From', render: r => String(r.effective_from||'').slice(0,10) },
+            { key: 'old_basic', label: 'Old Basic', render: r => `₹${Number(r.old_basic||0).toLocaleString('en-IN')}` },
+            { key: 'new_basic', label: 'New Basic', render: r => `₹${Number(r.new_basic||0).toLocaleString('en-IN')}` },
+            { key: 'increment_pct', label: 'Increment', render: r => (
+              <span style={{ fontWeight:700, color: Number(r.increment_pct) >= 0 ? '#059669' : '#DC2626' }}>
+                {Number(r.increment_pct||0) >= 0 ? '+' : ''}{Number(r.increment_pct||0).toFixed(2)}%
+              </span>
+            )},
+            { key: 'new_ctc', label: 'New CTC', render: r => r.new_ctc ? `₹${Number(r.new_ctc).toLocaleString('en-IN')}` : '--' },
+            { key: 'reason', label: 'Reason', render: r => REVISION_REASON_LABEL[r.reason] || r.reason },
+          ]}
+          rows={rows}
+          empty="No salary revisions on record yet"
+        />
+      </div>
+    </TabShell>
+  );
+}
+
 function DocumentsTab({ policies, userId }) {
   const qc = useQueryClient();
   const [doc, setDoc] = useState({ file: null, doc_type: 'employee_document', doc_name: '' });
@@ -3661,7 +3851,7 @@ function ComingSoon({ label }) {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    ROOT PAGE
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-const FUNCTIONAL_TABS = new Set(['dashboard','engage','profile','attendance','leave','payslips','reimbursement','loans','documents','hr-requests','manager','training','timesheet','assets','helpdesk','knowledge']);
+const FUNCTIONAL_TABS = new Set(['dashboard','engage','profile','attendance','leave','payslips','ytd-reports','it-statement','salary-revision','reimbursement','loans','documents','hr-requests','manager','training','timesheet','assets','helpdesk','knowledge']);
 
 export default function ESSPortalPage() {
   const now     = new Date();
@@ -3725,6 +3915,9 @@ export default function ESSPortalPage() {
           {active === 'attendance'  && <AttendanceTab leaveTypes={derivedLeaveTypes} />}
           {active === 'leave'       && <LeaveTab leaveTypes={derivedLeaveTypes} />}
           {active === 'payslips'    && <PayslipsTab />}
+          {active === 'ytd-reports'    && <YtdReportsTab />}
+          {active === 'it-statement'   && <ITStatementTab />}
+          {active === 'salary-revision' && <SalaryRevisionTab />}
           {active === 'documents'   && <DocumentsTab policies={policies.data || []} userId={userId} />}
           {active === 'hr-requests' && <HRRequestsTab serviceRequests={serviceRequests.data || []} />}
           {active === 'manager'     && <ManagerDeskTab />}

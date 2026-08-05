@@ -557,6 +557,81 @@ router.get('/payslips/:id', async (req, res) => {
   }
 });
 
+// IT Statement — an employee's own annual salary/TDS summary (Form 16 style).
+// Mirrors /hr-payroll/reports/form16, self-scoped to the logged-in user since
+// that report route is HR-admin-only and must never take an arbitrary user_id
+// from an ESS caller.
+router.get('/it-statement', async (req, res) => {
+  try {
+    const fy = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const fyStartYear = fy - 1;
+    const fyEndYear   = fy;
+
+    const { rows } = await query(`
+      SELECT
+        ep.pan_number, ep.uan_number, dep.name AS department, des.name AS designation,
+        SUM(p.basic)             AS total_basic,
+        SUM(p.hra)               AS total_hra,
+        SUM(p.conveyance)        AS total_conveyance,
+        SUM(p.medical)           AS total_medical,
+        SUM(p.special_allowance) AS total_special,
+        SUM(p.other_earnings)    AS total_other_earnings,
+        SUM(p.gross_earnings)    AS total_gross,
+        SUM(p.pf_employee)       AS total_pf_employee,
+        SUM(p.esi_employee)      AS total_esi_employee,
+        SUM(p.pt)                AS total_pt,
+        SUM(p.tds)               AS total_tds,
+        SUM(p.loan_deduction)    AS total_loan_deduction,
+        SUM(p.total_deductions)  AS total_deductions,
+        SUM(p.net_pay)           AS total_net_pay,
+        SUM(p.working_days)      AS total_working_days,
+        SUM(p.paid_days)         AS total_paid_days,
+        SUM(p.lop_days)          AS total_lop_days,
+        COUNT(*)::int            AS months_processed
+      FROM hr_monthly_payroll p
+      LEFT JOIN employee_profiles ep ON ep.user_id = p.user_id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des ON des.id = ep.designation_id
+      WHERE p.company_id = $1 AND p.user_id = $2
+        AND p.status IN ('approved','paid')
+        AND (
+          (p.year = $3 AND p.month >= 4) OR
+          (p.year = $4 AND p.month <= 3)
+        )
+      GROUP BY ep.pan_number, ep.uan_number, dep.name, des.name
+    `, [ownCompany(req), ownUser(req), fyStartYear, fyEndYear]);
+
+    const STANDARD_DEDUCTION = 75000; // Budget 2024: raised from ₹50,000 to ₹75,000 (new tax regime)
+    const r = rows[0];
+    const data = r ? {
+      ...r,
+      taxable_income: Math.max(0, Math.round(parseFloat(r.total_gross || 0) - parseFloat(r.total_pf_employee || 0) - STANDARD_DEDUCTION)),
+      standard_deduction: STANDARD_DEDUCTION,
+    } : null;
+
+    res.json({ data, financial_year: `${fyStartYear}-${String(fyEndYear).slice(-2)}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Salary Revision history — read-only, own record only.
+router.get('/salary-revisions', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, old_basic, new_basic, old_ctc, new_ctc, increment_pct,
+              effective_from, reason, remarks, created_at
+       FROM hr_salary_revisions
+       WHERE company_id = $1 AND user_id = $2
+       ORDER BY effective_from DESC`,
+      [ownCompany(req), ownUser(req)]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/manager/leave-requests', requireManager, async (req, res) => {
   try {
     const status = req.query.status || 'pending';
