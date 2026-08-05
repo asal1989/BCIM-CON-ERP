@@ -1413,10 +1413,13 @@ router.post('/recalculate', async (req, res) => {
         late_minutes = CASE
           WHEN ha.status IN ('leave','holiday','week_off') THEN ha.late_minutes
           WHEN ha.in_time IS NOT NULL THEN
-            GREATEST(0, EXTRACT(EPOCH FROM (
+            GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (
               ha.in_time::time - COALESCE(
                 -- No grace period, by policy — late_minutes counts from the
                 -- exact shift start time, not start_time + grace_minutes.
+                -- FLOOR (not a plain ::int cast) so a punch inside the same
+                -- clock minute as shift start (e.g. 08:30:59) doesn't round
+                -- up to 1 minute late.
                 (SELECT hs.start_time
                  FROM hr_employee_shifts es
                  JOIN hr_shifts hs ON hs.id = es.shift_id
@@ -1426,7 +1429,7 @@ router.post('/recalculate', async (req, res) => {
                  ORDER BY es.effective_from DESC LIMIT 1),
                 '09:30:00'::time
               )
-            )) / 60)::int
+            )) / 60))::int
           ELSE 0
         END
       FROM users u

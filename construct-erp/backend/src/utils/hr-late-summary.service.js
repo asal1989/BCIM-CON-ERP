@@ -360,9 +360,10 @@ async function runLateSummary({ date, manual = false, recipients: recipientOverr
     // Recalculate late_minutes before querying (same as the individual alert does)
     await query(`
       UPDATE hr_attendance ha
-      SET late_minutes = GREATEST(0, EXTRACT(EPOCH FROM (
+      SET late_minutes = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (
         ha.in_time::time - COALESCE(
-          -- No grace period, by policy.
+          -- No grace period, by policy — but a punch inside the same clock
+          -- minute as shift start (e.g. 08:30:59) must not round up to late.
           (SELECT hs.start_time
            FROM hr_employee_shifts es
            JOIN hr_shifts hs ON hs.id = es.shift_id
@@ -372,7 +373,7 @@ async function runLateSummary({ date, manual = false, recipients: recipientOverr
            ORDER BY es.effective_from DESC LIMIT 1),
           '09:30:00'::time
         )
-      )) / 60)::int
+      )) / 60))::int
       WHERE ha.attendance_date = $1
         AND ha.in_time IS NOT NULL
         AND ha.status IN ('present', 'half_day')

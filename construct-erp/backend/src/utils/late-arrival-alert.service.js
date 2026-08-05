@@ -241,9 +241,10 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 1, over
   // so the button works correctly without a separate manual recalculate step.
   await query(`
     UPDATE hr_attendance ha
-    SET late_minutes = GREATEST(0, EXTRACT(EPOCH FROM (
+    SET late_minutes = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (
       ha.in_time::time - COALESCE(
-        -- No grace period, by policy.
+        -- No grace period, by policy — but a punch inside the same clock
+        -- minute as shift start (e.g. 08:30:59) must not round up to late.
         (SELECT hs.start_time
          FROM hr_employee_shifts es
          JOIN hr_shifts hs ON hs.id = es.shift_id
@@ -253,7 +254,7 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 1, over
          ORDER BY es.effective_from DESC LIMIT 1),
         '09:30:00'::time
       )
-    )) / 60)::int
+    )) / 60))::int
     WHERE ha.attendance_date = $1
       AND ha.in_time IS NOT NULL
       AND ha.status IN ('present', 'half_day')
