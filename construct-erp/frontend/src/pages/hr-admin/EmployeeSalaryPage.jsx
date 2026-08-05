@@ -85,6 +85,22 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
 
   const runCalculate = async () => {
     if (!form.ctc_monthly || Number(form.ctc_monthly) <= 0) return toast.error('Enter a monthly CTC to calculate');
+    // Hard gate, not just a passive banner: on an existing record this
+    // replaces real, often individually negotiated or imported figures with
+    // a generic formula guess. Require an explicit, named confirmation
+    // before it's allowed to run at all — no accidental click should be able
+    // to trigger this.
+    if (isEdit) {
+      const ok = window.confirm(
+        `This will REPLACE ${editSalary.employee_name || 'this employee'}'s real saved salary figures ` +
+        `(HRA, accommodation, food, transport, washing, special allowance, etc.) with a generic formula ` +
+        `estimate from the CTC. These fields are individually negotiated per employee and do not follow ` +
+        `a formula — recalculating is very likely to make this record wrong.\n\n` +
+        `Only continue if you specifically intend to overwrite this employee's real salary breakup.\n\n` +
+        `Type OK to proceed, or Cancel to keep their real saved values.`
+      );
+      if (!ok) return;
+    }
     try {
       const res = await calculateBreakup({ ctc_monthly: Number(form.ctc_monthly) });
       setBreakup(res.data?.data || null);
@@ -166,8 +182,8 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
                 className={inp} placeholder="e.g. 45000"/>
               <button onClick={runCalculate} type="button" disabled={calculating}
                 className="px-4 py-2.5 rounded-xl text-sm font-black text-white whitespace-nowrap disabled:opacity-50"
-                style={{background:`linear-gradient(135deg,${B.blue},${B.navy})`}}>
-                {calculating?'Calculating…':'Calculate Breakup'}
+                style={{background: isEdit ? 'linear-gradient(135deg,#D97706,#92400E)' : `linear-gradient(135deg,${B.blue},${B.navy})`}}>
+                {calculating ? 'Calculating…' : isEdit ? 'Recalculate from CTC (overwrites real data)' : 'Calculate Breakup'}
               </button>
             </div>
           </div>
