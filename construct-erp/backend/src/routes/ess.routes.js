@@ -361,7 +361,7 @@ router.post('/attendance/corrections', async (req, res) => {
 
     // Notify HR about new correction request
     const empName = req.user.name || req.user.email;
-    notifyHR(ownCompany(req),
+    notifyHR(
       `Attendance Correction Request: ${empName} — ${fmtDate(attendance_date)}`,
       mailWrap(
         mailHeader('Attendance Correction Request'),
@@ -820,6 +820,31 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
       ),
       'regularization'
     );
+
+    // Notify HR whenever an attendance correction is actually regularized
+    // (approved) — the request-time notify only covers submission.
+    if (action === 'approve') {
+      const { rows: empRows } = await query(
+        `SELECT name, email, employee_code FROM users WHERE id=$1`, [correction.user_id]
+      );
+      const emp = empRows[0] || {};
+      notifyHR(
+        `Attendance Regularized: ${emp.name || emp.email || 'Employee'} — ${fmtDate(correction.attendance_date)}`,
+        mailWrap(
+          `<div style="background:#16a34a;padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Attendance Regularized</h2></div>`,
+          `<p style="margin-top:0"><strong>${emp.name || emp.email}</strong>'s attendance for <strong>${fmtDate(correction.attendance_date)}</strong> has been regularized.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+            ${mailRow('Employee', `${emp.name || '—'}${emp.employee_code ? ` (${emp.employee_code})` : ''}`)}
+            ${mailRow('Date', fmtDate(correction.attendance_date))}
+            ${mailRow('Status', correction.requested_status || '—')}
+            ${mailRow('In Time', correction.requested_in_time || '—')}
+            ${mailRow('Out Time', correction.requested_out_time || '—')}
+            ${mailRow('Approved By', req.user.name || req.user.email)}
+          </table>
+          <p>View attendance records in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+        )
+      );
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
