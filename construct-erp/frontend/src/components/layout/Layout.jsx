@@ -276,6 +276,7 @@ const navGroups = [
     { to: '/hr-admin/attendance/dashboard',    icon: LayoutDashboard, label: 'Attendance Dashboard' },
     { to: '/hr-admin/attendance/biometric',    icon: Fingerprint,     label: 'Biometric Attendance' },
     { to: '/hr-admin/attendance/regularization', icon: ClipboardCheck, label: 'Attendance Regularization' },
+    { to: '/hr-admin/attendance/bulk-correction', icon: AlertTriangle, label: 'Bulk Attendance Correction' },
     { to: '/hr-admin/attendance/timesheet',    icon: FileSpreadsheet, label: 'Timesheet Report' },
     { to: '/hr-admin/shifts',                  icon: Clock,           label: 'Shift Management' },
     // ── Leaves & Holidays ──
@@ -536,7 +537,7 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'Overview',          paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist','/ess'] },
     { label: 'People',            paths: ['/hr-admin/employees','/hr-admin/project-staff','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/departments'] },
-    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
+    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
     { label: 'Leaves & Holidays', paths: ['/hr-admin/leaves','/hr-admin/holidays'] },
     { label: 'Payroll',           paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary','/hr-admin/fnf'] },
     { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },

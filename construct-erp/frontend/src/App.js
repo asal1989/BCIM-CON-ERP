@@ -315,6 +315,7 @@ const HRAttendancePage            = lazy(() => import('./pages/hr-admin/Attendan
 const HRAttendanceDashboardPage   = lazy(() => import('./pages/hr-admin/attendance/AttendanceDashboardPage'));
 const HRBiometricAttendancePage   = lazy(() => import('./pages/hr-admin/attendance/BiometricAttendancePage'));
 const HRAttendanceRegularizationPage = lazy(() => import('./pages/hr-admin/attendance/AttendanceRegularizationPage'));
+const HRBulkAttendanceCorrectionPage = lazy(() => import('./pages/hr-admin/attendance/BulkAttendanceCorrectionPage'));
 const HRTimesheetReportPage          = lazy(() => import('./pages/hr-admin/attendance/TimesheetReportPage'));
 const HRLeaveManagementPage = lazy(() => import('./pages/hr-admin/LeaveManagementPage'));
 const HRPayrollPage         = lazy(() => import('./pages/hr-admin/PayrollPage'));
@@ -928,6 +929,7 @@ export default function App() {
                 <Route path="hr-admin/attendance/dashboard" element={<RequireModule module="HR & Admin"><HRAttendanceDashboardPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/biometric" element={<RequireModule module="HR & Admin"><HRBiometricAttendancePage /></RequireModule>} />
                 <Route path="hr-admin/attendance/regularization" element={<RequireModule module="HR & Admin"><HRAttendanceRegularizationPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/bulk-correction" element={<RequireModule module="HR & Admin"><HRBulkAttendanceCorrectionPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/timesheet" element={<RequireModule module="HR & Admin"><HRTimesheetReportPage /></RequireModule>} />
                 <Route path="hr-admin/leaves" element={<RequireModule module="HR & Admin"><HRLeaveManagementPage /></RequireModule>} />
                 <Route path="hr-admin/payroll" element={<RequireModule module="HR & Admin"><HRPayrollPage /></RequireModule>} />
