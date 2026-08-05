@@ -831,7 +831,7 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
       notifyHR(
         `Attendance Regularized: ${emp.name || emp.email || 'Employee'} — ${fmtDate(correction.attendance_date)}`,
         mailWrap(
-          `<div style="background:#16a34a;padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Attendance Regularized</h2></div>`,
+          mailHeader('Attendance Regularized'),
           `<p style="margin-top:0"><strong>${emp.name || emp.email}</strong>'s attendance for <strong>${fmtDate(correction.attendance_date)}</strong> has been regularized.</p>
           <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
             ${mailRow('Employee', `${emp.name || '—'}${emp.employee_code ? ` (${emp.employee_code})` : ''}`)}
