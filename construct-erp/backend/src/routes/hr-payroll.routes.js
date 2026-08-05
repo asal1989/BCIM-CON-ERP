@@ -254,7 +254,20 @@ router.post('/run', async (req, res) => {
          LIMIT 1
        ) es ON TRUE
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-       WHERE u.company_id = $2 AND u.is_active = TRUE
+       WHERE u.company_id = $2
+         -- Include a now-terminated/resigned employee if they still have
+         -- attendance recorded in this payroll month, so leaving mid-month
+         -- (or after) doesn't silently drop them from the run they actually
+         -- worked in — full & final settlement still owes them that pay.
+         AND (
+           u.is_active = TRUE
+           OR EXISTS (
+             SELECT 1 FROM hr_attendance ha
+             WHERE ha.user_id = u.id
+               AND EXTRACT(MONTH FROM ha.attendance_date) = $1
+               AND EXTRACT(YEAR FROM ha.attendance_date) = $3
+           )
+         )
          AND u.id NOT IN (SELECT user_id FROM hr_stop_salary WHERE company_id = $2)`;
     const employeeParams = [m, req.user.company_id, y];
     let epIdx = 4;
@@ -286,15 +299,25 @@ router.post('/run', async (req, res) => {
 
     // Identify employees with no salary record (LATERAL gives us only matched ones;
     // we do a separate check to surface missing-salary employees explicitly)
-    const allActive = await query(
-      `SELECT u.id, u.name FROM users u
+    const allActiveParams = [req.user.company_id, m, y];
+    let allActiveIdx = 4;
+    let allActiveSql = `
+       SELECT u.id, u.name FROM users u
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-       WHERE u.company_id=$1 AND u.is_active=TRUE
-       AND u.id NOT IN (SELECT user_id FROM hr_stop_salary WHERE company_id=$1)
-       ${user_id ? 'AND u.id=$2' : ''}
-       ${project_id ? `AND ep.project_id=$${user_id ? 3 : 2}` : ''}`,
-      [req.user.company_id, ...(user_id ? [user_id] : []), ...(project_id ? [project_id] : [])]
-    );
+       WHERE u.company_id=$1
+         AND (
+           u.is_active = TRUE
+           OR EXISTS (
+             SELECT 1 FROM hr_attendance ha
+             WHERE ha.user_id = u.id
+               AND EXTRACT(MONTH FROM ha.attendance_date) = $2
+               AND EXTRACT(YEAR FROM ha.attendance_date) = $3
+           )
+         )
+       AND u.id NOT IN (SELECT user_id FROM hr_stop_salary WHERE company_id=$1)`;
+    if (user_id)    { allActiveSql += ` AND u.id=$${allActiveIdx}`;          allActiveParams.push(user_id);    allActiveIdx++; }
+    if (project_id) { allActiveSql += ` AND ep.project_id=$${allActiveIdx}`; allActiveParams.push(project_id); allActiveIdx++; }
+    const allActive = await query(allActiveSql, allActiveParams);
     const foundIds = new Set(employees.rows.map(e => e.user_id));
     const missingSalary = allActive.rows.filter(u => !foundIds.has(u.id)).map(u => u.name);
 
