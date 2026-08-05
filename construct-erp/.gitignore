@@ -8,6 +8,8 @@
 *.key
 *.crt
 *.p12
+dburl.txt
+**/dburl.txt
 
 # ── Deployment secrets ────────────────────────────────────────
 nginx/ssl/

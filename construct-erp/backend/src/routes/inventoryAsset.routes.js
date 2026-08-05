@@ -30,7 +30,12 @@ router.post('/issue', async (req, res) => {
     if (!inventory_id || !quantity || !project_id) {
       return res.status(400).json({ error: 'inventory_id, quantity and project_id are required' });
     }
-    const inv = await query('SELECT * FROM inventory WHERE id = $1', [inventory_id]);
+    const inv = await query(
+      `SELECT i.* FROM inventory i
+         JOIN projects p ON i.project_id = p.id
+        WHERE i.id = $1 AND p.company_id = $2`,
+      [inventory_id, req.user.company_id]
+    );
     if (!inv.rows[0]) return res.status(404).json({ error: 'Inventory item not found' });
     if (parseFloat(inv.rows[0].closing_stock) < parseFloat(quantity)) {
       return res.status(400).json({ error: `Insufficient stock. Available: ${inv.rows[0].closing_stock}` });
