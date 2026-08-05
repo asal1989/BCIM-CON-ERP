@@ -93,8 +93,14 @@ function SalaryBreakupPanel({ record }) {
       </div>
     );
   }
-  const basic   = parseFloat(record.basic || 0) + parseFloat(record.hra || 0);
-  const allow   = parseFloat(record.conveyance || 0) + parseFloat(record.medical || 0) + parseFloat(record.special_allowance || 0);
+  const basic   = parseFloat(record.basic || 0) + parseFloat(record.da || 0) + parseFloat(record.hra || 0);
+  // Every itemised allowance the payroll run now persists (previously most of
+  // this fell into the "other" catch-all since only conveyance/medical/special
+  // were tracked — see hr-payroll.routes.js POST /run).
+  const allow   = ['conveyance', 'medical', 'special_allowance', 'washing_allowance', 'lta',
+    'mobile_allowance', 'project_allowance', 'city_special_allowance', 'accommodation_allowance',
+    'food_allowance', 'transport_allowance', 'conveyance_allowance', 'incentive']
+    .reduce((s, k) => s + parseFloat(record[k] || 0), 0);
   const other   = Math.max(0, parseFloat(record.gross_earnings || 0) - basic - allow);
   const gross   = parseFloat(record.gross_earnings || 0) || 1;
   const circ    = 2 * Math.PI * 46;
@@ -143,6 +149,39 @@ function ComplianceSnapshot({ totals }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Attendance/leave breakdown behind this employee's pro-ration this month —
+// the "why is Net Pay lower than usual" panel, sourced from the new
+// absent_days/cl_availed/sl_availed/el_availed/total_leave_availed columns.
+function AttendancePanel({ record }) {
+  if (!record) return null;
+  const lop = parseFloat(record.lop_days || 0);
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <p className="text-sm font-bold text-gray-900 mb-3">Attendance This Month</p>
+      <div className="grid grid-cols-2 gap-2.5 text-xs">
+        <div className="flex justify-between"><span className="text-gray-500">Working Days</span><span className="font-bold text-gray-900">{record.working_days}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">Paid Days</span><span className="font-bold text-gray-900">{parseFloat(record.paid_days || 0).toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">LOP</span><span className={`font-bold ${lop > 0 ? 'text-rose-600' : 'text-gray-900'}`}>{lop.toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">Absent</span><span className="font-bold text-gray-900">{parseFloat(record.absent_days || 0).toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">CL</span><span className="font-bold text-gray-900">{parseFloat(record.cl_availed || 0).toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">SL</span><span className="font-bold text-gray-900">{parseFloat(record.sl_availed || 0).toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">EL</span><span className="font-bold text-gray-900">{parseFloat(record.el_availed || 0).toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-gray-500">Total Leave</span><span className="font-bold text-gray-900">{parseFloat(record.total_leave_availed || 0).toFixed(1)}</span></div>
+      </div>
+      {(parseFloat(record.mess_deduction || 0) > 0 || parseFloat(record.accommodation_deduction || 0) > 0) && (
+        <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-2">
+          {parseFloat(record.mess_deduction || 0) > 0 && (
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Mess Deduction</span><span className="font-bold text-rose-600">{fmt(record.mess_deduction)}</span></div>
+          )}
+          {parseFloat(record.accommodation_deduction || 0) > 0 && (
+            <div className="flex justify-between text-xs"><span className="text-gray-500">Accommodation Deduction</span><span className="font-bold text-rose-600">{fmt(record.accommodation_deduction)}</span></div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -641,6 +680,7 @@ export default function PayrollPage() {
           {/* Detail panel */}
           <div className="flex flex-col gap-4">
             <SalaryBreakupPanel record={records.find(r => r.id === selectedId) || null} />
+            <AttendancePanel record={records.find(r => r.id === selectedId) || null} />
             <ComplianceSnapshot totals={totals} />
           </div>
         </motion.div>
