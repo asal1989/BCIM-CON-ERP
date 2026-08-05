@@ -17,6 +17,41 @@ const lbl = "text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1.
 const fmt = (n) => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today = () => new Date().toISOString().slice(0,10);
 
+// Builds a "breakup"-shaped object straight from a stored hr_employee_salaries
+// row, so opening Edit shows what's actually saved. Previously this modal
+// re-ran calculateCTCBreakup() on open, silently replacing real (often
+// individually negotiated / imported) figures with generic formula guesses —
+// HRA, accommodation, food, transport, washing and special allowance don't
+// reliably follow any formula (verified against the real CTC master: HRA
+// alone lands anywhere from 20% to 40% of Basic with no derivable rule), so
+// recalculating on every edit was silently corrupting real data the moment
+// someone clicked "Update Salary" without noticing the numbers had changed.
+function salaryToBreakup(s) {
+  return {
+    ctc_monthly: s.ctc_annual ? Math.round(Number(s.ctc_annual) / 12) : 0,
+    ctc_annual: Number(s.ctc_annual || 0),
+    basic: Number(s.basic || 0), vda: Number(s.vda || 0), hra: Number(s.hra || 0),
+    project_allowance: Number(s.project_allowance || 0),
+    accommodation_allowance: Number(s.accommodation_allowance || 0),
+    food_allowance: Number(s.food_allowance || 0),
+    transport_allowance: Number(s.transport_allowance || 0),
+    lta: Number(s.lta || 0), medical_allowance: Number(s.medical || 0),
+    mobile_allowance: Number(s.mobile_allowance || 0),
+    incentive: Number(s.incentive || 0), washing_allowance: Number(s.washing_allowance || 0),
+    education_allowance: Number(s.education_allowance || 0), special_allowance: Number(s.special_allowance || 0),
+    conveyance_allowance: Number(s.conveyance_allowance || 0), city_special_allowance: Number(s.city_special_allowance || 0),
+    outstation_allowance: Number(s.outstation_allowance || 0), fixed_site_allowance: Number(s.fixed_site_allowance || 0),
+    variable_site_allowance: Number(s.variable_site_allowance || 0), value_of_food_concession: Number(s.value_of_food_concession || 0),
+    gross_monthly: Number(s.gross_monthly || 0),
+    employer_pf: Number(s.employer_pf || 0), edli: Number(s.edli || 0), epf_admin: Number(s.epf_admin || 0),
+    gratuity: Number(s.gratuity || 0), employer_esic: Number(s.employer_esi || 0), employer_lwf: 0,
+    employee_pf: Number(s.employee_pf || 0), pt_deduction: Number(s.pt_deduction || 0),
+    employee_esic: 0, employee_lwf: 0,
+    basic_reversal: Number(s.basic_reversal || 0),
+    net_pay_monthly: Number(s.net_pay_monthly || 0),
+  };
+}
+
 function SalaryModal({ employees, structures, onClose, onSave, saving, calculateBreakup, calculating, editSalary }) {
   const isEdit = !!editSalary;
   const [form, setForm] = useState(() => isEdit ? {
@@ -36,7 +71,11 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
     pf_applicable:true, esi_applicable:false, pt_applicable:true,
     effective_from:today(),
   });
-  const [breakup, setBreakup] = useState(null);
+  // Editing an existing record: show what's actually saved, not a fresh
+  // formula guess. recalculated=true only once the admin explicitly clicks
+  // "Recalculate from CTC" — see the warning banner below.
+  const [breakup, setBreakup] = useState(() => isEdit ? salaryToBreakup(editSalary) : null);
+  const [recalculated, setRecalculated] = useState(false);
   const update = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const messDeduction = Number(form.mess_deduction||0);
@@ -49,16 +88,11 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
     try {
       const res = await calculateBreakup({ ctc_monthly: Number(form.ctc_monthly) });
       setBreakup(res.data?.data || null);
+      setRecalculated(true);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to calculate breakup');
     }
   };
-
-  // When editing, auto-calculate the breakup on open so the form is ready to save.
-  useEffect(() => {
-    if (isEdit && form.ctc_monthly && Number(form.ctc_monthly) > 0) runCalculate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const submit = () => {
     if(!form.user_id) return toast.error('Select employee');
@@ -141,6 +175,14 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
             <label className={lbl}>Effective From</label>
             <input type="date" value={form.effective_from} onChange={e=>update('effective_from',e.target.value)} className={inp}/>
           </div>
+
+          {isEdit && recalculated && (
+            <div className="md:col-span-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 font-bold">
+              ⚠ These figures are a fresh formula estimate from the CTC, not the employee's saved values —
+              HRA/accommodation/food/transport/washing/special allowance are individually negotiated per
+              employee and don't follow a formula. Saving now will overwrite their real numbers with this estimate.
+            </div>
+          )}
 
           {breakup && (
             <div className="md:col-span-2 rounded-xl border border-gray-200 overflow-hidden">
