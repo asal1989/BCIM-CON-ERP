@@ -385,6 +385,61 @@ router.post('/attendance/corrections', async (req, res) => {
   }
 });
 
+// Same as POST /attendance/corrections but for several dates at once, using
+// one shared status/in-time/out-time/reason — e.g. "I was marked absent
+// Mon–Wed, I was actually on-site all three days." One request row is
+// created per date, and HR gets a single summary email for the whole batch
+// instead of one email per date.
+router.post('/attendance/corrections/bulk', async (req, res) => {
+  try {
+    const { dates, requested_status, requested_in_time, requested_out_time, reason } = req.body;
+    if (!Array.isArray(dates) || !dates.length) {
+      return res.status(400).json({ error: 'At least one date is required' });
+    }
+    if (!reason) {
+      return res.status(400).json({ error: 'Reason is required' });
+    }
+    const uniqueDates = [...new Set(dates)].sort();
+
+    const created = [];
+    for (const attendance_date of uniqueDates) {
+      const { rows } = await query(
+        `INSERT INTO hr_attendance_correction_requests
+         (company_id, user_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING *`,
+        [
+          ownCompany(req), ownUser(req), attendance_date,
+          requested_status || null, requested_in_time || null, requested_out_time || null, reason,
+        ]
+      );
+      created.push(rows[0]);
+    }
+    res.status(201).json({ data: created, count: created.length });
+
+    // One summary email to HR for the whole batch.
+    const empName = req.user.name || req.user.email;
+    notifyHR(
+      `Attendance Correction Request (${created.length} dates): ${empName}`,
+      mailWrap(
+        mailHeader('Attendance Correction Request'),
+        `<p style="margin-top:0"><strong>${empName}</strong> has submitted attendance correction requests for <strong>${created.length}</strong> date(s).</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+          ${mailRow('Employee', empName)}
+          ${mailRow('Dates', uniqueDates.map(fmtDate).join(', '))}
+          ${mailRow('Requested Status', requested_status || '—')}
+          ${mailRow('In Time', requested_in_time || '—')}
+          ${mailRow('Out Time', requested_out_time || '—')}
+          ${mailRow('Reason', reason)}
+        </table>
+        <p>Please review and action these requests in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
+      )
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/attendance/corrections', async (req, res) => {
   try {
     const { rows } = await query(

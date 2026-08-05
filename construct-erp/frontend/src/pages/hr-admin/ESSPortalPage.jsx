@@ -1359,6 +1359,11 @@ function AttendanceTab({ leaveTypes }) {
     attendance_date: today(), requested_status: 'present',
     requested_in_time: '09:30', requested_out_time: '18:00', reason: '',
   });
+  // Bulk mode: request the same status/in/out/reason across several dates in
+  // one submission (e.g. "I was marked absent Mon–Wed, on-site all 3 days").
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkDates, setBulkDates] = useState([]);
+  const [bulkDateInput, setBulkDateInput] = useState(today());
 
   /* ── queries ── */
   const attendance  = useQuery({ queryKey: ['ess-attendance'],  queryFn: () => essAPI.attendance().then(unwrap) });
@@ -1372,6 +1377,22 @@ function AttendanceTab({ leaveTypes }) {
     onSuccess: () => { toast.success('Correction requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
     onError:   (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
   });
+  const createCorrectionBulk = useMutation({
+    mutationFn: essAPI.createCorrectionBulk,
+    onSuccess: (r) => {
+      toast.success(`Correction requested for ${r.data?.count ?? bulkDates.length} date(s)`);
+      setCorrection({ ...correction, reason: '' });
+      setBulkDates([]);
+      refresh();
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit bulk correction request'),
+  });
+  const addBulkDate = () => {
+    if (bulkDateInput && !bulkDates.includes(bulkDateInput)) {
+      setBulkDates(prev => [...prev, bulkDateInput].sort());
+    }
+  };
+  const removeBulkDate = (d) => setBulkDates(prev => prev.filter(x => x !== d));
 
   /* ── derived ── */
   const statusMap = useMemo(() => {
@@ -1633,16 +1654,49 @@ function AttendanceTab({ leaveTypes }) {
 
           {/* Correction Form */}
           <div style={{ ...Cd(), padding:'16px 18px' }}>
-            <div style={{ fontSize:11,fontWeight:700,color:T.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4 }}>Attendance Correction</div>
-            <p style={{ fontSize:11.5,color:T.t3,marginBottom:12 }}>Missed punch or wrong status? Raise a correction.</p>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:T.t4,textTransform:'uppercase',letterSpacing:'.08em' }}>Attendance Correction</div>
+              <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:10.5, color:T.t3, cursor:'pointer' }}>
+                <input type="checkbox" checked={bulkMode} onChange={e => { setBulkMode(e.target.checked); setBulkDates([]); }} />
+                Multiple dates
+              </label>
+            </div>
+            <p style={{ fontSize:11.5,color:T.t3,marginBottom:12 }}>
+              {bulkMode ? 'Same status/time/reason applied to every date you add below.' : 'Missed punch or wrong status? Raise a correction.'}
+            </p>
             <div style={{ display:'flex',flexDirection:'column',gap:9 }}>
-              <div>
-                <label style={{ fontSize:10.5,fontWeight:700,color:T.t4,display:'block',marginBottom:4 }}>Date</label>
-                <input type="date" value={correction.attendance_date}
-                  onChange={e=>setCorrection({...correction, attendance_date:e.target.value})}
-                  style={{ width:'100%',borderRadius:10,border:`1px solid ${T.bdr}`,padding:'8px 12px',fontSize:13,color:T.t1,outline:'none',background:'#F0FDF9',boxSizing:'border-box' }}
-                />
-              </div>
+              {bulkMode ? (
+                <div>
+                  <label style={{ fontSize:10.5,fontWeight:700,color:T.t4,display:'block',marginBottom:4 }}>Dates</label>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <input type="date" value={bulkDateInput} onChange={e=>setBulkDateInput(e.target.value)}
+                      style={{ flex:1,borderRadius:10,border:`1px solid ${T.bdr}`,padding:'8px 12px',fontSize:13,color:T.t1,outline:'none',background:'#F0FDF9',boxSizing:'border-box' }}
+                    />
+                    <button type="button" onClick={addBulkDate}
+                      style={{ padding:'0 14px',borderRadius:10,border:'none',background:'#0D9488',color:'#fff',fontSize:12.5,fontWeight:700,cursor:'pointer' }}>
+                      Add
+                    </button>
+                  </div>
+                  {bulkDates.length > 0 && (
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
+                      {bulkDates.map(d => (
+                        <span key={d} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#F0FDF9', border:`1px solid ${T.bdr}`, borderRadius:99, padding:'3px 10px', fontSize:11.5, color:T.t1 }}>
+                          {d}
+                          <button type="button" onClick={()=>removeBulkDate(d)} style={{ border:'none', background:'none', cursor:'pointer', color:'#94A3B8', fontWeight:700, lineHeight:1 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize:10.5,fontWeight:700,color:T.t4,display:'block',marginBottom:4 }}>Date</label>
+                  <input type="date" value={correction.attendance_date}
+                    onChange={e=>setCorrection({...correction, attendance_date:e.target.value})}
+                    style={{ width:'100%',borderRadius:10,border:`1px solid ${T.bdr}`,padding:'8px 12px',fontSize:13,color:T.t1,outline:'none',background:'#F0FDF9',boxSizing:'border-box' }}
+                  />
+                </div>
+              )}
               <div>
                 <label style={{ fontSize:10.5,fontWeight:700,color:T.t4,display:'block',marginBottom:4 }}>Requested Status</label>
                 <select value={correction.requested_status}
@@ -1673,15 +1727,36 @@ function AttendanceTab({ leaveTypes }) {
                   onChange={e=>setCorrection({...correction,reason:e.target.value})}
                   style={{ width:'100%',borderRadius:10,border:`1px solid ${T.bdr}`,padding:'8px 12px',fontSize:13,color:T.t1,outline:'none',background:'#F0FDF9',boxSizing:'border-box' }}/>
               </div>
-              <button
-                disabled={!correction.reason||createCorrection.isPending}
-                onClick={()=>createCorrection.mutate(correction)}
-                style={{ padding:'10px',borderRadius:11,border:'none',cursor:correction.reason?'pointer':'not-allowed',
-                  background:correction.reason?'linear-gradient(135deg,#059669,#0D9488)':'rgba(0,0,0,.06)',
-                  color:correction.reason?'#fff':'#94A3B8',fontSize:13,fontWeight:700,
-                  boxShadow:correction.reason?'0 4px 14px rgba(5,150,105,.35)':undefined,transition:'.15s' }}>
-                {createCorrection.isPending ? 'Submitting…' : 'Submit Correction Request'}
-              </button>
+              {(() => {
+                const bulkReady = bulkMode && correction.reason && bulkDates.length > 0;
+                const singleReady = !bulkMode && correction.reason;
+                const ready = bulkReady || singleReady;
+                const pending = createCorrection.isPending || createCorrectionBulk.isPending;
+                const handleSubmit = () => {
+                  if (bulkMode) {
+                    createCorrectionBulk.mutate({
+                      dates: bulkDates,
+                      requested_status: correction.requested_status,
+                      requested_in_time: correction.requested_in_time,
+                      requested_out_time: correction.requested_out_time,
+                      reason: correction.reason,
+                    });
+                  } else {
+                    createCorrection.mutate(correction);
+                  }
+                };
+                return (
+                  <button
+                    disabled={!ready || pending}
+                    onClick={handleSubmit}
+                    style={{ padding:'10px',borderRadius:11,border:'none',cursor:ready?'pointer':'not-allowed',
+                      background:ready?'linear-gradient(135deg,#059669,#0D9488)':'rgba(0,0,0,.06)',
+                      color:ready?'#fff':'#94A3B8',fontSize:13,fontWeight:700,
+                      boxShadow:ready?'0 4px 14px rgba(5,150,105,.35)':undefined,transition:'.15s' }}>
+                    {pending ? 'Submitting…' : bulkMode ? `Submit Correction for ${bulkDates.length} Date${bulkDates.length===1?'':'s'}` : 'Submit Correction Request'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
