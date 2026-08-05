@@ -258,6 +258,7 @@ const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage
 const UserModuleAccessPage = lazy(() => import('./pages/admin/UserModuleAccessPage'));
 const ApiKeysPage         = lazy(() => import('./pages/admin/ApiKeysPage'));
 const DatabaseBackupPage  = lazy(() => import('./pages/admin/DatabaseBackupPage'));
+const SecurityDashboardPage = lazy(() => import('./pages/admin/SecurityDashboardPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
 const MINVerificationPage = lazy(() => import('./pages/stores/MINVerificationPage'));
@@ -1135,6 +1136,7 @@ export default function App() {
                 <Route path="user-module-access" element={<RequireModule module="Administration"><UserModuleAccessPage /></RequireModule>} />
                 <Route path="api-keys" element={<RequireModule module="Administration"><ApiKeysPage /></RequireModule>} />
                 <Route path="db-backup" element={<RequireModule module="Administration"><DatabaseBackupPage /></RequireModule>} />
+                <Route path="security-dashboard" element={<RequireModule module="Administration"><SecurityDashboardPage /></RequireModule>} />
                 <Route path="automation-ideas" element={<RequireModule module="Automation Ideas"><AutomationIdeasPage /></RequireModule>} />
                 <Route path="approval-engine" element={<RequireModule module="Approval Engine"><ApprovalEnginePage /></RequireModule>} />
 

@@ -161,6 +161,7 @@ const approvalEngineRoutes        = require('./routes/approval-engine.routes');
 const ewayBillRoutes              = require('./routes/ewayBill.routes');
 const searchRoutes                = require('./routes/search.routes');
 const dbBackupRoutes              = require('./routes/db-backup.routes');
+const securityRoutes              = require('./routes/security.routes');
 
 // ── Data migration: move 13 bills to DQS Tower project ───────────────────────
 const { runSchemaInit } = require('./utils/schemaInit');
@@ -628,6 +629,7 @@ app.use(`${API}/automation-ideas`, automationIdeasRoutes);
 app.use(`${API}/approval-engine`, approvalEngineRoutes);
 app.use(`${API}/search`, searchRoutes);
 app.use(`${API}/db-backup`, dbBackupRoutes);
+app.use(`${API}/security`, securityRoutes);
 
 // GET /api/v1/chat/pending-call — returns the stored call:offer for this user (if any, not expired).
 // Called by the mobile app after it wakes from an FCM incoming-call push notification.

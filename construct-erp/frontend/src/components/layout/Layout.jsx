@@ -448,6 +448,7 @@ const navGroups = [
     { to: '/user-module-access', icon: ShieldCheck, label: 'User Module Access' },
     { to: '/api-keys',         icon: Key,         label: 'API Keys' },
     { to: '/db-backup',        icon: Database,    label: 'DB Backup' },
+    { to: '/security-dashboard', icon: Shield,    label: 'Security Dashboard' },
   ]},
   { label: 'Automation Ideas', items: [
     { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },

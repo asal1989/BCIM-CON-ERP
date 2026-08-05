@@ -7,6 +7,20 @@ const { query, withTransaction } = require('../config/database');
 const { sendPasswordResetMail } = require('../services/mail.service');
 const { canonicalizeRole } = require('../middleware/auth');
 
+// Login attempts happen before req.user exists, so they can't go through the
+// normal logAudit(req, ...) helper (which reads req.user). Writes directly.
+async function logLoginAttempt({ action, email, userId, companyId, ip }) {
+  try {
+    await query(
+      `INSERT INTO audit_logs (user_id, company_id, action, table_name, new_values, ip_address)
+       VALUES ($1,$2,$3,'users',$4,$5)`,
+      [userId || null, companyId || null, action, JSON.stringify({ email }), ip || null]
+    );
+  } catch (err) {
+    console.error('[audit-log] failed to write login attempt:', err.message);
+  }
+}
+
 // Generate tokens
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role, company_id: user.company_id };
@@ -135,6 +149,7 @@ const login = async (req, res) => {
 
     const retryAfterSec = checkLoginThrottle(normalizedEmail);
     if (retryAfterSec) {
+      logLoginAttempt({ action: 'login_throttled', email: normalizedEmail, ip: req.ip });
       return res.status(429).json({ error: `Too many failed attempts for this account. Try again in ${Math.ceil(retryAfterSec / 60)} minute(s).` });
     }
 
@@ -154,13 +169,25 @@ const login = async (req, res) => {
     );
 
     const user = result.rows[0];
-    if (!user) { recordFailedLogin(normalizedEmail); return res.status(401).json({ error: 'Invalid email or password.' }); }
-    if (!user.is_active) return res.status(401).json({ error: 'Account deactivated.' });
+    if (!user) {
+      recordFailedLogin(normalizedEmail);
+      logLoginAttempt({ action: 'login_failed', email: normalizedEmail, ip: req.ip });
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    if (!user.is_active) {
+      logLoginAttempt({ action: 'login_failed', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
+      return res.status(401).json({ error: 'Account deactivated.' });
+    }
     user.role = canonicalizeRole(user.role);
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) { recordFailedLogin(normalizedEmail); return res.status(401).json({ error: 'Invalid email or password.' }); }
+    if (!validPassword) {
+      recordFailedLogin(normalizedEmail);
+      logLoginAttempt({ action: 'login_failed', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
     clearLoginThrottle(normalizedEmail);
+    logLoginAttempt({ action: 'login_success', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
 
     // Update last login
     await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
