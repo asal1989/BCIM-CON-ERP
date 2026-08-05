@@ -1,5 +1,6 @@
 // src/pages/hr-admin/EmployeeSalaryPage.jsx — 2026 Premium UI
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -562,45 +563,78 @@ function AccommodationAllowanceEditModal({ employee, salary, onClose, onSave, sa
   );
 }
 
+// Portal-rendered dropdown, positioned by the trigger button's actual screen
+// rect. Previously this rendered `absolute` inside the table's `overflow-x-
+// auto` wrapper, which clips or mis-positions any dropdown taller than the
+// visible scroll area — exactly what happened once this menu grew past two
+// items. Fixed positioning + a portal to document.body sidesteps that
+// entirely, matching the pattern already used elsewhere (BillTrackerBillsPage,
+// AssetPage, ITAssetPage).
 function RowActionsMenu({ sal, emp, onView, onMess, onReversal, onAccommodation, onIncentive, onAccommodationAllowance }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const MENU_W = 232, MENU_H = 260;
+      // Flip left/up if the menu would overflow the viewport — the table's
+      // rightmost/bottommost rows are exactly where the old absolute
+      // positioning broke down.
+      const left = Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8);
+      const top  = (r.bottom + MENU_H > window.innerHeight) ? r.top - MENU_H - 4 : r.bottom + 4;
+      setPos({ top, left: Math.max(8, left) });
+    }
+    setOpen(o => !o);
+  };
+
   useEffect(() => {
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if (!open) return;
+    const onDoc = (e) => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  const items = [
+    { icon: Utensils,   label: 'Edit Mess Deduction',            onClick: onMess },
+    { icon: Home,       label: 'Edit Accommodation Allowance',   onClick: onAccommodationAllowance },
+    { icon: Home,       label: 'Edit Accommodation Deduction',   onClick: onAccommodation },
+    { icon: TrendingUp, label: 'Edit Incentive',                 onClick: onIncentive },
+    { icon: RotateCcw,  label: 'Edit Basic Reversal',            onClick: onReversal },
+  ];
+
   return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)}
+    <>
+      <button ref={btnRef} onClick={toggle}
         className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
         <MoreVertical className="w-4 h-4" />
       </button>
-      {open && sal && (
-        <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-lg z-20 py-1.5 overflow-hidden">
-          <button onClick={() => { onMess(); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
-            <Utensils className="w-3.5 h-3.5 text-gray-400" /> Edit Mess Deduction
-          </button>
-          <button onClick={() => { onAccommodationAllowance(); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
-            <Home className="w-3.5 h-3.5 text-gray-400" /> Edit Accommodation Allowance
-          </button>
-          <button onClick={() => { onAccommodation(); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
-            <Home className="w-3.5 h-3.5 text-gray-400" /> Edit Accommodation Deduction
-          </button>
-          <button onClick={() => { onIncentive(); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
-            <TrendingUp className="w-3.5 h-3.5 text-gray-400" /> Edit Incentive
-          </button>
-          <button onClick={() => { onReversal(); setOpen(false); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
-            <RotateCcw className="w-3.5 h-3.5 text-gray-400" /> Edit Basic Reversal
-          </button>
-        </div>
+      {open && sal && pos && ReactDOM.createPortal(
+        <div ref={menuRef} style={{ position: 'fixed', top: pos.top, left: pos.left, width: 232, zIndex: 9999 }}
+          className="bg-white rounded-xl border border-gray-100 shadow-xl py-1.5 overflow-hidden">
+          {items.map(({ icon: Icon, label, onClick }) => (
+            <button key={label} onClick={() => { onClick(); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors text-left">
+              <Icon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> {label}
+            </button>
+          ))}
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
@@ -819,8 +853,8 @@ export default function EmployeeSalaryPage() {
     const lines = filtered.map(emp => {
       const sal = latestByUser.get(emp.id);
       const basic = Number(sal?.basic || 0);
-      const allowances = sal ? Number(sal.gross_monthly || 0) - basic : 0;
-      const deductions = sal ? Math.max(0, Number(sal.employee_pf||0) + Number(sal.pt_deduction||0) + Number(sal.mess_deduction||0) - Number(sal.basic_reversal||0)) : 0;
+      const allowances = sal ? Number(sal.gross_monthly || 0) - basic + Number(sal.incentive||0) : 0;
+      const deductions = sal ? Math.max(0, Number(sal.employee_pf||0) + Number(sal.pt_deduction||0) + Number(sal.mess_deduction||0) + Number(sal.accommodation_deduction||0) - Number(sal.basic_reversal||0)) : 0;
       return [
         emp.name, emp.employee_code||'', emp.department_name||'', emp.designation_name||emp.designation||'',
         basic.toFixed(2), allowances.toFixed(2), deductions.toFixed(2), Number(sal?.net_pay_monthly||0).toFixed(2),
@@ -923,8 +957,8 @@ export default function EmployeeSalaryPage() {
               {!empLoading && !salaryLoading && pageRows.map(emp=>{
                 const sal = latestByUser.get(emp.id);
                 const basic = sal ? Number(sal.basic || 0) : 0;
-                const allowances = sal ? Number(sal.gross_monthly || 0) - basic : 0;
-                const deductions = sal ? Math.max(0, Number(sal.employee_pf||0) + Number(sal.pt_deduction||0) + Number(sal.mess_deduction||0) - Number(sal.basic_reversal||0)) : 0;
+                const allowances = sal ? Number(sal.gross_monthly || 0) - basic + Number(sal.incentive||0) : 0;
+                const deductions = sal ? Math.max(0, Number(sal.employee_pf||0) + Number(sal.pt_deduction||0) + Number(sal.mess_deduction||0) + Number(sal.accommodation_deduction||0) - Number(sal.basic_reversal||0)) : 0;
                 return (
                   <tr key={emp.id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="px-4 py-3">
