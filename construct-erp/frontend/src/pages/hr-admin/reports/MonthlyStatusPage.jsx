@@ -328,13 +328,17 @@ export default function MonthlyStatusPage() {
                       );
                     }
                     // In/Out share one column — side by side on screen, stacked
-                    // for print so all 31 days fit across the sheet.
+                    // for print so all 31 days fit across the sheet. A/L/HD
+                    // cells already carry a status letter (see cs.label
+                    // above) — Present days need the same "P" so the print
+                    // sheet never shows a bare time with no status attached.
                     return (
                       <td
                         key={d}
                         title={cs.late ? `Late by ${p.lateMin} min` : undefined}
                         style={{ ...tdBase, background: bg, padding:0, borderLeft: cs.late ? '2px solid #FB923C' : undefined }}
                       >
+                        <span className="mar-status">P</span>
                         <span className="mar-io">
                           <span className="mar-io-in" style={{ color: p?.in ? (cs.late ? '#C2410C' : '#16A34A') : '#CBD5E1', fontWeight: cs.late ? 800 : 600 }}>{p?.in || '—'}</span>
                           <span className="mar-io-out" style={{ color: p?.out ? '#DC2626' : '#CBD5E1', fontWeight:600 }}>{p?.out || '—'}</span>
@@ -361,6 +365,9 @@ export default function MonthlyStatusPage() {
           flex:1 1 50%; padding:4px 5px; text-align:center; white-space:nowrap;
         }
         .mar-io-out { border-left:1px solid #EEF2F6; }
+        /* Present-day status letter — only shown in print (see @media print
+           below); on screen the coloured In/Out times already read clearly. */
+        .mar-status { display:none; }
 
         @media print {
           /* Screen scroll box would otherwise clip every row past 68vh. */
@@ -389,6 +396,16 @@ export default function MonthlyStatusPage() {
           .mar-c-dept { width:19mm !important; }
           .mar-c-co   { width:21mm !important; }
 
+          /* On screen every column uses a different colour (green In, red
+             Out, purple Company, grey placeholders) to carry meaning
+             visually — on a black & white/low-toner office printer those
+             all render as faint grey and become unreadable. Force solid
+             black + bold everywhere in print instead; the P/A/L/HD letters
+             and cell shading already carry the status without colour. */
+          .mar-table th, .mar-table td, .mar-io-in, .mar-io-out, .mar-status {
+            color:#000 !important; font-weight:800 !important;
+          }
+
           /* Stack the punches so a day needs one column, not two. */
           .mar-io { display:block !important; }
           .mar-io-in, .mar-io-out {
@@ -396,6 +413,12 @@ export default function MonthlyStatusPage() {
             font-size:6.5pt !important; line-height:1.25 !important;
           }
           .mar-io-out { border-left:none !important; border-top:0.5pt solid #D1D5DB !important; }
+          /* Present days had no status letter at all (only A/L/HD did) —
+             stack a "P" above In/Out so every cell states its status. */
+          .mar-status {
+            display:block !important; font-size:6pt !important; line-height:1.1 !important;
+            padding:0 1px !important; border-bottom:0.5pt solid #D1D5DB !important;
+          }
         }
       `}</style>
     </div>
