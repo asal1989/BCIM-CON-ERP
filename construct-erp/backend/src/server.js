@@ -115,6 +115,7 @@ const copilotRoutes           = require('./routes/copilot.routes');
 const tdsRoutes           = require('./routes/tds.routes');
 const hrMastersRoutes     = require('./routes/hr-masters.routes');
 const hrEmployeesRoutes   = require('./routes/hr-employees.routes');
+const hrEmployeeBackgroundRoutes = require('./routes/hr-employee-background.routes');
 const hrLeaveRoutes       = require('./routes/hr-leave.routes');
 const hrAttendanceRoutes  = require('./routes/hr-attendance.routes');
 const hrSalaryRoutes      = require('./routes/hr-salary.routes');
@@ -573,6 +574,7 @@ app.use(`${API}/mail`, mailRoutes);
 // HR & Admin Module (salaried permanent employees)
 app.use(`${API}/hr-admin/masters`,     hrMastersRoutes);
 app.use(`${API}/hr-admin/employees`,   hrEmployeesRoutes);
+app.use(`${API}/hr-admin/employees`,   hrEmployeeBackgroundRoutes);
 app.use(`${API}/hr-admin/leave`,       hrLeaveRoutes);
 app.use(`${API}/hr-admin/attendance`,  hrAttendanceRoutes);
 app.use(`${API}/hr-admin/salary`,      hrSalaryRoutes);

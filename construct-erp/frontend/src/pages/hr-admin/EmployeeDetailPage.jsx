@@ -6,9 +6,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, User, Calendar, CreditCard, TrendingUp, FileText, Briefcase,
   Phone, Mail, MapPin, Shield, Building2, Edit2, Upload, Trash2, Download, Plus, Clock,
-  FileSignature, Printer, ClipboardCheck, CheckCircle2, Circle, Ban, X, Send
+  FileSignature, Printer, ClipboardCheck, CheckCircle2, Circle, Ban, X, Send,
+  Users, GraduationCap, Zap, Award, Heart,
 } from 'lucide-react';
-import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI, mailAPI } from '../../api/client';
+import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI, mailAPI, hrEmployeeBackgroundAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 const B = { navy:'#0A1F5C', blue:'#2563EB', yellow:'#F4C430', success:'#10B981' };
@@ -16,6 +17,7 @@ const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, tran
 
 const TABS = [
   { id:'profile',    label:'Profile',        icon:User          },
+  { id:'background', label:'Background',     icon:GraduationCap },
   { id:'leaves',     label:'Leaves',         icon:Calendar      },
   { id:'payroll',    label:'Payroll',         icon:CreditCard    },
   { id:'loans',      label:'Loans',           icon:Briefcase     },
@@ -140,6 +142,202 @@ function ProfileTab({ emp, refetch }) {
   );
 }
 
+// ─── Background Tab — Family, Education, Experience, Skills, Certifications,
+// Emergency Contacts. All six are one-to-many child records with the same
+// list/add/delete shape, so one generic section component drives all of them
+// — each caller just supplies its own field config and API resource. ───────
+function BackgroundSection({ title, icon: Icon, empId, resource, fields, renderRow, emptyLabel }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({});
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['emp-bg', title, empId],
+    queryFn: () => resource.list(empId).then(r => r.data?.data || []),
+  });
+
+  const createMut = useMutation({
+    mutationFn: (d) => resource.create(empId, d),
+    onSuccess: () => { toast.success('Added'); setForm({}); setShowForm(false); qc.invalidateQueries({ queryKey: ['emp-bg', title, empId] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to add'),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => resource.remove(empId, id),
+    onSuccess: () => { toast.success('Removed'); qc.invalidateQueries({ queryKey: ['emp-bg', title, empId] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to remove'),
+  });
+
+  const rows = data || [];
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const requiredOk = fields.filter(f => f.required).every(f => form[f.key]);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4" style={{ boxShadow: '0 2px 8px rgba(10,31,92,0.05)' }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-black text-gray-500 uppercase tracking-wide flex items-center gap-2">
+          <Icon className="w-3.5 h-3.5" /> {title}
+        </h3>
+        <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700">
+          <Plus className="w-3.5 h-3.5" /> Add
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4 p-4 bg-gray-50 rounded-xl">
+          {fields.map(f => (
+            <div key={f.key} className={f.wide ? 'col-span-2 md:col-span-3' : ''}>
+              <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">{f.label}{f.required && ' *'}</label>
+              {f.type === 'select' ? (
+                <select value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400">
+                  <option value="">—</option>
+                  {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type={f.type || 'text'} value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400" />
+              )}
+            </div>
+          ))}
+          <div className="col-span-2 md:col-span-3 flex justify-end gap-2">
+            <button onClick={() => { setShowForm(false); setForm({}); }} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg hover:bg-gray-100">Cancel</button>
+            <button disabled={!requiredOk || createMut.isPending} onClick={() => createMut.mutate(form)}
+              className="px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-40" style={{ background: B.blue }}>
+              {createMut.isPending ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-gray-400 py-2">{emptyLabel}</p>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {rows.map(row => (
+            <div key={row.id} className="flex items-center justify-between py-2.5">
+              {renderRow(row)}
+              <button onClick={() => deleteMut.mutate(row.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BackgroundTab({ empId }) {
+  return (
+    <div>
+      <BackgroundSection
+        title="Family Details" icon={Users} empId={empId} resource={hrEmployeeBackgroundAPI.family}
+        emptyLabel="No family members added"
+        fields={[
+          { key: 'name', label: 'Name', required: true },
+          { key: 'relation', label: 'Relation', type: 'select', required: true, options: ['Spouse', 'Father', 'Mother', 'Son', 'Daughter', 'Sibling', 'Other'] },
+          { key: 'date_of_birth', label: 'Date of Birth', type: 'date' },
+          { key: 'occupation', label: 'Occupation' },
+          { key: 'phone', label: 'Phone' },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.name} <span className="text-xs font-normal text-gray-400">· {r.relation}</span></p>
+            <p className="text-xs text-gray-400">{[r.date_of_birth ? fmtDate(r.date_of_birth) : null, r.occupation, r.phone].filter(Boolean).join(' · ') || '—'}</p>
+          </div>
+        )}
+      />
+      <BackgroundSection
+        title="Education" icon={GraduationCap} empId={empId} resource={hrEmployeeBackgroundAPI.education}
+        emptyLabel="No education records added"
+        fields={[
+          { key: 'qualification', label: 'Qualification', required: true },
+          { key: 'institution', label: 'Institution' },
+          { key: 'board_university', label: 'Board / University' },
+          { key: 'year_of_passing', label: 'Year of Passing', type: 'number' },
+          { key: 'percentage', label: '% / CGPA' },
+          { key: 'specialization', label: 'Specialization' },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.qualification} {r.specialization ? `— ${r.specialization}` : ''}</p>
+            <p className="text-xs text-gray-400">{[r.institution, r.board_university, r.year_of_passing, r.percentage].filter(Boolean).join(' · ') || '—'}</p>
+          </div>
+        )}
+      />
+      <BackgroundSection
+        title="Experience (Previous Employers)" icon={Briefcase} empId={empId} resource={hrEmployeeBackgroundAPI.experience}
+        emptyLabel="No prior work experience added"
+        fields={[
+          { key: 'company_name', label: 'Company', required: true },
+          { key: 'designation', label: 'Designation' },
+          { key: 'from_date', label: 'From', type: 'date' },
+          { key: 'to_date', label: 'To', type: 'date' },
+          { key: 'reason_for_leaving', label: 'Reason for Leaving' },
+          { key: 'responsibilities', label: 'Responsibilities', wide: true },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.designation ? `${r.designation} — ` : ''}{r.company_name}</p>
+            <p className="text-xs text-gray-400">{[r.from_date ? fmtDate(r.from_date) : null, r.to_date ? fmtDate(r.to_date) : null].filter(Boolean).join(' to ') || '—'}</p>
+          </div>
+        )}
+      />
+      <BackgroundSection
+        title="Skills" icon={Zap} empId={empId} resource={hrEmployeeBackgroundAPI.skills}
+        emptyLabel="No skills added"
+        fields={[
+          { key: 'skill_name', label: 'Skill', required: true },
+          { key: 'proficiency', label: 'Proficiency', type: 'select', options: ['beginner', 'intermediate', 'advanced', 'expert'] },
+          { key: 'years_of_experience', label: 'Years', type: 'number' },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.skill_name}</p>
+            <p className="text-xs text-gray-400 capitalize">{[r.proficiency, r.years_of_experience ? `${r.years_of_experience} yrs` : null].filter(Boolean).join(' · ') || '—'}</p>
+          </div>
+        )}
+      />
+      <BackgroundSection
+        title="Certifications" icon={Award} empId={empId} resource={hrEmployeeBackgroundAPI.certifications}
+        emptyLabel="No certifications added"
+        fields={[
+          { key: 'certificate_name', label: 'Certificate', required: true },
+          { key: 'issuing_authority', label: 'Issuing Authority' },
+          { key: 'certificate_number', label: 'Certificate Number' },
+          { key: 'issue_date', label: 'Issue Date', type: 'date' },
+          { key: 'expiry_date', label: 'Expiry Date', type: 'date' },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.certificate_name}</p>
+            <p className="text-xs text-gray-400">{[r.issuing_authority, r.expiry_date ? `expires ${fmtDate(r.expiry_date)}` : null].filter(Boolean).join(' · ') || '—'}</p>
+          </div>
+        )}
+      />
+      <BackgroundSection
+        title="Emergency Contacts" icon={Heart} empId={empId} resource={hrEmployeeBackgroundAPI.emergencyContacts}
+        emptyLabel="No emergency contacts added"
+        fields={[
+          { key: 'name', label: 'Name', required: true },
+          { key: 'relation', label: 'Relation' },
+          { key: 'phone', label: 'Phone', required: true },
+          { key: 'alternate_phone', label: 'Alternate Phone' },
+          { key: 'address', label: 'Address', wide: true },
+        ]}
+        renderRow={(r) => (
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{r.name} <span className="text-xs font-normal text-gray-400">{r.relation ? `· ${r.relation}` : ''}</span></p>
+            <p className="text-xs text-gray-400">{[r.phone, r.alternate_phone].filter(Boolean).join(' / ')}</p>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
 // ─── Timeline Tab ─────────────────────────────────────────────────────────────
 function TimelineTab({ emp }) {
   const timeline = emp.timeline || [];
@@ -174,6 +372,92 @@ function TimelineTab({ emp }) {
           </div>
         )}
       </div>
+      <RoleHistorySection empId={emp.id} />
+    </div>
+  );
+}
+
+// Promotions/transfers recorded explicitly by HR — distinct from the
+// auto-generated timeline above, which only logs profile/status/document
+// events, not role changes (there's no auto-detection of designation/
+// department edits, so these are added manually).
+function RoleHistorySection({ empId }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({});
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['emp-role-history', empId],
+    queryFn: () => hrEmployeeBackgroundAPI.roleHistory.list(empId).then(r => r.data?.data || []),
+  });
+  const createMut = useMutation({
+    mutationFn: (d) => hrEmployeeBackgroundAPI.roleHistory.create(empId, d),
+    onSuccess: () => { toast.success('Added'); setForm({}); setShowForm(false); qc.invalidateQueries({ queryKey: ['emp-role-history', empId] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to add'),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => hrEmployeeBackgroundAPI.roleHistory.remove(empId, id),
+    onSuccess: () => { toast.success('Removed'); qc.invalidateQueries({ queryKey: ['emp-role-history', empId] }); },
+  });
+
+  const rows = data || [];
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-black text-gray-500 uppercase tracking-wide">Employment / Role History</h3>
+        <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700">
+          <Plus className="w-3.5 h-3.5" /> Add Change
+        </button>
+      </div>
+      {showForm && (
+        <div className="grid grid-cols-2 gap-3 mb-4 p-4 bg-gray-50 rounded-xl">
+          {[
+            { key: 'from_designation', label: 'From Designation' },
+            { key: 'to_designation', label: 'To Designation' },
+            { key: 'from_department', label: 'From Department' },
+            { key: 'to_department', label: 'To Department' },
+            { key: 'effective_date', label: 'Effective Date', type: 'date', required: true },
+            { key: 'reason', label: 'Reason' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">{f.label}{f.required && ' *'}</label>
+              <input type={f.type || 'text'} value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400" />
+            </div>
+          ))}
+          <div className="col-span-2 flex justify-end gap-2">
+            <button onClick={() => { setShowForm(false); setForm({}); }} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg hover:bg-gray-100">Cancel</button>
+            <button disabled={!form.effective_date || createMut.isPending} onClick={() => createMut.mutate(form)}
+              className="px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-40" style={{ background: B.blue }}>
+              {createMut.isPending ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-gray-400">No role changes recorded</p>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {rows.map(r => (
+            <div key={r.id} className="flex items-center justify-between py-2.5">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {r.from_designation || r.to_designation ? `${r.from_designation || '—'} → ${r.to_designation || '—'}` : ''}
+                  {r.from_department || r.to_department ? ` ${r.from_designation || r.to_designation ? '· ' : ''}${r.from_department || '—'} → ${r.to_department || '—'}` : ''}
+                </p>
+                <p className="text-xs text-gray-400">{fmtDate(r.effective_date)}{r.reason ? ` · ${r.reason}` : ''}{r.created_by_name ? ` · by ${r.created_by_name}` : ''}</p>
+              </div>
+              <button onClick={() => deleteMut.mutate(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -960,6 +1244,7 @@ export default function EmployeeDetailPage() {
       {/* Tab Content */}
       <motion.div {...fade(0.10)}>
         {activeTab==='profile'    && <ProfileTab    emp={emp}   refetch={refetch}/>}
+        {activeTab==='background' && <BackgroundTab empId={id}/>}
         {activeTab==='leaves'     && <LeavesTab     empId={id}/>}
         {activeTab==='payroll'    && <PayrollTab    empId={id}/>}
         {activeTab==='loans'      && <LoansTab      empId={id}/>}

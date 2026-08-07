@@ -1976,6 +1976,30 @@ export const hrEmployeesAPI = {
   verifyDocument: (id, did, d) => api.patch(`/hr-admin/employees/${id}/documents/${did}/verify`, d),
 };
 
+// Family / Education / Experience / Skills / Certifications / Emergency
+// Contacts / Role History — all one-to-many child records off an employee.
+function backgroundResource(path) {
+  return {
+    list:   (empId)         => api.get(`/hr-admin/employees/${empId}/${path}`),
+    create: (empId, d)      => api.post(`/hr-admin/employees/${empId}/${path}`, d),
+    update: (empId, id, d)  => api.put(`/hr-admin/employees/${empId}/${path}/${id}`, d),
+    remove: (empId, id)     => api.delete(`/hr-admin/employees/${empId}/${path}/${id}`),
+  };
+}
+export const hrEmployeeBackgroundAPI = {
+  family:            backgroundResource('family'),
+  education:         backgroundResource('education'),
+  experience:        backgroundResource('experience'),
+  skills:             backgroundResource('skills'),
+  certifications:    backgroundResource('certifications'),
+  emergencyContacts: backgroundResource('emergency-contacts'),
+  roleHistory: {
+    list:   (empId)     => api.get(`/hr-admin/employees/${empId}/role-history`),
+    create: (empId, d)  => api.post(`/hr-admin/employees/${empId}/role-history`, d),
+    remove: (empId, id) => api.delete(`/hr-admin/employees/${empId}/role-history/${id}`),
+  },
+};
+
 export const hrOnboardingAPI = {
   summary:        (params)      => api.get('/hr-admin/onboarding/summary', { params }),
   employees:      (params)      => api.get('/hr-admin/onboarding/employees', { params }),
