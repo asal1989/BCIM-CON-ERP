@@ -15,7 +15,7 @@ import {
 import {
   Users, UserPlus, UserCheck, FileText, Laptop, GraduationCap,
   ShieldCheck, ClipboardList, Bell, Search, ChevronRight,
-  CheckCircle2, AlertTriangle, Clock, Mail, IdCard, Smartphone,
+  CheckCircle2, AlertTriangle, Clock, Mail, Contact, Smartphone,
   BadgeCheck, FilePlus2, Award, Timer, ArrowRight, X,
 } from 'lucide-react';
 import { hrOnboardingAPI, hrMastersAPI } from '../../../api/client';
@@ -55,7 +55,7 @@ export default function OnboardingDashboardPage() {
   });
   const { data: departments } = useQuery({
     queryKey: ['hr-departments'],
-    queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
   });
   const { data: tasks } = useQuery({
     queryKey: ['onboarding-tasks'],
@@ -122,7 +122,7 @@ export default function OnboardingDashboardPage() {
     { label: 'Training', icon: GraduationCap, to: '/hr-admin/training' },
     { label: 'Import Employees', icon: FilePlus2, to: '/hr-admin/import' },
     { label: 'Document Verification', icon: ShieldCheck, to: '/hr-admin/onboarding/document-verification' },
-    { label: 'Print ID Card', icon: IdCard, to: '/hr-admin/onboarding/id-card' },
+    { label: 'Print ID Card', icon: Contact, to: '/hr-admin/onboarding/id-card' },
     { label: 'Create Email', icon: Mail, to: '/hr-admin/onboarding/email-account' },
   ];
 
@@ -394,11 +394,11 @@ export default function OnboardingDashboardPage() {
           <KpiCard label="Laptop Assigned" value={kpis.it?.laptop_assigned} icon={Laptop} color={B.success} bg="#D1FAE5" />
           <KpiCard label="Laptop Pending" value={kpis.it?.laptop_pending} icon={Laptop} color={B.warning} bg="#FEF3C7" />
           <KpiCard label="Mobile Assigned" value={kpis.it?.mobile_assigned} icon={Smartphone} color={B.blue} bg="#DBEAFE" />
-          <KpiCard label="Access Card Assigned" value={kpis.it?.access_card_assigned} icon={IdCard} color={B.blue} bg="#DBEAFE" />
+          <KpiCard label="Access Card Assigned" value={kpis.it?.access_card_assigned} icon={Contact} color={B.blue} bg="#DBEAFE" />
           <KpiCard label="Email Pending" value={kpis.it?.email_pending} icon={Mail} color={B.warning} bg="#FEF3C7" />
           <KpiCard label="ERP Login Pending" value={kpis.it?.erp_login_pending} icon={UserCheck} color={B.warning} bg="#FEF3C7" />
           <KpiCard label="Access Permissions Pending" value={kpis.it?.access_permissions_pending} icon={ShieldCheck} color={B.warning} bg="#FEF3C7" />
-          <KpiCard label="ID Card Pending" value={kpis.it?.id_card_pending} icon={IdCard} color={B.warning} bg="#FEF3C7" />
+          <KpiCard label="ID Card Pending" value={kpis.it?.id_card_pending} icon={Contact} color={B.warning} bg="#FEF3C7" />
         </div>
 
         <SectionHeader title="Training" icon={GraduationCap} iconColor={B.blue} />

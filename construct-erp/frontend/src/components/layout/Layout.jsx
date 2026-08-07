@@ -17,7 +17,7 @@ import {
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
   RefreshCw, Shuffle, Globe, Database, CloudSun,
-  UserPlus, GraduationCap, Timer, FileCheck2, IdCard, Award,
+  UserPlus, GraduationCap, Timer, FileCheck2, Contact, Award,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -285,7 +285,7 @@ const navGroups = [
     { to: '/hr-admin/onboarding/document-verification',  icon: FileCheck2,      label: 'Document Verification' },
     { to: '/hr-admin/onboarding/offer-appointment',      icon: FileSignature,   label: 'Offer & Appointment' },
     { to: '/hr-admin/onboarding/asset-allocation',       icon: Package,         label: 'IT Asset Allocation' },
-    { to: '/hr-admin/onboarding/id-card',                icon: IdCard,          label: 'ID Card Generation' },
+    { to: '/hr-admin/onboarding/id-card',                icon: Contact,         label: 'ID Card Generation' },
     { to: '/hr-admin/onboarding/email-account',          icon: Mail,            label: 'Email & Account Creation' },
     { to: '/hr-admin/onboarding/access-permissions',     icon: Key,             label: 'Access Permissions' },
     { to: '/hr-admin/onboarding/training',               icon: GraduationCap,   label: 'Training Assignment' },

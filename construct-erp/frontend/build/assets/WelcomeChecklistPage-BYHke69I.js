@@ -1,1 +1,0 @@
-import{j as e}from"./vendor-react-BAVvCkcf.js";import{O as t}from"./OnboardingPlaceholderPage-6pnZKecA.js";import"./vendor-icons-iIy5jY5T.js";function o(){return e.jsx(t,{title:"Welcome Checklist",description:"Track each new hire's first-week setup tasks."})}export{o as default};
