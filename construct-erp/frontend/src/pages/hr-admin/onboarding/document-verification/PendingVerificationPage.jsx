@@ -58,7 +58,7 @@ export default function PendingVerificationPage() {
   });
   const { data: departments } = useQuery({
     queryKey: ['hr-departments'],
-    queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
   });
 
   const refetch = () => qc.invalidateQueries({ queryKey: ['doc-verification-pending'] });

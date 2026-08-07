@@ -35,7 +35,7 @@ export default function MissingDocumentsPage() {
   });
   const { data: departments } = useQuery({
     queryKey: ['hr-departments'],
-    queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
   });
 
   const refetch = () => qc.invalidateQueries({ queryKey: ['doc-verification-missing'] });

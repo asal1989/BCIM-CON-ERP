@@ -120,7 +120,7 @@ export default function WelcomeChecklistPage() {
   });
   const { data: departments } = useQuery({
     queryKey: ['hr-departments'],
-    queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
   });
 
   const employees = data || [];
