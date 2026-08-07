@@ -58,8 +58,12 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Pull latest in case another commit landed during the build
-          git pull --rebase origin main
+          # Pull latest in case another commit landed during the build.
+          # --autostash: `npm run build` always leaves construct-erp/frontend/build/
+          # with uncommitted changes at this point (that's the output we're about
+          # to add+commit below), which otherwise makes `pull --rebase` refuse to
+          # run at all if origin moved in the meantime.
+          git pull --rebase --autostash origin main
 
           git add construct-erp/frontend/build/
 
