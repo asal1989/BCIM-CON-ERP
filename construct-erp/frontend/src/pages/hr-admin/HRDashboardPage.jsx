@@ -2,7 +2,7 @@
 import CelebrationsWidget from '../../components/hr/CelebrationsWidget';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -18,7 +18,7 @@ import {
   AlertCircle, CheckCircle2, Briefcase,
   Rocket, HardHat,
   MessageSquare, Search, Banknote,
-  ClipboardList, UserPlus, X, Clock,
+  ClipboardList, UserPlus, X, Clock, UserX,
 } from 'lucide-react';
 import {
   hrEmployeesAPI, hrPayrollAPI, hrLeaveAPI,
@@ -318,6 +318,38 @@ export default function HRDashboardPage() {
     queryFn:()=>hrAdvancedAPI.analyticsCharts().then(r=>r.data),
     staleTime: 300000,
   });
+  const todayStr = now.toISOString().slice(0,10);
+  const { data: todayAttData } = useQuery({
+    queryKey:['hr-attendance-today',todayStr],
+    queryFn:()=>hrAttendanceAPI.list({date:todayStr}).then(r=>r.data),
+  });
+  // All leave requests (not just pending) — for the Leave Analysis chart's
+  // by-type breakdown. GET /leave/requests returns every matching row
+  // unbounded when no status filter is passed (no dedicated aggregation
+  // route exists yet).
+  const { data: allLeaveData } = useQuery({
+    queryKey:['hr-leave-requests-all'],
+    queryFn:()=>hrLeaveAPI.listRequests({}).then(r=>r.data),
+  });
+  // Payroll cost trend — last 6 months. No dedicated multi-month endpoint
+  // exists yet, so this fans out 6 requests against the existing per-month
+  // list API; react-query caches each independently.
+  const last6Months = useMemo(()=>Array.from({length:6},(_,i)=>{
+    const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1);
+    return { month:d.getMonth()+1, year:d.getFullYear(), label:d.toLocaleDateString('en-IN',{month:'short'}) };
+  }),[]); // eslint-disable-line react-hooks/exhaustive-deps
+  const payrollTrendQueries = useQueries({
+    queries: last6Months.map(m=>({
+      queryKey:['hr-payroll-trend',m.month,m.year],
+      queryFn:()=>hrPayrollAPI.list({month:m.month,year:m.year}).then(r=>r.data),
+    })),
+  });
+  // Attendance trend — last 12 months, aggregated across all employees from
+  // the yearly-summary endpoint (per-employee per-month present/absent/leave).
+  const { data: yearlyAttData } = useQuery({
+    queryKey:['hr-attendance-yearly',year],
+    queryFn:()=>hrAttendanceAPI.yearlySummary({year}).then(r=>r.data),
+  });
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const employees    = empData?.data  || [];
@@ -338,6 +370,7 @@ export default function HRDashboardPage() {
   const additionsAttritionData = charts.additions_attrition || [];
 
   const totalActive  = employees.length;
+  const totalHeadcount = advanced.employees?.total ?? allEmployees.length;
   const permanent    = employees.filter(e=>e.employment_type==='permanent').length;
   const probation    = employees.filter(e=>e.employment_type==='probation').length;
   const contract     = employees.filter(e=>e.employment_type==='contract').length;
@@ -352,6 +385,68 @@ export default function HRDashboardPage() {
     advanced.cases?.open_cases,
     advanced.exits?.active_exits,
   ].reduce((s,n)=>s+parseInt(n||0),0);
+
+  // New joiners / resigned this month — the last bucket of the 12-month
+  // additions/attrition series is always the current month.
+  const thisMonthMovement = additionsAttritionData[additionsAttritionData.length-1] || {};
+  const newJoinersThisMonth = parseInt(thisMonthMovement.joined || 0);
+  const resignedThisMonth   = parseInt(thisMonthMovement.resigned || 0);
+
+  const leaveTodayCount = (todayAttData?.data || []).filter(a=>a.status==='leave').length;
+
+  const trainingNominationsTotal     = parseInt(advanced.training?.total_nominations || 0);
+  const trainingNominationsCompleted = parseInt(advanced.training?.completed_nominations || 0);
+  const trainingCompletionPct = trainingNominationsTotal>0
+    ? Math.round(trainingNominationsCompleted/trainingNominationsTotal*100) : 0;
+
+  // Attrition rate per month (%) — resigned that month over current active
+  // headcount. A simplification (denominator doesn't vary by month since we
+  // don't have historical headcount snapshots), but a reasonable trend signal.
+  const attritionRateData = useMemo(()=>
+    additionsAttritionData.map(m=>({
+      month: m.month,
+      rate: totalActive>0 ? +((parseInt(m.resigned||0)/totalActive)*100).toFixed(1) : 0,
+    })),
+  [additionsAttritionData, totalActive]);
+
+  // Leave Analysis — approved/all leave requests bucketed by leave type.
+  const leaveAnalysisData = useMemo(()=>{
+    const rows = allLeaveData?.data || [];
+    const map = {};
+    rows.forEach(r=>{
+      const type = r.leave_type_name || r.leave_type_code || r.leave_type || 'Other';
+      map[type] = (map[type]||0) + 1;
+    });
+    return Object.entries(map).map(([name,value],i)=>({ name, value, fill: DEPT_COLORS[i%DEPT_COLORS.length] }));
+  },[allLeaveData]);
+
+  // Payroll Cost — net pay total per month, last 6 months.
+  const payrollCostData = useMemo(()=>
+    last6Months.map((m,i)=>({
+      month: m.label,
+      cost: parseFloat(payrollTrendQueries[i]?.data?.totals?.net_pay || 0),
+    })),
+  [last6Months, payrollTrendQueries]);
+
+  // Attendance Trend — monthly % across all employees, last 12 months.
+  const attendanceTrendData = useMemo(()=>{
+    const byMonth = yearlyAttData?.data || {};
+    const totals = {};
+    for (let m=1; m<=12; m++) totals[m] = { present:0, absent:0, leave:0 };
+    Object.values(byMonth).forEach(empMonths=>{
+      Object.entries(empMonths).forEach(([m,v])=>{
+        totals[m].present += v.present||0;
+        totals[m].absent  += v.absent||0;
+        totals[m].leave   += v.leave||0;
+      });
+    });
+    return Array.from({length:12},(_,i)=>{
+      const m = i+1;
+      const t = totals[m];
+      const marked = t.present+t.absent;
+      return { month: MONTHS_FULL[m]?.slice(0,3) || m, rate: marked>0 ? +((t.present/marked)*100).toFixed(1) : 0 };
+    });
+  },[yearlyAttData]);
 
   // Attendance aggregates for this month (from real data)
   const attTotals = useMemo(()=>{
@@ -497,21 +592,27 @@ export default function HRDashboardPage() {
           <div className="space-y-6 min-w-0">
 
             {/* ── KPI ROW ──────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
-              <KpiCard delay={0.07} label="Total Employees" value={totalActive||'—'} icon={Users}
-                color={B.blue}    bg="#EFF6FF" sub="All active staff"         onClick={()=>navigate('/hr-admin/employees')}/>
-              <KpiCard delay={0.10} label="Permanent"       value={permanent||'—'}  icon={UserCheck}
-                color={B.success} bg="#ECFDF5" sub="Full-time employees"      onClick={()=>navigate('/hr-admin/employees')}/>
-              <KpiCard delay={0.13} label="On Probation"    value={probation||'—'}  icon={Clock}
-                color="#F59E0B"   bg="#FFFBEB" sub="Under review"             onClick={()=>navigate('/hr-admin/employees')}/>
-              <KpiCard delay={0.16} label="Contract"        value={contract||'—'}   icon={Briefcase}
-                color="#8B5CF6"   bg="#F5F3FF" sub="Fixed-term staff"         onClick={()=>navigate('/hr-admin/employees')}/>
-              <KpiCard delay={0.19} label="Pending Leaves"  value={pendingLeaves}   icon={Calendar}
-                color="#F97316"   bg="#FFF7ED" sub="Awaiting approval"        onClick={()=>navigate('/hr-admin/leaves')}/>
-              <KpiCard delay={0.22} label="HR Alerts"       value={compCount||'0'}  icon={ClipboardList}
-                color={B.danger}  bg="#FEF2F2" sub="Compliance issues"        onClick={()=>navigate('/hr-admin/employees')}/>
-              <KpiCard delay={0.25} label="Not Linked"      value={noProfileCount||'0'} icon={Link2}
-                color="#D97706"   bg="#FFFBEB" sub="No HR profile yet"        onClick={()=>navigate('/users')}/>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              <KpiCard delay={0.05} label="Total Employees"  value={totalHeadcount||'—'} icon={Users}
+                color={B.blue}    bg="#EFF6FF" sub="All staff, any status"    onClick={()=>navigate('/hr-admin/employees')}/>
+              <KpiCard delay={0.07} label="Active Employees" value={totalActive||'—'}    icon={UserCheck}
+                color={B.success} bg="#ECFDF5" sub="Currently working"       onClick={()=>navigate('/hr-admin/employees')}/>
+              <KpiCard delay={0.09} label="New Joiners"      value={newJoinersThisMonth} icon={UserPlus}
+                color="#0EA5E9"   bg="#E0F2FE" sub={`${MONTHS_FULL[month]} joins`}       onClick={()=>navigate('/hr-admin/employees')}/>
+              <KpiCard delay={0.11} label="Resigned"         value={resignedThisMonth}   icon={UserX}
+                color={B.danger}  bg="#FEF2F2" sub={`${MONTHS_FULL[month]} exits`}       onClick={()=>navigate('/hr-admin/fnf')}/>
+              <KpiCard delay={0.13} label="Attendance %"     value={`${attTotals.rate}%`} icon={Fingerprint}
+                color="#8B5CF6"   bg="#F5F3FF" sub="This month"              onClick={()=>navigate('/hr-admin/attendance')}/>
+              <KpiCard delay={0.15} label="Leave Today"      value={leaveTodayCount}     icon={Calendar}
+                color="#F97316"   bg="#FFF7ED" sub="Out on leave today"      onClick={()=>navigate('/hr-admin/leaves')}/>
+              <KpiCard delay={0.17} label="Open Recruitment" value={advanced.recruitment?.open_jobs||0} icon={Briefcase}
+                color="#6366F1"   bg="#EEF2FF" sub="Open job openings"       onClick={()=>navigate('/hr-admin/recruitment')}/>
+              <KpiCard delay={0.19} label="Payroll Status"   value={payroll.length>0?`${payrollPaid}/${payroll.length}`:'Not run'} icon={CreditCard}
+                color="#14B8A6"   bg="#F0FDFA" sub={payroll.length>0?'Paid this month':MONTHS_FULL[month]} onClick={()=>navigate('/hr-admin/payroll')}/>
+              <KpiCard delay={0.21} label="Training Completion" value={`${trainingCompletionPct}%`} icon={Award}
+                color="#D97706"   bg="#FFFBEB" sub={trainingNominationsTotal>0?`${trainingNominationsCompleted}/${trainingNominationsTotal} done`:'No nominations yet'} onClick={()=>navigate('/hr-admin/training')}/>
+              <KpiCard delay={0.23} label="Compliance Status" value={compCount>0?`${compCount} alerts`:'All Clear'} icon={ShieldCheck}
+                color={compCount>0?B.danger:B.success} bg={compCount>0?'#FEF2F2':'#ECFDF5'} sub="Statutory & policy" onClick={()=>navigate('/hr-admin/compliance')}/>
             </div>
 
             {/* ── UNLINKED STAFF ALERT ─────────────────────────────────── */}
@@ -706,6 +807,106 @@ export default function HRDashboardPage() {
             <motion.div {...fade(0.36)}>
               <CelebrationsWidget />
             </motion.div>
+
+            {/* ── DASHBOARD SPEC CHARTS ───────────────────────────────────
+                Department-wise Employees is the Department Headcount donut
+                above; these five cover the rest of the requested set. */}
+            <div className="grid lg:grid-cols-3 gap-6">
+
+              {/* Monthly Hiring Trend */}
+              <motion.div {...fade(0.34)} className="bg-white rounded-2xl p-6 border border-gray-100"
+                style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                <SectionHeader title="Monthly Hiring Trend" sub="New joiners, last 12 months"
+                  icon={UserPlus} iconColor="#0EA5E9"/>
+                {additionsAttritionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={additionsAttritionData} margin={{top:8,right:8,left:-20,bottom:0}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                      <XAxis dataKey="month" tick={{fontSize:9}}/>
+                      <YAxis tick={{fontSize:11}} allowDecimals={false}/>
+                      <Tooltip content={<ChartTip suffix=" hires"/>}/>
+                      <Bar dataKey="joined" name="Joined" fill="#0EA5E9" radius={[4,4,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">No hiring data yet</div>
+                )}
+              </motion.div>
+
+              {/* Attrition Rate */}
+              <motion.div {...fade(0.35)} className="bg-white rounded-2xl p-6 border border-gray-100"
+                style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                <SectionHeader title="Attrition Rate" sub="% of active headcount, last 12 months"
+                  icon={UserX} iconColor={B.danger}/>
+                {attritionRateData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={attritionRateData} margin={{top:8,right:8,left:-20,bottom:0}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                      <XAxis dataKey="month" tick={{fontSize:9}}/>
+                      <YAxis tick={{fontSize:11}} unit="%"/>
+                      <Tooltip content={<ChartTip suffix="%"/>}/>
+                      <Line type="monotone" dataKey="rate" name="Attrition" stroke={B.danger} strokeWidth={2} dot={{r:3}}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">No attrition data yet</div>
+                )}
+              </motion.div>
+
+              {/* Attendance Trend */}
+              <motion.div {...fade(0.36)} className="bg-white rounded-2xl p-6 border border-gray-100"
+                style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                <SectionHeader title="Attendance Trend" sub={`% present, ${year}`}
+                  icon={Fingerprint} iconColor={B.success}/>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={attendanceTrendData} margin={{top:8,right:8,left:-20,bottom:0}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                    <XAxis dataKey="month" tick={{fontSize:9}}/>
+                    <YAxis tick={{fontSize:11}} unit="%" domain={[0,100]}/>
+                    <Tooltip content={<ChartTip suffix="%"/>}/>
+                    <Line type="monotone" dataKey="rate" name="Attendance" stroke={B.success} strokeWidth={2} dot={{r:3}}/>
+                  </LineChart>
+                </ResponsiveContainer>
+              </motion.div>
+
+              {/* Leave Analysis */}
+              <motion.div {...fade(0.37)} className="bg-white rounded-2xl p-6 border border-gray-100"
+                style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                <SectionHeader title="Leave Analysis" sub="By leave type, all-time"
+                  icon={Calendar} iconColor="#F97316"/>
+                {leaveAnalysisData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={leaveAnalysisData} cx="50%" cy="50%" innerRadius={40} outerRadius={68}
+                        paddingAngle={3} dataKey="value">
+                        {leaveAnalysisData.map((d,i)=><Cell key={i} fill={d.fill}/>)}
+                      </Pie>
+                      <Tooltip content={<ChartTip suffix=" requests"/>}/>
+                      <Legend wrapperStyle={{fontSize:11}}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-sm text-gray-400">No leave requests yet</div>
+                )}
+              </motion.div>
+
+              {/* Payroll Cost */}
+              <motion.div {...fade(0.38)} className="bg-white rounded-2xl p-6 border border-gray-100 lg:col-span-2"
+                style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                <SectionHeader title="Payroll Cost" sub="Net pay total, last 6 months"
+                  icon={CreditCard} iconColor="#14B8A6"/>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={payrollCostData} margin={{top:8,right:8,left:-10,bottom:0}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                    <XAxis dataKey="month" tick={{fontSize:11}}/>
+                    <YAxis tick={{fontSize:11}} tickFormatter={v=>`₹${(v/100000).toFixed(1)}L`}/>
+                    <Tooltip formatter={v=>[`₹${Number(v).toLocaleString('en-IN')}`,'Net Pay']}/>
+                    <Bar dataKey="cost" name="Net Pay" fill="#14B8A6" radius={[4,4,0,0]}/>
+                  </BarChart>
+                </ResponsiveContainer>
+              </motion.div>
+
+            </div>
 
             {/* ── ANALYTICS CHARTS ─────────────────────────────────────── */}
             <div className="grid lg:grid-cols-2 gap-6">

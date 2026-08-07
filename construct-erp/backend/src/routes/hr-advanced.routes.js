@@ -1237,7 +1237,12 @@ router.get('/analytics/summary', async (req, res) => {
         : query(empFilter, [cid]),
       safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
       safe(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [cid], { pending: 0 }),
-      safe(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [cid], { planned: 0 }),
+      safe(`
+        SELECT
+          (SELECT COUNT(*) FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled'))::int AS planned,
+          (SELECT COUNT(*) FROM hr_training_nominations WHERE company_id=$1)::int AS total_nominations,
+          (SELECT COUNT(*) FROM hr_training_nominations WHERE company_id=$1 AND attendance_status='completed')::int AS completed_nominations
+      `, [cid], { planned: 0, total_nominations: 0, completed_nominations: 0 }),
       safe(`SELECT COUNT(*)::int AS open_cases FROM hr_employee_cases WHERE company_id=$1 AND status='open'`, [cid], { open_cases: 0 }),
       safe(`SELECT COUNT(*)::int AS active_exits FROM hr_exit_cases WHERE company_id=$1 AND status NOT IN ('closed','cancelled')`, [cid], { active_exits: 0 }),
       safe(`SELECT COUNT(*)::int AS goals, COALESCE(AVG(rating),0)::numeric(5,2) AS avg_rating FROM hr_performance_goals WHERE company_id=$1`, [cid], { goals: 0, avg_rating: 0 }),
