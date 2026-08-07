@@ -786,6 +786,13 @@ function MusterRoll({ depts }) {
 
       <style>{`
         @media print {
+          /* Both ancestor shells (HR Reports Hub page + this page's own
+             sidebar/content row) keep horizontal padding that the generic
+             .no-print rules don't touch, since it lives on the *surviving*
+             element, not a hidden one. That padding eats straight into the
+             already-tight A3 width budget the 31-day grid depends on. */
+          .hr-reports-shell { padding:0 !important; }
+          .hrc-shell { padding:0 !important; gap:0 !important; }
           /* Screen-only overflow/clip wrappers must not carry into print --
              same failure mode as the Monthly Attendance report: a fixed
              box would silently drop whatever didn't fit inside it. */
@@ -2547,7 +2554,7 @@ export default function HRCompliancePage({ embedded = false, initialTab }) {
     <div className={embedded ? '' : 'min-h-screen'} style={embedded ? {} : { background: '#F8FAFC' }}>
       {/* Header — hidden when embedded inside HRReportsPage */}
       {!embedded && (
-        <motion.div {...fade(0)} className="relative overflow-hidden"
+        <motion.div {...fade(0)} className="no-print relative overflow-hidden"
           style={{ background: 'linear-gradient(135deg,#0A1F5C,#1e3a8a)', boxShadow: '0 4px 20px rgba(10,31,92,0.2)' }}>
           <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
             style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }}/>
@@ -2565,9 +2572,9 @@ export default function HRCompliancePage({ embedded = false, initialTab }) {
       )}
 
       {/* Sidebar + Content */}
-      <motion.div {...fade(0.06)} className="px-5 py-4 flex gap-3.5 items-start">
+      <motion.div {...fade(0.06)} className="hrc-shell px-5 py-4 flex gap-3.5 items-start">
 
-        <div className="w-56 flex-shrink-0 bg-white rounded-2xl border border-gray-100 p-2.5 sticky top-4"
+        <div className="no-print w-56 flex-shrink-0 bg-white rounded-2xl border border-gray-100 p-2.5 sticky top-4"
           style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
           <div className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Overview</div>
           <NavItem active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}

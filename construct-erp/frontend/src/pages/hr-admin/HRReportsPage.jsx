@@ -132,7 +132,7 @@ function MonthFilter({ month, setMonth, year, setYear }) {
 function ReportFilterBar({ month, setMonth, year, setYear }) {
   const sel = "h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 focus:outline-none focus:border-blue-400 transition";
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-3 flex flex-wrap items-center gap-3"
+    <div className="no-print bg-white rounded-2xl border border-gray-100 p-3 flex flex-wrap items-center gap-3"
       style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
       <span className="text-xs font-black uppercase tracking-wide text-slate-500 px-1">Period</span>
       <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={sel}>
@@ -1097,10 +1097,10 @@ export default function HRReportsPage() {
   };
 
   return (
-    <div className="min-h-screen p-6 space-y-6" style={{background:'#F8FAFC'}}>
+    <div className="hr-reports-shell min-h-screen p-6 space-y-6" style={{background:'#F8FAFC'}}>
 
       {/* Header Banner */}
-      <motion.div {...fade(0)} className="relative overflow-hidden rounded-2xl"
+      <motion.div {...fade(0)} className="no-print relative overflow-hidden rounded-2xl"
         style={{background:`linear-gradient(135deg,#0A1F5C,#1e3a8a)`,boxShadow:'0 8px 32px rgba(10,31,92,0.2)'}}>
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
           style={{background:'radial-gradient(circle,#fff,transparent 70%)',transform:'translate(25%,-25%)'}}/>
@@ -1131,12 +1131,12 @@ export default function HRReportsPage() {
         <motion.div {...fade(0.05)} className="space-y-4">
           <button
             onClick={() => setView('')}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-700 border border-gray-200 hover:bg-gray-50 transition"
+            className="no-print inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-700 border border-gray-200 hover:bg-gray-50 transition"
             style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}
           >
             <ArrowLeft className="h-4 w-4" /> All Reports
           </button>
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+          <div className="no-print flex items-center gap-2 text-sm font-bold text-slate-500">
             <span>HR Reports</span><span className="text-slate-300">/</span>
             <span className="text-slate-900">{labelOf(view)}</span>
           </div>
