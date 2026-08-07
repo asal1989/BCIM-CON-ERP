@@ -61,27 +61,18 @@ export const REPORT_PRINT_CSS_LANDSCAPE = REPORT_PRINT_CSS.replace(
   '@page { size: A4 landscape; margin: 10mm 8mm; }'
 );
 
-// A3 landscape variant — for the widest day-grid reports (Monthly Attendance:
-// 4 fixed columns + up to 31 days x In/Out = 66+ columns, which doesn't fit
-// legibly on A4 landscape). Also tightens table font/padding a notch further
-// since even A3 is fitting 60+ columns.
-export const REPORT_PRINT_CSS_A3_LANDSCAPE = REPORT_PRINT_CSS
-  .replace(
-    '@page { size: A4 portrait; margin: 12mm 10mm; }',
-    '@page { size: A3 landscape; margin: 10mm 8mm; }'
-  )
-  .replace(
-    ".report-print-table {\n    width:100% !important; border-collapse:collapse !important; font-size:8pt !important;",
-    ".report-print-table {\n    width:100% !important; border-collapse:collapse !important; font-size:7.5pt !important;"
-  )
-  .replace(
-    "padding:4px 5px !important; border:1px solid #1B3A6B !important;\n    text-align:left !important; font-size:7.5pt !important; font-weight:700 !important;",
-    "padding:3px 4px !important; border:1px solid #1B3A6B !important;\n    text-align:left !important; font-size:7pt !important; font-weight:700 !important;"
-  )
-  .replace(
-    ".report-print-table td {\n    padding:3px 5px !important; border:1px solid #bbb !important;\n    vertical-align:middle !important; font-size:8pt !important;\n  }",
-    ".report-print-table td {\n    padding:2px 4px !important; border:1px solid #bbb !important;\n    vertical-align:middle !important; font-size:7.5pt !important;\n  }"
-  );
+// A3 landscape variant — for day-grid reports too wide for A4 landscape
+// (Monthly Attendance: 4 fixed columns + up to 31 day columns).
+//
+// This only swaps the page size. A very wide grid needs more than a bigger
+// sheet: browsers clip an over-wide table rather than scaling it to fit, so
+// the report must also override its own column min-widths for print. See the
+// .mar-* print rules in MonthlyStatusPage for a worked example — a report that
+// keeps screen min-widths will still be cut off here, just at a later column.
+export const REPORT_PRINT_CSS_A3_LANDSCAPE = REPORT_PRINT_CSS.replace(
+  '@page { size: A4 portrait; margin: 12mm 10mm; }',
+  '@page { size: A3 landscape; margin: 10mm 8mm; }'
+);
 
 export function ReportPrintHeader({ companyName = 'BCIM', reportTitle, subtitle }) {
   return (
