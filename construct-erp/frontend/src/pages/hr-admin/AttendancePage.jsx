@@ -2,14 +2,18 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+// jspdf-autotable v5 dropped the auto-patch-on-import side effect (no more
+// doc.autoTable(...) just from `import 'jspdf-autotable'`) — it's now a
+// plain function you call with the doc. Verified live: the old pattern threw
+// "doc.autoTable is not a function" in production.
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import {
   Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle,
   CalendarCheck, Clock, Mail, Send, Search, Users, UserCheck,
   UserX, Clock3, Palmtree, ChevronRight, Printer, FileDown, FileSpreadsheet,
 } from 'lucide-react';
-import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI, companySettingsAPI, scAPI } from '../../api/client';
+import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI, companySettingsAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -113,7 +117,7 @@ function buildAttendancePDFDoc(table, companyName) {
   doc.setFontSize(8); doc.setTextColor(148, 163, 184);
   doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, ML, 23);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 27,
     margin: { left: ML, right: ML },
     head: [table.headers],
@@ -469,33 +473,44 @@ export default function AttendancePage() {
   const { data:companyData }  = useQuery({ queryKey:['company-settings'], queryFn:()=>companySettingsAPI.get().then(r=>r.data?.data||r.data), staleTime:10*60*1000 });
   const { data:deptData }     = useQuery({ queryKey:['hr-departments'],  queryFn:()=>hrMastersAPI.listDepts().then(r=>r.data) });
   const { data:projectsData } = useQuery({ queryKey:['projects-active'], queryFn:()=>projectAPI.list({ is_active:true }).then(r=>r.data) });
-  // Subcontractor companies — the "Company" filter options. Attendance page
-  // previously showed only direct staff (hr_attendance); this merges in
-  // sc_attendance so a specific subcontractor's workers can be isolated.
-  // NOTE: scAPI.listSC() hits sc_subcontractors, which is what sc_workers.sc_id
-  // actually references — NOT subcontractorAPI.listSubcontractors(), which
-  // queries the unrelated `vendors` table (different ID space entirely; using
-  // those IDs as a sc_id filter would silently match zero workers).
-  const { data:subcontractorsData } = useQuery({
-    queryKey:['sc-subcontractors-list'],
-    queryFn:()=>scAPI.listSC().then(r=>r.data?.data||r.data||[]),
+  // Company filter fetches the full (dept/project-filtered) set and narrows
+  // client-side — same pattern as TimesheetReportPage's working Company
+  // filter, so `availableCompanies` always lists every real value rather than
+  // collapsing to just the currently-selected one.
+  const { data:attDataRaw, isLoading } = useQuery({
+    queryKey:['hr-attendance-grid', month, year, deptFilter, projectFilter],
+    queryFn:()=>hrAttendanceAPI.list({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
   });
-  const subcontractors = subcontractorsData || [];
-  const { data:attData, isLoading } = useQuery({
-    queryKey:['hr-attendance-grid', month, year, deptFilter, projectFilter, companyFilter],
-    queryFn:()=>hrAttendanceAPI.list({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
+  const { data:summaryDataRaw } = useQuery({
+    queryKey:['hr-attendance-summary', month, year, deptFilter, projectFilter],
+    queryFn:()=>hrAttendanceAPI.summary({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
   });
-  const { data:summaryData } = useQuery({
-    queryKey:['hr-attendance-summary', month, year, deptFilter, projectFilter, companyFilter],
-    queryFn:()=>hrAttendanceAPI.summary({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
-  });
-  const { data:dailyData, isLoading:dailyLoading } = useQuery({
-    queryKey:['hr-attendance-daily', dailyDate, deptFilter, projectFilter, companyFilter],
-    queryFn:()=>hrAttendanceAPI.list({ date:dailyDate, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
+  const { data:dailyDataRaw, isLoading:dailyLoading } = useQuery({
+    queryKey:['hr-attendance-daily', dailyDate, deptFilter, projectFilter],
+    queryFn:()=>hrAttendanceAPI.list({ date:dailyDate, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
     enabled: view==='daily',
   });
 
-  const allEmployees = useMemo(()=>(summaryData?.data||[]).map(s=>({ id:s.user_id, name:s.name, employee_code:s.employee_code, department_id:s.department_id, department_name:s.department_name })), [summaryData]);
+  const availableCompanies = useMemo(() => {
+    const seen = new Set();
+    (summaryDataRaw?.data||[]).forEach(s => { if (s.company_name) seen.add(s.company_name); });
+    return [...seen].sort();
+  }, [summaryDataRaw]);
+
+  const summaryData = useMemo(() => companyFilter
+    ? { data: (summaryDataRaw?.data||[]).filter(s => s.company_name === companyFilter) }
+    : summaryDataRaw
+  , [summaryDataRaw, companyFilter]);
+  const attData = useMemo(() => companyFilter
+    ? { data: (attDataRaw?.data||[]).filter(a => a.company_name === companyFilter) }
+    : attDataRaw
+  , [attDataRaw, companyFilter]);
+  const dailyData = useMemo(() => companyFilter
+    ? { data: (dailyDataRaw?.data||[]).filter(a => a.company_name === companyFilter) }
+    : dailyDataRaw
+  , [dailyDataRaw, companyFilter]);
+
+  const allEmployees = useMemo(()=>(summaryData?.data||[]).map(s=>({ id:s.user_id, name:s.name, employee_code:s.employee_code, department_id:s.department_id, department_name:s.department_name, company_name:s.company_name })), [summaryData]);
   const employees = useMemo(()=>{ const e=allEmployees; if (!deptFilter) return e; return e.filter(x=>x.department_id===deptFilter); }, [allEmployees, deptFilter]);
 
   const attMap = useMemo(()=>{
@@ -732,8 +747,7 @@ export default function AttendancePage() {
           </select>
           <select value={companyFilter} onChange={e=>setCompanyFilter(e.target.value)} style={S.select} aria-label="Company">
             <option value="">All companies</option>
-            <option value="staff">Direct staff only</option>
-            {subcontractors.map(sc=><option key={sc.id} value={sc.id}>{sc.name}</option>)}
+            {availableCompanies.map(c=><option key={c} value={c}>{c}</option>)}
           </select>
 
           {/* Print / PDF / Excel — export whatever view is currently active.
