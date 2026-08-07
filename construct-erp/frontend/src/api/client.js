@@ -23,6 +23,7 @@ const PROJECT_INJECT_SKIP = [
   /\/vendor/,           // vendor master data is company-wide
   /\/quotations\/vendor-rfq/,
   /\/hr-admin\/employees/,  // HR-only endpoint; all employees visible regardless of project context
+  /\/hr-admin\/onboarding/, // Onboarding Dashboard — company-wide, not project-scoped
 ];
 
 function shouldInjectProject(url) {
@@ -1972,6 +1973,21 @@ export const hrEmployeesAPI = {
   updateLifecycle:(id, itemId, d) => api.patch(`/hr-admin/employees/${id}/lifecycle/${itemId}`, d),
   uploadDocument: (id, fd)  => api.post(`/hr-admin/employees/${id}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   deleteDocument: (id, did) => api.delete(`/hr-admin/employees/${id}/documents/${did}`),
+  verifyDocument: (id, did, d) => api.patch(`/hr-admin/employees/${id}/documents/${did}/verify`, d),
+};
+
+export const hrOnboardingAPI = {
+  summary:        (params)      => api.get('/hr-admin/onboarding/summary', { params }),
+  employees:      (params)      => api.get('/hr-admin/onboarding/employees', { params }),
+  tracker:        (id)          => api.get(`/hr-admin/onboarding/employees/${id}/tracker`),
+  tasks:          ()            => api.get('/hr-admin/onboarding/tasks'),
+  taskEmployees:  (itemKey)     => api.get(`/hr-admin/onboarding/tasks/${itemKey}/employees`),
+  probation:      (params)      => api.get('/hr-admin/onboarding/probation/upcoming', { params }),
+  joiningTrend:   (params)      => api.get('/hr-admin/onboarding/charts/joining-trend', { params }),
+  completionChart:()            => api.get('/hr-admin/onboarding/charts/onboarding-completion'),
+  trainingChart:  ()            => api.get('/hr-admin/onboarding/charts/training-progress'),
+  probationChart: ()            => api.get('/hr-admin/onboarding/charts/probation-status'),
+  report:         (key, params) => api.get(`/hr-admin/onboarding/reports/${key}`, { params }),
 };
 
 export const hrLeaveAPI = {

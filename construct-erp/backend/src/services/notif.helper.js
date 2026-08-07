@@ -851,6 +851,79 @@ function notifyAdvanceProcurementApproved(companyId, av, actorName) {
   }).catch(() => {});
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════════════════════════════════════════
+function notifyOnboardingStarted(companyId, employee) {
+  notify({
+    company_id: companyId,
+    target_role: 'hr_admin',
+    type: 'onboarding_started',
+    title: 'New Employee Onboarding Started',
+    message: `${employee.name} has joined and onboarding has started.`,
+    link: `/hr-admin/onboarding/employee/${employee.id}`,
+    severity: 'info',
+    related_type: 'onboarding',
+    related_id: employee.id,
+  });
+}
+
+function notifyOnboardingTaskOverdue(companyId, employee, taskTitle) {
+  notify({
+    company_id: companyId,
+    target_role: 'hr_admin',
+    type: 'onboarding_task_overdue',
+    title: 'Onboarding Task Overdue',
+    message: `"${taskTitle}" for ${employee.name} is overdue.`,
+    link: `/hr-admin/onboarding/employee/${employee.id}`,
+    severity: 'warning',
+    related_type: 'lifecycle_item',
+    related_id: employee.id,
+  });
+}
+
+function notifyOnboardingCompleted(companyId, employee) {
+  notify({
+    company_id: companyId,
+    target_role: 'hr_admin',
+    type: 'onboarding_completed',
+    title: 'Onboarding Completed',
+    message: `${employee.name} has completed onboarding.`,
+    link: `/hr-admin/onboarding/employee/${employee.id}`,
+    severity: 'info',
+    related_type: 'onboarding',
+    related_id: employee.id,
+  });
+}
+
+function notifyDocumentRejected(companyId, employee, docName, reason) {
+  notify({
+    company_id: companyId,
+    target_role: 'hr_admin',
+    type: 'onboarding_document_rejected',
+    title: 'Document Rejected',
+    message: `${docName} for ${employee.name} was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+    link: `/hr-admin/onboarding/employee/${employee.id}`,
+    severity: 'warning',
+    related_type: 'employee_document',
+    related_id: employee.id,
+  });
+}
+
+function notifyProbationEndingSoon(companyId, employee, daysLeft) {
+  notify({
+    company_id: companyId,
+    target_role: 'hr_admin',
+    type: 'probation_ending_soon',
+    title: 'Probation Ending Soon',
+    message: `${employee.name}'s probation ends in ${daysLeft} day(s). Review is due.`,
+    link: `/hr-admin/onboarding/employee/${employee.id}`,
+    severity: 'warning',
+    related_type: 'onboarding',
+    related_id: employee.id,
+  });
+}
+
 module.exports = {
   // MR
   notifyMrNextApprover,
@@ -890,4 +963,7 @@ module.exports = {
   notifyTicketRaised, notifyTicketResolved,
   // SC Payment
   notifyScPaymentRecorded,
+  // Onboarding
+  notifyOnboardingStarted, notifyOnboardingTaskOverdue, notifyOnboardingCompleted,
+  notifyDocumentRejected, notifyProbationEndingSoon,
 };

@@ -177,6 +177,84 @@ runSchemaInit('hr-employees-docs-sharepoint', async () => {
   await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_url TEXT`);
 });
 
+// Document verification workflow (Onboarding Dashboard) — existing rows stay
+// 'pending' since no verification actually happened for them historically.
+runSchemaInit('hr-employees-doc-verification', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'pending'`);
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS verified_by UUID REFERENCES users(id)`);
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ`);
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+  await q(`
+    DO $$ BEGIN
+      ALTER TABLE employee_documents ADD CONSTRAINT employee_documents_verification_status_check
+        CHECK (verification_status IN ('pending','verified','rejected'));
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await q(`CREATE INDEX IF NOT EXISTS idx_empdocs_user_status ON employee_documents(user_id, verification_status)`);
+});
+
+// Lifecycle checklist metadata (Onboarding Dashboard tracker) — sort_order is
+// required so the expanded item list below renders in the intended sequence
+// (GET /:id orders by created_at, which has no relation to onboarding stage order).
+runSchemaInit('hr-lifecycle-v2-metadata', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_lifecycle_checklist ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 999`);
+  await q(`ALTER TABLE employee_lifecycle_checklist ADD COLUMN IF NOT EXISTS stage_group TEXT`);
+  await q(`ALTER TABLE employee_lifecycle_checklist ADD COLUMN IF NOT EXISTS auto_source TEXT`);
+  await q(`ALTER TABLE employee_lifecycle_checklist ADD COLUMN IF NOT EXISTS location TEXT`);
+  await q(`ALTER TABLE employee_lifecycle_checklist ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES users(id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_lifecycle_stage_status ON employee_lifecycle_checklist(company_id, stage, status)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_lifecycle_user_stage ON employee_lifecycle_checklist(user_id, stage)`);
+});
+
+// Onboarding-state columns on employee_profiles — "in onboarding"/"completed"
+// are otherwise derived at query time from checklist completion; these two
+// timestamps just record when that derived state actually changed, for
+// reporting (time-to-onboard) without re-deriving history.
+runSchemaInit('hr-onboarding-state-v1', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS onboarding_started_at TIMESTAMPTZ`);
+});
+
+// Backfill the 12 new onboarding checklist items onto every existing employee
+// (not just future hires, per confirmed product decision — their onboarding %
+// will visibly dip until reconcileDerived() catches most items back up from
+// real data) + refresh the email_setup title text on pre-existing rows, since
+// ON CONFLICT DO NOTHING above never updates an already-seeded row's title.
+runSchemaInit('hr-onboarding-backfill-checklist-v1', async () => {
+  const { query: q } = require('../config/database');
+  const { rows } = await q(`SELECT user_id, company_id FROM employee_profiles`);
+  for (const r of rows) {
+    await ensureLifecycleChecklist(r.company_id, r.user_id, q);
+  }
+  await q(`
+    UPDATE employee_lifecycle_checklist
+    SET title = 'Official email account created'
+    WHERE stage = 'onboarding' AND item_key = 'email_setup' AND title = 'Email and ERP access created'
+  `);
+});
+
+// The backfill migration above only INSERTs missing rows — it never touches
+// rows that already existed for the 7 originally-shipped onboarding item_keys
+// (they predate the sort_order/stage_group/auto_source columns, so those
+// columns are still at their ALTER-time defaults: 999 / NULL / NULL). Refresh
+// every onboarding row's metadata from LIFECYCLE_ITEMS regardless of when it
+// was created.
+runSchemaInit('hr-onboarding-backfill-metadata-fix-v1', async () => {
+  const { query: q } = require('../config/database');
+  for (const item of LIFECYCLE_ITEMS) {
+    if (item.stage !== 'onboarding') continue;
+    await q(
+      `UPDATE employee_lifecycle_checklist
+       SET stage_group = $1, sort_order = $2, auto_source = $3
+       WHERE stage = 'onboarding' AND item_key = $4`,
+      [item.stage_group || null, item.sort_order || 999, item.auto_source || null, item.item_key]
+    );
+  }
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const employeeSelect = `
   SELECT u.id, u.employee_code, u.name, u.email, u.phone, u.role, u.designation,
@@ -212,14 +290,33 @@ async function addTimeline(client, companyId, userId, eventType, title, descript
 }
 
 // ═══════════════════════════════════════════════════════════
+// Onboarding items carry stage_group (one of the 8 Onboarding Tracker steps:
+// profile, documents, assets, email, training, orientation, probation,
+// confirmation) + sort_order (render sequence) + auto_source (which real
+// data source, if any, auto-ticks this item — see reconcileDerived() in
+// hr-onboarding.routes.js). Never rename an item_key here — the UNIQUE
+// constraint means a rename orphans existing rows and re-seeds a duplicate;
+// only add new keys or change title text.
 const LIFECYCLE_ITEMS = [
-  { stage: 'onboarding', item_key: 'offer_acceptance', title: 'Offer acceptance received', owner_department: 'HR' },
-  { stage: 'onboarding', item_key: 'joining_documents', title: 'Joining documents collected', owner_department: 'HR' },
-  { stage: 'onboarding', item_key: 'id_card', title: 'ID card issued', owner_department: 'Admin' },
-  { stage: 'onboarding', item_key: 'asset_issue', title: 'Laptop / assets issued', owner_department: 'Admin / IT' },
-  { stage: 'onboarding', item_key: 'email_setup', title: 'Email and ERP access created', owner_department: 'IT' },
-  { stage: 'onboarding', item_key: 'bank_pf_esi', title: 'Bank, PF and ESI details verified', owner_department: 'HR / Accounts' },
-  { stage: 'onboarding', item_key: 'safety_induction', title: 'Safety / site induction completed', owner_department: 'HSE / Projects' },
+  { stage: 'onboarding', item_key: 'offer_acceptance',   title: 'Offer acceptance received',                 owner_department: 'HR',            stage_group: 'documents',   sort_order: 10,  auto_source: null },
+  { stage: 'onboarding', item_key: 'joining_documents',  title: 'Joining documents collected',                owner_department: 'HR',            stage_group: 'documents',   sort_order: 20,  auto_source: 'any_doc' },
+  { stage: 'onboarding', item_key: 'profile_basics',     title: 'Employee profile completed',                 owner_department: 'HR',            stage_group: 'profile',     sort_order: 30,  auto_source: 'profile' },
+  { stage: 'onboarding', item_key: 'profile_photo',      title: 'Profile photo uploaded',                     owner_department: 'HR',            stage_group: 'profile',     sort_order: 40,  auto_source: 'photo' },
+  { stage: 'onboarding', item_key: 'doc_verify_pan',     title: 'PAN card verified',                          owner_department: 'HR',            stage_group: 'documents',   sort_order: 50,  auto_source: 'doc:pan' },
+  { stage: 'onboarding', item_key: 'doc_verify_aadhaar', title: 'Aadhaar card verified',                      owner_department: 'HR',            stage_group: 'documents',   sort_order: 60,  auto_source: 'doc:aadhaar' },
+  { stage: 'onboarding', item_key: 'bank_pf_esi',        title: 'Bank, PF and ESI details verified',          owner_department: 'HR / Accounts', stage_group: 'documents',   sort_order: 70,  auto_source: 'bank' },
+  { stage: 'onboarding', item_key: 'id_card',            title: 'ID card issued',                             owner_department: 'Admin',         stage_group: 'assets',      sort_order: 80,  auto_source: null },
+  { stage: 'onboarding', item_key: 'asset_issue',        title: 'Laptop / assets issued',                     owner_department: 'Admin / IT',    stage_group: 'assets',      sort_order: 90,  auto_source: 'asset:laptop' },
+  { stage: 'onboarding', item_key: 'email_setup',        title: 'Official email account created',             owner_department: 'IT',            stage_group: 'email',       sort_order: 100, auto_source: null },
+  { stage: 'onboarding', item_key: 'erp_login',          title: 'ERP login account created',                  owner_department: 'IT',            stage_group: 'email',       sort_order: 110, auto_source: null },
+  { stage: 'onboarding', item_key: 'access_permissions', title: 'System / module access permissions granted', owner_department: 'IT',            stage_group: 'email',       sort_order: 120, auto_source: null },
+  { stage: 'onboarding', item_key: 'training_assigned',  title: 'Induction training assigned',                owner_department: 'HR',            stage_group: 'training',    sort_order: 130, auto_source: 'training' },
+  { stage: 'onboarding', item_key: 'safety_induction',   title: 'Safety / site induction completed',          owner_department: 'HSE / Projects', stage_group: 'orientation', sort_order: 140, auto_source: null },
+  { stage: 'onboarding', item_key: 'orientation',        title: 'Orientation session completed',              owner_department: 'HR',            stage_group: 'orientation', sort_order: 150, auto_source: null },
+  { stage: 'onboarding', item_key: 'manager_intro',      title: 'Introduced to reporting manager and team',   owner_department: 'Reporting Manager', stage_group: 'orientation', sort_order: 160, auto_source: null },
+  { stage: 'onboarding', item_key: 'policy_ack',         title: 'Company policies acknowledged',              owner_department: 'HR',            stage_group: 'orientation', sort_order: 170, auto_source: 'policy' },
+  { stage: 'onboarding', item_key: 'probation_review',   title: 'Probation review scheduled',                 owner_department: 'Reporting Manager', stage_group: 'probation', sort_order: 180, auto_source: null },
+  { stage: 'onboarding', item_key: 'confirmation',       title: 'Employment confirmed',                       owner_department: 'HR',            stage_group: 'confirmation', sort_order: 190, auto_source: 'confirmation' },
   { stage: 'exit', item_key: 'resignation_acceptance', title: 'Resignation / exit approval recorded', owner_department: 'HR' },
   { stage: 'exit', item_key: 'knowledge_handover', title: 'Work handover completed', owner_department: 'Reporting Manager' },
   { stage: 'exit', item_key: 'asset_return', title: 'Company assets returned', owner_department: 'Admin / IT' },
@@ -229,16 +326,27 @@ const LIFECYCLE_ITEMS = [
   { stage: 'exit', item_key: 'relieving_letter', title: 'Relieving / experience letter issued', owner_department: 'HR' },
 ];
 
-async function ensureLifecycleChecklist(companyId, userId) {
-  for (const item of LIFECYCLE_ITEMS) {
-    await query(
-      `INSERT INTO employee_lifecycle_checklist
-       (user_id, company_id, stage, item_key, title, owner_department)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (user_id, stage, item_key) DO NOTHING`,
-      [userId, companyId, item.stage, item.item_key, item.title, item.owner_department]
-    );
-  }
+// One bulk INSERT (unnest arrays) instead of one round-trip per item — matters
+// for the one-time backfill migration, which calls this for every existing
+// employee (216 employees x 19 items = 4104+ rows would otherwise mean 4104+
+// sequential network round-trips to the DB).
+async function ensureLifecycleChecklist(companyId, userId, exec = query) {
+  const stages = LIFECYCLE_ITEMS.map(i => i.stage);
+  const keys = LIFECYCLE_ITEMS.map(i => i.item_key);
+  const titles = LIFECYCLE_ITEMS.map(i => i.title);
+  const owners = LIFECYCLE_ITEMS.map(i => i.owner_department || null);
+  const groups = LIFECYCLE_ITEMS.map(i => i.stage_group || null);
+  const sorts = LIFECYCLE_ITEMS.map(i => i.sort_order || 999);
+  const autos = LIFECYCLE_ITEMS.map(i => i.auto_source || null);
+  await exec(
+    `INSERT INTO employee_lifecycle_checklist
+     (user_id, company_id, stage, item_key, title, owner_department, stage_group, sort_order, auto_source)
+     SELECT $1, $2, s, k, t, o, g, so, a
+     FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int[], $9::text[])
+       AS x(s, k, t, o, g, so, a)
+     ON CONFLICT (user_id, stage, item_key) DO NOTHING`,
+    [userId, companyId, stages, keys, titles, owners, groups, sorts, autos]
+  );
 }
 
 // LIST
@@ -418,7 +526,7 @@ router.get('/:id', async (req, res) => {
        WHERE lc.user_id = $1 AND lc.company_id = $2
        ORDER BY
          CASE lc.stage WHEN 'onboarding' THEN 1 WHEN 'exit' THEN 2 ELSE 3 END,
-         lc.created_at ASC`,
+         lc.sort_order ASC, lc.created_at ASC`,
       [req.params.id, req.user.company_id]
     );
     res.json({ data: { ...rows[0], documents: docs.rows, timeline: timeline.rows, lifecycle_checklist: lifecycle.rows } });
@@ -531,9 +639,21 @@ router.post('/', async (req, res) => {
       date_of_joining || null
     );
 
+    // Eager-seed the onboarding checklist now, not lazily on first profile
+    // view — otherwise brand-new hires are invisible on the Onboarding
+    // Dashboard until someone happens to open their profile page.
+    await ensureLifecycleChecklist(req.user.company_id, userId, client.query.bind(client));
+    await client.query(
+      `UPDATE employee_profiles SET onboarding_started_at = NOW() WHERE user_id = $1`,
+      [userId]
+    );
+
     await client.query('COMMIT');
 
     sendWelcomeMail({ id: userId, name, email, role: role || 'viewer', department: deptName });
+    try {
+      require('../services/notif.helper').notifyOnboardingStarted(req.user.company_id, { id: userId, name });
+    } catch { /* best-effort */ }
 
     // Return full employee record
     const { rows } = await query(`${employeeSelect} WHERE u.id = $1`, [userId]);
@@ -795,13 +915,15 @@ router.patch('/:id/status', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.patch('/:id/lifecycle/:itemId', async (req, res) => {
   try {
-    const { status, remarks, due_date } = req.body;
+    const { status, remarks, due_date, location, assigned_to } = req.body;
     const nextStatus = status || 'pending';
     const { rows } = await query(
       `UPDATE employee_lifecycle_checklist
        SET status=$1,
            remarks=$2,
            due_date=$3,
+           location=COALESCE($8, location),
+           assigned_to=COALESCE($9::uuid, assigned_to),
            completed_at=CASE WHEN $1 = 'done' THEN NOW() ELSE NULL END,
            completed_by=CASE WHEN $1 = 'done' THEN $4::uuid ELSE NULL END,
            updated_at=NOW()
@@ -815,6 +937,8 @@ router.patch('/:id/lifecycle/:itemId', async (req, res) => {
         req.params.itemId,
         req.params.id,
         req.user.company_id,
+        location || null,
+        assigned_to || null,
       ]
     );
     if (!rows.length) return res.status(404).json({ error: 'Checklist item not found' });
@@ -831,6 +955,71 @@ router.patch('/:id/lifecycle/:itemId', async (req, res) => {
         req.user.id,
       ]
     );
+
+    // If this completed the onboarding checklist, stamp it + notify.
+    if (rows[0].stage === 'onboarding' && nextStatus === 'done') {
+      const remaining = await query(
+        `SELECT COUNT(*)::int AS cnt FROM employee_lifecycle_checklist
+         WHERE user_id=$1 AND company_id=$2 AND stage='onboarding' AND status <> 'done'`,
+        [req.params.id, req.user.company_id]
+      );
+      if (remaining.rows[0].cnt === 0) {
+        const stamped = await query(
+          `UPDATE employee_profiles SET onboarding_completed_at = NOW()
+           WHERE user_id=$1 AND onboarding_completed_at IS NULL RETURNING user_id`,
+          [req.params.id]
+        );
+        if (stamped.rows.length) {
+          const emp = await query(`SELECT name FROM users WHERE id=$1`, [req.params.id]);
+          try {
+            require('../services/notif.helper').notifyOnboardingCompleted(
+              req.user.company_id,
+              { id: req.params.id, name: emp.rows[0]?.name || 'An employee' }
+            );
+          } catch { /* notification is best-effort */ }
+        }
+      }
+    }
+
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Document verification (Onboarding Dashboard) — reuses the existing
+// employee_documents upload flow, adding a verify/reject decision.
+router.patch('/:id/documents/:docId/verify', async (req, res) => {
+  try {
+    const { verification_status, rejection_reason } = req.body;
+    if (!['verified', 'rejected', 'pending'].includes(verification_status)) {
+      return res.status(400).json({ error: 'verification_status must be verified, rejected, or pending' });
+    }
+    const { rows } = await query(
+      `UPDATE employee_documents
+       SET verification_status=$1, verified_by=$2, verified_at=NOW(),
+           rejection_reason=CASE WHEN $1='rejected' THEN $3 ELSE NULL END
+       WHERE id=$4 AND user_id=$5
+       RETURNING *`,
+      [verification_status, req.user.id, rejection_reason || null, req.params.docId, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Document not found' });
+
+    await query(
+      `INSERT INTO employee_timeline (user_id, company_id, event_type, title, description, created_by)
+       VALUES ($1,$2,'document',$3,$4,$5)`,
+      [req.params.id, req.user.company_id, `Document ${verification_status}`, rows[0].doc_name || rows[0].doc_type, req.user.id]
+    );
+
+    if (verification_status === 'rejected') {
+      try {
+        const emp = await query(`SELECT name FROM users WHERE id=$1`, [req.params.id]);
+        require('../services/notif.helper').notifyDocumentRejected(
+          req.user.company_id,
+          { id: req.params.id, name: emp.rows[0]?.name || 'an employee' },
+          rows[0].doc_name || rows[0].doc_type,
+          rejection_reason
+        );
+      } catch { /* best-effort */ }
+    }
 
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -925,6 +1114,11 @@ async function generateEmpCode(companyId) {
   const seq = String(parseInt(rows[0].cnt) + 1).padStart(3, '0');
   return `EMP${yr}${seq}`;
 }
+
+// Shared with hr-onboarding.routes.js so it doesn't duplicate this list/logic.
+router.SYSTEM_ACCOUNT_EMAILS = SYSTEM_ACCOUNT_EMAILS;
+router.ensureLifecycleChecklist = ensureLifecycleChecklist;
+router.LIFECYCLE_ITEMS = LIFECYCLE_ITEMS;
 
 module.exports = router;
 

@@ -132,6 +132,7 @@ const hrFnfRoutes         = require('./routes/hr-fnf.routes');
 const hrLettersRoutes     = require('./routes/hr-letters.routes');
 const hrTrainingRoutes    = require('./routes/hr-training.routes');
 const hrEmpAssetsRoutes   = require('./routes/hr-employee-assets.routes');
+const hrOnboardingRoutes  = require('./routes/hr-onboarding.routes');
 const hrTravelRoutes      = require('./routes/hr-travel.routes');
 const hrRecruitmentRoutes = require('./routes/hr-recruitment.routes');
 const apiKeysRoutes       = require('./routes/api-keys.routes');
@@ -589,6 +590,7 @@ app.use(`${API}/hr-admin/training`,    hrTrainingRoutes);
 app.use(`${API}/hr-admin/emp-assets`,  hrEmpAssetsRoutes);
 app.use(`${API}/hr-admin/travel`,      hrTravelRoutes);
 app.use(`${API}/hr-admin/recruitment`, hrRecruitmentRoutes);
+app.use(`${API}/hr-admin/onboarding`,  hrOnboardingRoutes);
 app.use(`${API}/settings/api-keys`,   apiKeysRoutes);
 app.use(`${API}/integration`,         integrationRoutes);
 app.use('/api/public/careers',        publicCareersRoutes);
@@ -1268,6 +1270,9 @@ if (require.main === module) {
 
     const { initBirthdayAnniversary } = require('./utils/hr-birthday-anniversary.service');
     initBirthdayAnniversary();
+
+    const { initOnboardingAlerts } = require('./utils/hr-onboarding-alerts.service');
+    initOnboardingAlerts();
 
     const { initLateArrivalAlert } = require('./utils/late-arrival-alert.service');
     initLateArrivalAlert();

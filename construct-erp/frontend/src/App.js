@@ -315,6 +315,7 @@ const HREmployeeDetailPage  = lazy(() => import('./pages/hr-admin/EmployeeDetail
 // ── Onboarding ── navigation shell; most of these are placeholders pending
 // the real workflow (Offer Letter → ... → Confirmation) build-out.
 const OnboardingDashboardPage      = lazy(() => import('./pages/hr-admin/onboarding/OnboardingDashboardPage'));
+const EmployeeOnboardingTrackerPage = lazy(() => import('./pages/hr-admin/onboarding/EmployeeOnboardingTrackerPage'));
 const WelcomeChecklistPage         = lazy(() => import('./pages/hr-admin/onboarding/WelcomeChecklistPage'));
 const OnboardingDocumentVerificationPage = lazy(() => import('./pages/hr-admin/onboarding/DocumentVerificationPage'));
 const OfferAppointmentPage         = lazy(() => import('./pages/hr-admin/onboarding/OfferAppointmentPage'));
@@ -946,6 +947,7 @@ export default function App() {
                 <Route path="hr-admin/employees/:id/edit" element={<RequireModule module="HR & Admin"><HREmployeeFormPage /></RequireModule>} />
                 {/* ── Onboarding ── */}
                 <Route path="hr-admin/onboarding" element={<RequireModule module="HR & Admin"><OnboardingDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/employee/:id" element={<RequireModule module="HR & Admin"><EmployeeOnboardingTrackerPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/welcome-checklist" element={<RequireModule module="HR & Admin"><WelcomeChecklistPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/document-verification" element={<RequireModule module="HR & Admin"><OnboardingDocumentVerificationPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferAppointmentPage /></RequireModule>} />
