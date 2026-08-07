@@ -7,7 +7,7 @@
 // since not every role allowed in here should see employee data.
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { loadProjectScope } = require('../middleware/projectScope');
+const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const copilotService = require('../services/copilot.service');
 
 const router = express.Router();
@@ -23,13 +23,31 @@ function requireCopilotAccess(req, res, next) {
 
 router.use(authenticate);
 router.use(loadProjectScope);
-router.use(requireCopilotAccess);
 
-router.post('/chat', async (req, res) => {
+router.post('/chat', requireCopilotAccess, async (req, res) => {
   try {
     const { message, history, project_id } = req.body;
     const reply = await copilotService.chat({ req, message, history, projectId: project_id });
     res.json({ reply });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Project 360's AI Insights panel — deliberately NOT behind requireCopilotAccess
+// (that role list is scoped to Bill Tracker/HR access). Any role that can see
+// the project at all should be able to see AI-generated insights about it —
+// gated by userCanAccessProject instead, same as the project-360 data endpoint.
+router.post('/project-insights', async (req, res) => {
+  try {
+    const { project_id: projectId } = req.body;
+    if (!projectId) return res.status(400).json({ error: 'project_id is required' });
+    if (!userCanAccessProject(req, projectId)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const kpis = await copilotService.buildProjectInsightKpis(req, projectId);
+    const insights = await copilotService.generateProjectInsights(kpis);
+    res.json({ data: insights });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

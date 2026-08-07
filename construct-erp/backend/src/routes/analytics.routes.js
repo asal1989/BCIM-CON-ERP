@@ -3,9 +3,19 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { query } = require('../config/database');
+const { aggregateEVM } = require('../services/evm.service');
 
 router.use(authenticate);
 router.use(loadProjectScope);
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+function dateSubDays(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 function buildProjectScope(req, filters = {}) {
   const conditions = ['p.company_id = $1'];
@@ -652,12 +662,17 @@ router.get('/executive', async (req, res) => {
 });
 
 // GET /analytics/project-360/:project_id
+// Strategic Command Hub — single-project 360 view. Every sub-query is wrapped
+// in safeQuery so one missing/empty table (EVM, baseline, risk register —
+// all genuinely unused on most projects today) degrades that one panel
+// instead of 500ing the whole page.
 router.get('/project-360/:project_id', async (req, res) => {
   try {
     const projectId = req.params.project_id;
     if (!userCanAccessProject(req, projectId)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
+    const { date_from: dateFrom, date_to: dateTo } = req.query;
 
     const projectInfo = await query(
       "SELECT * FROM projects WHERE id = $1 AND company_id = $2",
@@ -667,82 +682,299 @@ router.get('/project-360/:project_id', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const revenue = await query(
-      `SELECT
-         COALESCE(SUM(gross_amount), 0) as total_revenue_booked,
-         COALESCE(SUM(net_payable), 0) as total_certified_amount,
-         COALESCE(SUM(retention_amount), 0) as total_retention_held
-       FROM ra_bills
-       WHERE project_id = $1 AND status IN ('certified', 'authorized', 'verified', 'paid')`,
-      [projectId]
-    );
+    const safeQuery = async (sql, params) => {
+      try { return await query(sql, params); } catch (e) { console.error('[project-360] sub-query failed:', e.message); return { rows: [] }; }
+    };
 
-    const materialCost = await query(
-      `SELECT
-         COALESCE(SUM(net_amount), 0) as total_material_liability
-       FROM invoices
-       WHERE project_id = $1 AND status IN ('authorized', 'verified', 'paid')`,
-      [projectId]
-    );
+    const [
+      revenueRes, materialCostRes, assetCostRes, laborCostRes, physicalProgressRes, safetyRes,
+      variationsRes, receivedRes, subConRes, pettyCashRes,
+      raBillsMonthlyRes, baselineRes, evmActivitiesRes, evmHistoryRes,
+      qualityRfiRes, qualityNcrRes,
+      manpowerRes,
+      cashFlowRes,
+      riskRes, lowStockRes, openRfisRes, openNcrsRes, openIncidentsRes,
+    ] = await Promise.all([
+      safeQuery(
+        `SELECT COALESCE(SUM(gross_amount),0) total_revenue_booked, COALESCE(SUM(net_payable),0) total_certified_amount,
+                COALESCE(SUM(retention_amount),0) total_retention_held
+         FROM ra_bills WHERE project_id=$1 AND status IN ('certified','authorized','verified','paid')`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(net_amount),0) total_material_liability FROM invoices
+         WHERE project_id=$1 AND status IN ('authorized','verified','paid')`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(total_cost),0) total_fuel_cost,
+                COALESCE((SELECT SUM(units_worked*hourly_rate) FROM asset_usage_logs ul JOIN assets a ON ul.asset_id=a.id WHERE ul.project_id=$1),0) total_machinery_rental_cost
+         FROM asset_fuel_logs WHERE project_id=$1`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(w.daily_rate * CASE WHEN a.status='present' THEN 1 WHEN a.status='half_day' THEN 0.5 ELSE 0 END),0) total_labor_cost
+         FROM attendance a JOIN workers w ON a.worker_id=w.id WHERE a.project_id=$1`,
+        [projectId]),
+      safeQuery(
+        `SELECT SUM(quantity*rate) total_boq_value,
+                SUM(COALESCE((SELECT SUM(net_quantity) FROM measurements m WHERE m.boq_item_id=bi.id AND m.status='pm_approved'),0)*rate) physical_certified_value
+         FROM boq_items bi WHERE project_id=$1 AND is_active=true`,
+        [projectId]),
+      safeQuery(
+        `SELECT COUNT(*) incident_count, COUNT(*) FILTER (WHERE incident_type='major_accident') major_accidents,
+                COUNT(*) FILTER (WHERE lost_time_days > 0) lti_count
+         FROM incidents WHERE project_id=$1 AND incident_date > NOW() - INTERVAL '30 days'`,
+        [projectId]),
+      // Approved contract variations — WO + PO amendments, joined through their
+      // parent order since neither amendment table carries project_id directly.
+      safeQuery(
+        `SELECT COALESCE(SUM(v), 0) approved_variations FROM (
+           SELECT COALESCE(SUM(a.value_impact),0) v FROM po_amendments a
+             JOIN purchase_orders po ON po.id = a.po_id WHERE po.project_id=$1 AND a.status='approved'
+           UNION ALL
+           SELECT COALESCE(SUM(a.value_impact),0) v FROM wo_amendments a
+             JOIN work_orders wo ON wo.id = a.wo_id WHERE wo.project_id=$1 AND a.status='approved'
+         ) x`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(net_amount),0) total_received FROM payments
+         WHERE project_id=$1 AND LOWER(payment_type)='customer_receipt' AND status IN ('paid','success')`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(gross_amount),0) total FROM sc_bills
+         WHERE project_id=$1 AND status IN ('submitted','under_review','approved','paid')`,
+        [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(amount),0) total FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved'`,
+        [projectId]),
+      // Monthly certified RA bill value — feeds the S-curve "actual" line.
+      safeQuery(
+        `SELECT to_char(bill_date,'YYYY-MM') AS ym, SUM(net_payable) v FROM ra_bills
+         WHERE project_id=$1 AND status IN ('certified','authorized','verified','paid') AND bill_date IS NOT NULL
+         GROUP BY 1`,
+        [projectId]),
+      // Active baseline (if one was ever snapshotted for this project) — feeds
+      // the S-curve "planned" line with a real time-phased curve instead of a
+      // flat reference line.
+      safeQuery(
+        `SELECT ba.planned_start, ba.planned_value FROM planning_baselines pb
+         JOIN baseline_activities ba ON ba.baseline_id = pb.id
+         WHERE pb.project_id=$1 AND pb.is_active=true`,
+        [projectId]),
+      safeQuery(`SELECT * FROM project_activities WHERE project_id=$1 AND status != 'cancelled'`, [projectId]),
+      safeQuery(`SELECT * FROM evm_snapshots WHERE project_id=$1 ORDER BY snapshot_date ASC LIMIT 20`, [projectId]),
+      safeQuery(`SELECT status, COUNT(*) c FROM quality_rfis WHERE project_id=$1 GROUP BY status`, [projectId]),
+      safeQuery(`SELECT status, COUNT(*) c FROM quality_ncrs WHERE project_id=$1 GROUP BY status`, [projectId]),
+      // Manpower on site today — three separate attendance tables, none unified.
+      safeQuery(
+        `SELECT status, COUNT(*) c FROM (
+           SELECT status FROM attendance WHERE project_id=$1 AND attendance_date=CURRENT_DATE
+           UNION ALL
+           SELECT status FROM sc_attendance WHERE project_id=$1 AND attendance_date=CURRENT_DATE
+         ) x GROUP BY status`,
+        [projectId]),
+      safeQuery(
+        `SELECT payment_date,
+                CASE WHEN LOWER(payment_type)='customer_receipt' THEN net_amount ELSE 0 END inflow,
+                CASE WHEN LOWER(payment_type)!='customer_receipt' THEN net_amount ELSE 0 END outflow
+         FROM payments
+         WHERE project_id=$1 AND status IN ('paid','success')
+           AND payment_date >= $2 AND payment_date <= $3`,
+        [projectId, dateFrom || dateSubDays(30), dateTo || todayIso()]),
+      safeQuery(
+        `SELECT r.id, r.risk_title, r.category, r.risk_level, r.status, r.due_date, r.owner, r.created_at
+         FROM risk_register r WHERE r.project_id=$1 AND r.status='open'
+         ORDER BY r.risk_score DESC, r.created_at DESC LIMIT 8`,
+        [projectId]),
+      safeQuery(
+        `SELECT COUNT(*) c FROM inventory WHERE project_id=$1 AND closing_stock <= COALESCE(NULLIF(reorder_level,0), minimum_level)`,
+        [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM quality_rfis WHERE project_id=$1 AND status NOT IN ('closed','approved','completed')`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM quality_ncrs WHERE project_id=$1 AND status NOT IN ('verified','closed','completed')`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM incidents WHERE project_id=$1 AND status NOT IN ('closed','resolved')`, [projectId]),
+    ]);
 
-    const assetCost = await query(
-      `SELECT
-         COALESCE(SUM(total_cost), 0) as total_fuel_cost,
-         COALESCE((SELECT SUM(units_worked * hourly_rate) FROM asset_usage_logs ul JOIN assets a ON ul.asset_id = a.id WHERE ul.project_id = $1), 0) as total_machinery_rental_cost
-       FROM asset_fuel_logs
-       WHERE project_id = $1`,
-      [projectId]
-    );
+    const project = projectInfo.rows[0];
+    const revenue = revenueRes.rows[0] || {};
+    const materialCost = materialCostRes.rows[0] || {};
+    const assetCost = assetCostRes.rows[0] || {};
+    const laborCost = laborCostRes.rows[0] || {};
+    const physicalProgress = physicalProgressRes.rows[0] || {};
+    const safety = safetyRes.rows[0] || {};
 
-    const laborCost = await query(
-      `SELECT
-         COALESCE(SUM(w.daily_rate * CASE WHEN a.status='present' THEN 1 WHEN a.status='half_day' THEN 0.5 ELSE 0 END), 0) as total_labor_cost
-       FROM attendance a
-       JOIN workers w ON a.worker_id = w.id
-       WHERE a.project_id = $1`,
-      [projectId]
-    );
+    const materialsTotal = toNumber(materialCost.total_material_liability);
+    const equipmentTotal = toNumber(assetCost.total_fuel_cost) + toNumber(assetCost.total_machinery_rental_cost);
+    const laborTotal = toNumber(laborCost.total_labor_cost);
+    const subConTotal = toNumber(subConRes.rows[0]?.total);
+    const pettyCashTotal = toNumber(pettyCashRes.rows[0]?.total);
+    const totalCost = materialsTotal + equipmentTotal + laborTotal + subConTotal + pettyCashTotal;
 
-    const physicalProgress = await query(
-      `SELECT
-         SUM(quantity * rate) as total_boq_value,
-         SUM(COALESCE((SELECT SUM(net_quantity) FROM measurements m WHERE m.boq_item_id = bi.id AND m.status = 'pm_approved'), 0) * rate) as physical_certified_value
-       FROM boq_items bi
-       WHERE project_id = $1 AND is_active = true`,
-      [projectId]
-    );
+    const totalBilled = toNumber(revenue.total_certified_amount);
+    const totalReceived = toNumber(receivedRes.rows[0]?.total_received);
+    const retentionHeld = toNumber(revenue.total_retention_held);
+    const approvedVariations = toNumber(variationsRes.rows[0]?.approved_variations);
+    const contractValue = toNumber(project.contract_value);
+    const revisedContractValue = contractValue + approvedVariations;
+    const grossProfit = totalBilled - totalCost;
 
-    const safety = await query(
-      `SELECT COUNT(*) as incident_count,
-              COUNT(*) FILTER (WHERE incident_type = 'major_accident') as major_accidents
-       FROM incidents WHERE project_id = $1 AND incident_date > NOW() - INTERVAL '30 days'`,
-      [projectId]
-    );
+    const progressPct = toNumber(physicalProgress.total_boq_value) > 0
+      ? (toNumber(physicalProgress.physical_certified_value) / toNumber(physicalProgress.total_boq_value)) * 100
+      : 0;
+
+    // Quality — inspections (all quality_rfis) + open NCR count.
+    const rfiRows = qualityRfiRes.rows || [];
+    const ncrRows = qualityNcrRes.rows || [];
+    const inspectionCount = rfiRows.reduce((s, r) => s + parseInt(r.c, 10), 0);
+    const openRfiCount = rfiRows.filter(r => !['closed', 'approved', 'completed'].includes(String(r.status || '').toLowerCase()))
+      .reduce((s, r) => s + parseInt(r.c, 10), 0);
+    const ncrTotal = ncrRows.reduce((s, r) => s + parseInt(r.c, 10), 0);
+    const openNcrCount = ncrRows.filter(r => !['verified', 'closed', 'completed'].includes(String(r.status || '').toLowerCase()))
+      .reduce((s, r) => s + parseInt(r.c, 10), 0);
+    const qualityScore = (inspectionCount + ncrTotal) > 0
+      ? Math.max(0, 100 - (((openRfiCount + openNcrCount) / (inspectionCount + ncrTotal)) * 100))
+      : 100;
+
+    const incidentCount = parseInt(safety.incident_count || 0, 10);
+    const majorAccidents = parseInt(safety.major_accidents || 0, 10);
+    const ltiCount = parseInt(safety.lti_count || 0, 10);
+    const safetyScore = Math.max(0, 100 - (incidentCount * 2) - (majorAccidents * 15));
+
+    // Manpower — present/absent counts across own workers + subcontractor labour, today.
+    const manpower = { present: 0, absent: 0, half_day: 0, holiday: 0, leave: 0 };
+    for (const row of manpowerRes.rows) {
+      const key = String(row.status || '').toLowerCase();
+      if (manpower[key] !== undefined) manpower[key] += parseInt(row.c, 10);
+    }
+    manpower.total = manpower.present + manpower.absent + manpower.half_day + manpower.holiday + manpower.leave;
+
+    // Cash flow — net for the selected/default-30-day period. Not a forecast —
+    // no data exists in this ERP to predict a future cash position.
+    const cashRows = cashFlowRes.rows || [];
+    const cashInflow = cashRows.reduce((s, r) => s + toNumber(r.inflow), 0);
+    const cashOutflow = cashRows.reduce((s, r) => s + toNumber(r.outflow), 0);
+
+    // S-curve — actual from monthly certified RA bills; planned from an active
+    // baseline if one exists (bucketed by baseline_activities.planned_start),
+    // else a flat contract-value reference line (same fallback /executive uses
+    // for the portfolio view). Forecast only appears when evm_snapshots exist.
+    const months = buildMonthSeries(dateFrom, dateTo);
+    const monthlyActual = {};
+    for (const row of (raBillsMonthlyRes.rows || [])) monthlyActual[row.ym] = toNumber(row.v);
+    const monthlyPlanned = {};
+    let hasBaseline = false;
+    for (const row of (baselineRes.rows || [])) {
+      if (!row.planned_start) continue;
+      hasBaseline = true;
+      const key = String(row.planned_start).slice(0, 7);
+      monthlyPlanned[key] = (monthlyPlanned[key] || 0) + toNumber(row.planned_value);
+    }
+    const evmHistory = evmHistoryRes.rows || [];
+    const forecastByMonth = {};
+    for (const row of evmHistory) {
+      const key = String(row.snapshot_date).slice(0, 7);
+      forecastByMonth[key] = toNumber(row.eac);
+    }
+    let cumActual = 0, cumPlanned = 0;
+    const sCurve = months.map((m) => {
+      cumActual += monthlyActual[m.key] || 0;
+      cumPlanned += hasBaseline ? (monthlyPlanned[m.key] || 0) : (contractValue / months.length);
+      const point = {
+        month: m.label,
+        planned: Number((cumPlanned / 10000000).toFixed(3)),
+        actual: Number((cumActual / 10000000).toFixed(3)),
+      };
+      if (forecastByMonth[m.key] !== undefined) point.forecast = Number((forecastByMonth[m.key] / 10000000).toFixed(3));
+      return point;
+    });
+
+    // EVM / SPI / CPI — real engine (evm.service.js), but only meaningful once
+    // activities actually carry PV/EV/AC — most projects have none yet.
+    const evmActivities = evmActivitiesRes.rows || [];
+    const evmTotals = evmActivities.reduce((acc, a) => ({
+      pv: acc.pv + toNumber(a.planned_value), ev: acc.ev + toNumber(a.earned_value),
+      ac: acc.ac + toNumber(a.actual_cost), bac: acc.bac + toNumber(a.budget_at_completion),
+    }), { pv: 0, ev: 0, ac: 0, bac: 0 });
+    const evmTracked = evmTotals.pv > 0 || evmTotals.ev > 0 || evmTotals.ac > 0 || evmTotals.bac > 0;
+    const evm = evmTracked ? aggregateEVM(evmActivities) : { not_tracked: true };
+
+    // Cost breakdown — Materials / Labour / Equipment / Subcontract / Others.
+    // Deliberately simpler than the full ~20-cost-head BOQ breakdown on Budget
+    // Control (that page is the source of truth for per-cost-head detail);
+    // this is a 5-bucket summary for the executive view.
+    const costBreakdown = [
+      { name: 'Materials', value: materialsTotal },
+      { name: 'Labour', value: laborTotal },
+      { name: 'Equipment', value: equipmentTotal },
+      { name: 'Subcontract', value: subConTotal },
+      { name: 'Others', value: pettyCashTotal },
+    ].filter(c => c.value > 0);
+
+    // Top variance — vs the same 5 buckets' budget (project_costhead_budgets is
+    // keyed by the ~20 granular BOQ heads, not these 5, so budget here is a
+    // proportional share of total budget by bucket weight — flagged as such).
+    const budgetRes = await safeQuery(`SELECT COALESCE(SUM(budget_amount),0) b FROM project_costhead_budgets WHERE project_id=$1`, [projectId]);
+    const totalBudget = toNumber(budgetRes.rows[0]?.b);
+    const topVariance = costBreakdown
+      .map(c => {
+        const budgetShare = totalCost > 0 ? (totalBudget * (c.value / totalCost)) : 0;
+        return { name: c.name, budget: budgetShare, actual: c.value, variance: c.value - budgetShare };
+      })
+      .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+      .slice(0, 5);
+
+    // Time elapsed — used client-side for the Project Health Score composite
+    // (progress vs. schedule) and to decide whether the S-curve's date range
+    // defaults make sense for this project.
+    const startDate = project.start_date ? new Date(project.start_date) : null;
+    const endDate = project.end_date ? new Date(project.end_date) : null;
+    const timeElapsedPct = (startDate && endDate && endDate > startDate)
+      ? Math.min(100, Math.max(0, ((Date.now() - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100))
+      : null;
+
+    // Risk & Alerts — real open risk_register rows + cheap derived exceptions
+    // scoped to this one project. No fabricated predictive alerts.
+    const riskAlerts = [
+      ...riskRes.rows.map(r => ({
+        type: 'risk', severity: r.risk_level, label: r.risk_title, category: r.category,
+        due_date: r.due_date, owner: r.owner,
+      })),
+    ];
+    const lowStockCount = parseInt(lowStockRes.rows[0]?.c || 0, 10);
+    if (lowStockCount > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${lowStockCount} material(s) at/below reorder level`, to: '/stores/inventory' });
+    const openRfisCount2 = parseInt(openRfisRes.rows[0]?.c || 0, 10);
+    if (openRfisCount2 > 0) riskAlerts.push({ type: 'exception', severity: 'low', label: `${openRfisCount2} open inspection(s)`, to: '/quality/rfi' });
+    const openNcrsCount2 = parseInt(openNcrsRes.rows[0]?.c || 0, 10);
+    if (openNcrsCount2 > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${openNcrsCount2} open NCR(s)`, to: '/quality/ncr' });
+    const openIncidentsCount = parseInt(openIncidentsRes.rows[0]?.c || 0, 10);
+    if (openIncidentsCount > 0) riskAlerts.push({ type: 'exception', severity: 'high', label: `${openIncidentsCount} open safety incident(s)`, to: '/safety/incidents' });
 
     res.json({
       data: {
-        project: projectInfo.rows[0],
+        project,
         financials: {
-          revenue: revenue.rows[0],
-          costs: {
-            materials: materialCost.rows[0].total_material_liability,
-            assets: toNumber(assetCost.rows[0].total_fuel_cost) + toNumber(assetCost.rows[0].total_machinery_rental_cost),
-            labor: laborCost.rows[0].total_labor_cost,
-            total:
-              toNumber(materialCost.rows[0].total_material_liability) +
-              toNumber(assetCost.rows[0].total_fuel_cost) +
-              toNumber(assetCost.rows[0].total_machinery_rental_cost) +
-              toNumber(laborCost.rows[0].total_labor_cost),
-          },
+          revenue,
+          contract_value: contractValue,
+          approved_variations: approvedVariations,
+          revised_contract_value: revisedContractValue,
+          billing: { total_billed: totalBilled, total_received: totalReceived, retention_held: retentionHeld, balance_receivable: totalBilled - totalReceived },
+          costs: { materials: materialsTotal, assets: equipmentTotal, labor: laborTotal, subcontract: subConTotal, others: pettyCashTotal, total: totalCost },
+          total_budget: totalBudget,
+          gross_profit: grossProfit,
+          gross_margin_pct: totalBilled > 0 ? (grossProfit / totalBilled) * 100 : 0,
         },
+        schedule: { time_elapsed_pct: timeElapsedPct },
         progress: {
-          total_boq_value: physicalProgress.rows[0].total_boq_value,
-          physical_certified_value: physicalProgress.rows[0].physical_certified_value,
-          pct: toNumber(physicalProgress.rows[0].total_boq_value) > 0
-            ? (toNumber(physicalProgress.rows[0].physical_certified_value) / toNumber(physicalProgress.rows[0].total_boq_value)) * 100
-            : 0,
+          total_boq_value: physicalProgress.total_boq_value,
+          physical_certified_value: physicalProgress.physical_certified_value,
+          pct: progressPct,
         },
-        safety: safety.rows[0],
+        costBreakdown,
+        topVariance,
+        sCurve,
+        evm,
+        safety: { incident_count: incidentCount, major_accidents: majorAccidents, lti_count: ltiCount, safety_score: safetyScore },
+        quality: { inspection_count: inspectionCount, open_rfi_count: openRfiCount, ncr_count: ncrTotal, open_ncr_count: openNcrCount, quality_score: qualityScore },
+        manpower,
+        cashFlow: { inflow: cashInflow, outflow: cashOutflow, net: cashInflow - cashOutflow },
+        riskAlerts,
       },
     });
   } catch (err) {

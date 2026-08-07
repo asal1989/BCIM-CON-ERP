@@ -1759,9 +1759,9 @@ export const hireLogAPI = {
 };
 
 export const analyticsAPI = {
-  global:     ()        => api.get('/analytics/global'),
-  executive:  (params)  => api.get('/analytics/executive', { params }),
-  project360: (id)      => api.get(`/analytics/project-360/${id}`),
+  global:     ()             => api.get('/analytics/global'),
+  executive:  (params)       => api.get('/analytics/executive', { params }),
+  project360: (id, params)   => api.get(`/analytics/project-360/${id}`, { params }),
 };
 
 export const approvalsAPI = {
@@ -2329,7 +2329,8 @@ export const notificationsAPI = {
 };
 
 export const copilotAPI = {
-  sendMessage: (data) => api.post('/copilot/chat', data),
+  sendMessage:      (data)      => api.post('/copilot/chat', data),
+  projectInsights:  (projectId) => api.post('/copilot/project-insights', { project_id: projectId }),
 };
 
 export const automationIdeasAPI = {

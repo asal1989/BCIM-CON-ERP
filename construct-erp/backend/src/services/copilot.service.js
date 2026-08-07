@@ -684,4 +684,96 @@ async function chat({ req, message, history, projectId }) {
   return "I wasn't able to finish looking that up — try narrowing your question (e.g. a specific project or vendor).";
 }
 
-module.exports = { chat };
+// Lean, purpose-built KPI fetch for the AI Insights prompt — deliberately not
+// a call into analytics.routes.js's much larger /project-360 handler (that
+// logic isn't exported as a reusable function, and duplicating a compact
+// subset here is simpler than refactoring a validated endpoint just to share
+// code with a secondary feature). Numbers only, no PII.
+async function buildProjectInsightKpis(req, projectId) {
+  const companyId = req.user.company_id;
+  const proj = await query(`SELECT name, contract_value, start_date, end_date FROM projects WHERE id=$1 AND company_id=$2`, [projectId, companyId]);
+  if (!proj.rows.length) { const err = new Error('Project not found'); err.statusCode = 404; throw err; }
+  const project = proj.rows[0];
+
+  const [progressRes, revenueRes, budgetRes, safetyRes, qualityRes] = await Promise.all([
+    query(
+      `SELECT SUM(quantity*rate) total_boq_value,
+              SUM(COALESCE((SELECT SUM(net_quantity) FROM measurements m WHERE m.boq_item_id=bi.id AND m.status='pm_approved'),0)*rate) physical_certified_value
+       FROM boq_items bi WHERE project_id=$1 AND is_active=true`, [projectId]),
+    query(`SELECT COALESCE(SUM(net_payable),0) total_certified FROM ra_bills WHERE project_id=$1 AND status IN ('certified','authorized','verified','paid')`, [projectId]),
+    query(`SELECT COALESCE(SUM(budget_amount),0) b FROM project_costhead_budgets WHERE project_id=$1`, [projectId]),
+    query(`SELECT COUNT(*) c FROM incidents WHERE project_id=$1 AND incident_date > NOW() - INTERVAL '30 days'`, [projectId]),
+    query(`SELECT COUNT(*) c FROM quality_ncrs WHERE project_id=$1 AND status NOT IN ('verified','closed','completed')`, [projectId]),
+  ]);
+
+  const progress = progressRes.rows[0] || {};
+  const boqValue = parseFloat(progress.total_boq_value || 0);
+  const progressPct = boqValue > 0 ? (parseFloat(progress.physical_certified_value || 0) / boqValue) * 100 : 0;
+
+  const start = project.start_date ? new Date(project.start_date) : null;
+  const end = project.end_date ? new Date(project.end_date) : null;
+  const now = new Date();
+  const plannedPct = (start && end && end > start)
+    ? Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100))
+    : null;
+
+  const budget = parseFloat(budgetRes.rows[0]?.b || 0);
+  const spent = parseFloat(revenueRes.rows[0]?.total_certified || 0);
+
+  return {
+    project_name: project.name,
+    physical_progress_pct: Number(progressPct.toFixed(1)),
+    time_elapsed_pct: plannedPct === null ? null : Number(plannedPct.toFixed(1)),
+    budget,
+    spent,
+    budget_used_pct: budget > 0 ? Number(((spent / budget) * 100).toFixed(1)) : null,
+    open_incidents_last_30_days: parseInt(safetyRes.rows[0]?.c || 0, 10),
+    open_ncrs: parseInt(qualityRes.rows[0]?.c || 0, 10),
+  };
+}
+
+// Project 360 "AI Insights" panel — a single non-agentic call (no tools, no
+// conversation history) that turns already-computed KPIs into a handful of
+// short factual bullets. Distinct from chat() above: this is a "give it
+// numbers, get back a narrative" pattern, which nothing else in the app does
+// yet. The caller (analytics.routes.js's /project-360 handler) computes every
+// number server-side first — this function never queries the DB itself, so
+// it can't be tricked into describing data the caller didn't already fetch.
+async function generateProjectInsights(kpis) {
+  const client = anthropicClient();
+  if (!client) {
+    const err = new Error('AI Insights is not configured. Contact IT.');
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const prompt = `Given these metrics for a construction project, write 3-4 short, factual, one-line insights a project director would want to see at a glance — e.g. progress vs plan, cost trend, a standout risk. Use ONLY the numbers given below, no speculation or invented figures. Format every rupee amount in Indian numbering (lakh/crore grouping, e.g. ₹1,20,29,440 not ₹12,029,440).
+
+Respond with ONLY a JSON array of strings, nothing else. Example: ["Physical progress is 12% against a 15% planned target — tracking slightly behind.", "Total spend is 6% of budget while 25% of the schedule has elapsed."]
+
+Metrics:
+${JSON.stringify(kpis, null, 2)}`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  const raw = textBlock ? textBlock.text.trim() : '[]';
+  try {
+    // Defensive parse — the model may wrap the array in a code fence despite
+    // being asked not to; strip common fences before parsing.
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const bullets = JSON.parse(cleaned);
+    if (!Array.isArray(bullets)) return [];
+    return bullets.filter(b => typeof b === 'string' && b.trim()).slice(0, 4);
+  } catch {
+    // Model didn't return valid JSON — fall back to treating each non-empty
+    // line as a bullet rather than showing nothing.
+    return raw.split('\n').map(l => l.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean).slice(0, 4);
+  }
+}
+
+module.exports = { chat, generateProjectInsights, buildProjectInsightKpis };
