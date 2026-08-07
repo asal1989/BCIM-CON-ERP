@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { runSchemaInit } = require('../utils/schemaInit');
 
 const HR_ROLES = ['super_admin','admin','hr_admin','hr_manager'];
 const HR_ALL   = [...HR_ROLES, 'hr'];
@@ -75,9 +76,13 @@ const DEFAULT_TEMPLATES = [
   }
 ];
 
-;(async () => {
-  const safe = async sql => { try { await query(sql); } catch(_) {} };
-  await safe(`CREATE TABLE IF NOT EXISTS hr_letter_templates (
+// Was a fire-and-forget IIFE with a catch(_){} that silently swallowed any
+// creation error (no log, no retry) — if it ever failed once (e.g. a cold-start
+// DB race), every /templates request would 500 for the rest of that process's
+// life with no trace of why. runSchemaInit logs failures and retries on the
+// next boot until it actually succeeds.
+runSchemaInit('hr-letters-schema-v1', async () => {
+  await query(`CREATE TABLE IF NOT EXISTS hr_letter_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('offer','appointment','increment','relieving','experience','warning','show_cause','noc','probation_confirmation')),
@@ -89,7 +94,7 @@ const DEFAULT_TEMPLATES = [
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   )`);
-  await safe(`CREATE TABLE IF NOT EXISTS hr_employee_letters (
+  await query(`CREATE TABLE IF NOT EXISTS hr_employee_letters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
     employee_id UUID NOT NULL REFERENCES users(id),
@@ -104,70 +109,78 @@ const DEFAULT_TEMPLATES = [
     acknowledged_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
-  await safe(`CREATE SEQUENCE IF NOT EXISTS hr_letter_ref_seq START 1`);
-})();
+  await query(`CREATE SEQUENCE IF NOT EXISTS hr_letter_ref_seq START 1`);
+});
 
 router.use(authenticate);
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 router.get('/templates', authorize(...HR_ALL), async (req, res) => {
-  const { rows } = await query(
-    `SELECT * FROM hr_letter_templates WHERE company_id=$1 ORDER BY type,name`,
-    [req.user.company_id]
-  );
-  // Seed defaults if none exist
-  if (rows.length === 0) {
-    for (const t of DEFAULT_TEMPLATES) {
-      await query(
-        `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,is_default,created_by)
-         VALUES($1,$2,$3,$4,$5,TRUE,$6) ON CONFLICT DO NOTHING`,
-        [req.user.company_id, t.type, t.name, t.subject, t.body_html, req.user.id]
-      );
-    }
-    const { rows: seeded } = await query(
+  try {
+    const { rows } = await query(
       `SELECT * FROM hr_letter_templates WHERE company_id=$1 ORDER BY type,name`,
       [req.user.company_id]
     );
-    return res.json({ data: seeded });
-  }
-  res.json({ data: rows });
+    // Seed defaults if none exist
+    if (rows.length === 0) {
+      for (const t of DEFAULT_TEMPLATES) {
+        await query(
+          `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,is_default,created_by)
+           VALUES($1,$2,$3,$4,$5,TRUE,$6) ON CONFLICT DO NOTHING`,
+          [req.user.company_id, t.type, t.name, t.subject, t.body_html, req.user.id]
+        );
+      }
+      const { rows: seeded } = await query(
+        `SELECT * FROM hr_letter_templates WHERE company_id=$1 ORDER BY type,name`,
+        [req.user.company_id]
+      );
+      return res.json({ data: seeded });
+    }
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/templates', authorize(...HR_ROLES), async (req, res) => {
-  const { type, name, subject, body_html } = req.body;
-  const { rows } = await query(
-    `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,created_by)
-     VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [req.user.company_id, type, name, subject, body_html, req.user.id]
-  );
-  res.json({ data: rows[0] });
+  try {
+    const { type, name, subject, body_html } = req.body;
+    const { rows } = await query(
+      `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,created_by)
+       VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.company_id, type, name, subject, body_html, req.user.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/templates/:id', authorize(...HR_ROLES), async (req, res) => {
-  const { name, subject, body_html } = req.body;
-  const { rows } = await query(
-    `UPDATE hr_letter_templates SET name=$1,subject=$2,body_html=$3,updated_at=NOW()
-     WHERE id=$4 AND company_id=$5 RETURNING *`,
-    [name, subject, body_html, req.params.id, req.user.company_id]
-  );
-  res.json({ data: rows[0] });
+  try {
+    const { name, subject, body_html } = req.body;
+    const { rows } = await query(
+      `UPDATE hr_letter_templates SET name=$1,subject=$2,body_html=$3,updated_at=NOW()
+       WHERE id=$4 AND company_id=$5 RETURNING *`,
+      [name, subject, body_html, req.params.id, req.user.company_id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Generated Letters ─────────────────────────────────────────────────────────
 router.get('/generated', authorize(...HR_ALL), async (req, res) => {
-  const { employee_id, letter_type } = req.query;
-  const conds = ['l.company_id=$1']; const params=[req.user.company_id]; let i=2;
-  if (employee_id)  { conds.push(`l.employee_id=$${i++}`); params.push(employee_id); }
-  if (letter_type)  { conds.push(`l.letter_type=$${i++}`); params.push(letter_type); }
-  const { rows } = await query(
-    `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code, u.name as issued_by_name
-     FROM hr_employee_letters l
-     JOIN users e ON e.id=l.employee_id
-     LEFT JOIN users u ON u.id=l.issued_by
-     WHERE ${conds.join(' AND ')} ORDER BY l.generated_on DESC`,
-    params
-  );
-  res.json({ data: rows });
+  try {
+    const { employee_id, letter_type } = req.query;
+    const conds = ['l.company_id=$1']; const params=[req.user.company_id]; let i=2;
+    if (employee_id)  { conds.push(`l.employee_id=$${i++}`); params.push(employee_id); }
+    if (letter_type)  { conds.push(`l.letter_type=$${i++}`); params.push(letter_type); }
+    const { rows } = await query(
+      `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code, u.name as issued_by_name
+       FROM hr_employee_letters l
+       JOIN users e ON e.id=l.employee_id
+       LEFT JOIN users u ON u.id=l.issued_by
+       WHERE ${conds.join(' AND ')} ORDER BY l.generated_on DESC`,
+      params
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 function escHtml(s) {
@@ -185,48 +198,52 @@ function interpolate(html, data, trustedKeys = new Set()) {
 }
 
 router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
-  const { employee_id, template_id, extra_data = {}, generated_on } = req.body;
-  // Load template
-  const { rows: [tmpl] } = await query(
-    `SELECT * FROM hr_letter_templates WHERE id=$1 AND company_id=$2`,
-    [template_id, req.user.company_id]
-  );
-  if (!tmpl) return res.status(404).json({ error: 'Template not found' });
-  // Load employee
-  const { rows: [emp] } = await query(
-    `SELECT u.id, u.name AS full_name, u.employee_code AS employee_id, u.designation, u.department,
-            u.email, u.phone, ep.date_of_joining, ep.pan_number, c.name as company_name
-     FROM users u
-     LEFT JOIN employee_profiles ep ON ep.user_id=u.id
-     LEFT JOIN companies c ON c.id=u.company_id
-     WHERE u.id=$1 AND u.company_id=$2`,
-    [employee_id, req.user.company_id]
-  );
-  if (!emp) return res.status(404).json({ error: 'Employee not found' });
-  // Seq ref
-  const { rows: [{ nextval }] } = await query(`SELECT nextval('hr_letter_ref_seq')`);
-  const ref = `LTR/${new Date().getFullYear()}/${String(nextval).padStart(4,'0')}`;
-  const data = { ...emp, ...extra_data, reference_no: ref };
-  // Keys from emp (DB-sourced) and reference_no are trusted HTML; extra_data keys are escaped
-  const trustedKeys = new Set([...Object.keys(emp), 'reference_no']);
-  const content_html = interpolate(tmpl.body_html, data, trustedKeys);
-  const subject = interpolate(tmpl.subject || '', data, trustedKeys);
-  const { rows } = await query(
-    `INSERT INTO hr_employee_letters(company_id,employee_id,template_id,letter_type,reference_no,generated_on,subject,content_html,extra_data,issued_by)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [req.user.company_id, employee_id, template_id, tmpl.type, ref, generated_on||new Date().toISOString().split('T')[0], subject, content_html, JSON.stringify(extra_data), req.user.id]
-  );
-  res.json({ data: rows[0] });
+  try {
+    const { employee_id, template_id, extra_data = {}, generated_on } = req.body;
+    // Load template
+    const { rows: [tmpl] } = await query(
+      `SELECT * FROM hr_letter_templates WHERE id=$1 AND company_id=$2`,
+      [template_id, req.user.company_id]
+    );
+    if (!tmpl) return res.status(404).json({ error: 'Template not found' });
+    // Load employee
+    const { rows: [emp] } = await query(
+      `SELECT u.id, u.name AS full_name, u.employee_code AS employee_id, u.designation, u.department,
+              u.email, u.phone, ep.date_of_joining, ep.pan_number, c.name as company_name
+       FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+       LEFT JOIN companies c ON c.id=u.company_id
+       WHERE u.id=$1 AND u.company_id=$2`,
+      [employee_id, req.user.company_id]
+    );
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+    // Seq ref
+    const { rows: [{ nextval }] } = await query(`SELECT nextval('hr_letter_ref_seq')`);
+    const ref = `LTR/${new Date().getFullYear()}/${String(nextval).padStart(4,'0')}`;
+    const data = { ...emp, ...extra_data, reference_no: ref };
+    // Keys from emp (DB-sourced) and reference_no are trusted HTML; extra_data keys are escaped
+    const trustedKeys = new Set([...Object.keys(emp), 'reference_no']);
+    const content_html = interpolate(tmpl.body_html, data, trustedKeys);
+    const subject = interpolate(tmpl.subject || '', data, trustedKeys);
+    const { rows } = await query(
+      `INSERT INTO hr_employee_letters(company_id,employee_id,template_id,letter_type,reference_no,generated_on,subject,content_html,extra_data,issued_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.user.company_id, employee_id, template_id, tmpl.type, ref, generated_on||new Date().toISOString().split('T')[0], subject, content_html, JSON.stringify(extra_data), req.user.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/generated/:id', authorize(...HR_ALL), async (req, res) => {
-  const { rows } = await query(
-    `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code FROM hr_employee_letters l
-     JOIN users e ON e.id=l.employee_id WHERE l.id=$1 AND l.company_id=$2`,
-    [req.params.id, req.user.company_id]
-  );
-  if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-  res.json({ data: rows[0] });
+  try {
+    const { rows } = await query(
+      `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code FROM hr_employee_letters l
+       JOIN users e ON e.id=l.employee_id WHERE l.id=$1 AND l.company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
