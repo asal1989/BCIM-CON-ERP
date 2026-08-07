@@ -39,6 +39,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: construct-erp/frontend/package-lock.json
 
+      - name: Update npm
+        # The lockfile is generated with a newer npm than Node 22's bundled
+        # npm 10.x — npm ci's strict lockfile-sync check rejects it as
+        # "out of sync" even though it installs cleanly under npm 11+.
+        run: npm install -g npm@11
+
       - name: Install dependencies
         working-directory: construct-erp/frontend
         run: npm ci
