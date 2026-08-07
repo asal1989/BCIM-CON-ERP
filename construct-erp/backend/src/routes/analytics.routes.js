@@ -159,11 +159,16 @@ router.get('/global', async (req, res) => {
     const incidentCount = Number.parseInt(safety.rows[0]?.incident_count || 0, 10);
     const safetyScore = Math.max(0, 100 - (incidentCount * 2) - (Number.parseInt(safety.rows[0]?.major_accidents || 0, 10) * 15));
 
+    // quality_checklists is a template/master table (name, category, items) —
+    // it has no project_id or status column at all, so this always threw
+    // "column status does not exist" and took down the whole /global
+    // endpoint. quality_pour_cards is the actual per-project instance table;
+    // 'closed' = passed every quality gate, 'rejected' = failed one.
     const quality = await query(
       `SELECT
-         COUNT(*) as total,
-         COUNT(*) FILTER (WHERE status = 'pm_approved' OR status = 'verified' OR (metadata->>'passed')::boolean = true) as passed
-       FROM quality_checklists qc
+         COUNT(*) FILTER (WHERE status IN ('closed','rejected')) as total,
+         COUNT(*) FILTER (WHERE status = 'closed') as passed
+       FROM quality_pour_cards qc
        WHERE ${withProjectScope('qc', scope)}`,
       scope.params
     );
