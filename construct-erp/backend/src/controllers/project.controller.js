@@ -287,7 +287,12 @@ const updateProject = async (req, res) => {
     for (const field of fields) {
       if (req.body[field] !== undefined) {
         updates.push(`${field} = $${i++}`);
-        params.push(req.body[field]);
+        // An empty string means "cleared" for every field here — several are
+        // typed (gst_applicable is BOOLEAN, award_date is DATE, contract_value/
+        // progress_pct/client_advance_received are NUMERIC), and Postgres
+        // rejects '' for all of those with "invalid input syntax". NULL is
+        // what "cleared" actually means for a typed column.
+        params.push(req.body[field] === '' ? null : req.body[field]);
       }
     }
     if (!updates.length) return res.status(400).json({ error: 'No fields to update.' });
