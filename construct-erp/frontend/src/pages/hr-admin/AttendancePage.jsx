@@ -141,13 +141,54 @@ function downloadAttendancePDF(table, companyName) {
   buildAttendancePDFDoc(table, companyName).save(`${table.title.replace(/[^\w\- ]/g,'')}.pdf`);
 }
 
-// Opens the same clean PDF in a new tab and triggers the browser's print
-// dialog on it — so "Print" produces the same well-formatted table as
-// "Download PDF" instead of printing the raw dashboard chrome.
-function printAttendancePDF(table, companyName) {
-  const doc = buildAttendancePDFDoc(table, companyName);
-  doc.autoPrint();
-  window.open(doc.output('bloburl'), '_blank');
+// Print via a real HTML document in a fresh window, then win.print() — the
+// pattern already proven elsewhere in this codebase (POPage.jsx, WorkOrder-
+// Page.jsx, StoreLedgerPage.jsx). NOT doc.autoPrint()+output('bloburl'):
+// that opens the PDF in the browser's built-in PDF viewer, which does not
+// execute the embedded auto-print JavaScript in Chrome/Edge — the tab opens
+// but no print dialog ever appears. That was the actual bug.
+function printAttendanceTable(table, companyName) {
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) { toast.error('Please allow pop-ups for this site to print.'); return; }
+  const isGrid = table.headers.length > 9;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>${table.title}</title>
+<style>
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { margin: 0; padding: 10mm; font-family: Arial, Helvetica, sans-serif; color: #0F172A; }
+  .bar { height: 2mm; background: #4F46E5; margin: -10mm -10mm 6mm; }
+  h1 { font-size: 15px; margin: 0 0 2px; }
+  .sub { font-size: 11px; color: #475569; margin: 0 0 1px; }
+  .meta { font-size: 9px; color: #94A3B8; margin: 0 0 6mm; }
+  table { width: 100%; border-collapse: collapse; font-size: ${isGrid ? '8px' : '10px'}; }
+  th, td { border: 0.5px solid #CBD5E1; padding: ${isGrid ? '2px 3px' : '5px 8px'}; text-align: left; }
+  th { background: #1E293B; color: #fff; font-weight: 700; text-align: center; }
+  td { text-align: center; }
+  td:first-child, th:first-child { text-align: left; }
+  tbody tr:nth-child(even) { background: #F8FAFC; }
+  @page { size: A4 ${isGrid ? 'landscape' : 'portrait'}; margin: 10mm; }
+</style>
+</head>
+<body>
+  <div class="bar"></div>
+  <h1>${companyName || 'BCIM Engineering Private Limited'}</h1>
+  <p class="sub">${table.title}</p>
+  <p class="meta">Generated ${new Date().toLocaleString('en-IN')}</p>
+  <table>
+    <thead><tr>${table.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${table.rows.map(r => `<tr>${r.map(c => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>
+</body>
+</html>`;
+  win.document.write(html);
+  win.document.close();
+  let printed = false;
+  const doPrint = () => { if (printed) return; printed = true; win.focus(); win.print(); };
+  win.onload = doPrint;
+  setTimeout(doPrint, 800);
 }
 
 // ── Shared components ─────────────────────────────────────────────────────────
@@ -543,9 +584,21 @@ export default function AttendancePage() {
   const getExportTable = () => buildExportTable({
     view, month, year, dailyDate, summary, employees, attMap, days, dailyRows, dailyData,
   });
-  const handlePrint    = () => printAttendancePDF(getExportTable(), companyData?.name);
-  const handleDownloadPDF   = () => downloadAttendancePDF(getExportTable(), companyData?.name);
-  const handleDownloadExcel = () => downloadAttendanceExcel(getExportTable());
+  // try/catch + toast on all three: previously a thrown error inside PDF/Excel
+  // generation failed completely silently — the button just appeared to do
+  // nothing, which is exactly what was reported as "not working".
+  const handlePrint = () => {
+    try { printAttendanceTable(getExportTable(), companyData?.name); }
+    catch (e) { console.error(e); toast.error('Print failed: ' + e.message); }
+  };
+  const handleDownloadPDF = () => {
+    try { downloadAttendancePDF(getExportTable(), companyData?.name); }
+    catch (e) { console.error(e); toast.error('PDF download failed: ' + e.message); }
+  };
+  const handleDownloadExcel = () => {
+    try { downloadAttendanceExcel(getExportTable()); }
+    catch (e) { console.error(e); toast.error('Excel download failed: ' + e.message); }
+  };
 
   return (
     <div style={S.page}>
