@@ -951,12 +951,20 @@ router.patch('/:id/approve', async (req, res) => {
       }
 
       // 4. Auto-close PO when all items fully received
+      // qty_inspected is only populated when an item goes through formal QC
+      // inspection — plenty of items (electricals, tools, safety gear) never
+      // do, and were logged with only qty_as_per_dc filled in. Summing
+      // qty_inspected alone silently treated those deliveries as zero
+      // received, so POs with real, approved, paid receipts never flipped to
+      // fully_received. Same COALESCE(qty_inspected, qty_as_per_dc) minus
+      // qty_rejected formula already used elsewhere in this file (see the MR
+      // matching query above) — this was the one place it was missing.
       if (ign.po_id) {
         const poCheck = await client.query(
           `SELECT
              SUM(poi.quantity) AS total_ordered,
              COALESCE(SUM(
-               (SELECT COALESCE(SUM(ii2.qty_inspected), 0)
+               (SELECT COALESCE(SUM(COALESCE(ii2.qty_inspected, ii2.qty_as_per_dc, 0) - COALESCE(ii2.qty_rejected, 0)), 0)
                 FROM ign_items ii2
                 JOIN ign n2 ON n2.id = ii2.ign_id
                 WHERE n2.po_id = poi.po_id AND n2.status = 'approved'
