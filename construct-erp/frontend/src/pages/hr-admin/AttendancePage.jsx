@@ -1,12 +1,15 @@
 // src/pages/hr-admin/AttendancePage.jsx
 import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import {
   Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle,
   CalendarCheck, Clock, Mail, Send, Search, Users, UserCheck,
-  UserX, Clock3, Palmtree, ChevronRight,
+  UserX, Clock3, Palmtree, ChevronRight, Printer, FileDown, FileSpreadsheet,
 } from 'lucide-react';
-import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI } from '../../api/client';
+import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI, companySettingsAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -31,6 +34,121 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const toMins = (t) => { if (!t) return null; const [h,m]=t.split(':').map(Number); return h*60+(m||0); };
 const fmtHrs = (mins) => { if (!mins || mins<=0) return '—'; const h=Math.floor(mins/60),m=mins%60; return m?`${h}h ${m}m`:`${h}h`; };
+
+// ── Print / PDF / Excel export ──────────────────────────────────────────────
+// Builds a {headers, rows} table for whichever view is currently active, so
+// Print/PDF/Excel all export exactly what the admin is looking at rather than
+// a fixed report shape unrelated to the screen.
+function buildExportTable({ view, month, year, dailyDate, summary, employees, attMap, days, dailyRows, dailyData }) {
+  if (view === 'summary') {
+    return {
+      title: `Attendance Summary — ${MONTHS[month-1]} ${year}`,
+      headers: ['Employee', 'Employee ID', 'Department', 'Present', 'Absent', 'Half Day', 'Leave', 'Total Marked'],
+      rows: summary.map(s => [
+        s.name, s.employee_code || '', s.department_name || '—',
+        s.present || 0, s.absent || 0, s.half_day || 0, s.on_leave || 0, s.total_marked || 0,
+      ]),
+    };
+  }
+  if (view === 'grid') {
+    return {
+      title: `Attendance Grid — ${MONTHS[month-1]} ${year}`,
+      headers: ['Employee', 'Employee ID', ...days.map(d => String(d)), 'P', 'A', 'H'],
+      rows: employees.map(emp => {
+        const ea = attMap[emp.id] || {};
+        const pC = Object.values(ea).filter(a => a.status==='present').length;
+        const aC = Object.values(ea).filter(a => a.status==='absent').length;
+        const hC = Object.values(ea).filter(a => a.status==='half_day').length;
+        return [
+          emp.name, emp.employee_code || '',
+          ...days.map(d => new Date(year, month-1, d).getDay()===0 ? '—' : (STATUS_CELL[ea[d]?.status]?.label || '·')),
+          pC, aC, hC,
+        ];
+      }),
+    };
+  }
+  if (view === 'daily') {
+    return {
+      title: `Daily Punch Report — ${dailyDate}`,
+      headers: ['#', 'Employee', 'Employee ID', 'Department', 'Status', 'In Time', 'Out Time', 'Hours', 'Late (min)'],
+      rows: dailyRows.map((emp, i) => {
+        const rec = (dailyData?.data||[]).find(r => r.user_id===emp.id);
+        const inM = toMins(rec?.in_time), outM = toMins(rec?.out_time);
+        const hrs = (inM!=null && outM!=null && outM>inM) ? fmtHrs(outM-inM) : '—';
+        return [
+          i+1, emp.name, emp.employee_code || '', emp.department_name || '—',
+          STATUS_META[rec?.status]?.label || 'Not marked',
+          rec?.in_time ? rec.in_time.slice(0,5) : '—',
+          rec?.out_time ? rec.out_time.slice(0,5) : '—',
+          hrs, rec?.late_minutes > 0 ? rec.late_minutes : '—',
+        ];
+      }),
+    };
+  }
+  return { title: '', headers: [], rows: [] };
+}
+
+function downloadAttendanceExcel(table) {
+  const ws = XLSX.utils.aoa_to_sheet([table.headers, ...table.rows]);
+  ws['!cols'] = table.headers.map((h, i) => ({ wch: i===0 ? 24 : (h.length<=3 ? 5 : 14) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+  XLSX.writeFile(wb, `${table.title.replace(/[^\w\- ]/g,'')}.xlsx`);
+}
+
+// Builds the jsPDF doc (shared by Print and Download PDF, so what you print is
+// exactly what you download — no separate, uglier browser-print CSS path).
+function buildAttendancePDFDoc(table, companyName) {
+  const landscape = table.headers.length > 9;
+  const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+  const PW = landscape ? 297 : 210;
+  const ML = 12;
+
+  doc.setFillColor(79, 70, 229);
+  doc.rect(0, 0, PW, 1.5, 'F');
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+  doc.text(companyName || 'BCIM Engineering Private Limited', ML, 12);
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(71, 85, 105);
+  doc.text(table.title, ML, 18);
+  doc.setFontSize(8); doc.setTextColor(148, 163, 184);
+  doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, ML, 23);
+
+  doc.autoTable({
+    startY: 27,
+    margin: { left: ML, right: ML },
+    head: [table.headers],
+    body: table.rows,
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 1.6, valign: 'middle' },
+    headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', halign: 'center' },
+    columnStyles: table.headers.length > 9
+      // Grid view: narrow day columns so 31 days + name still fits landscape A4
+      ? { 0: { cellWidth: 30, halign: 'left' }, 1: { cellWidth: 16 } }
+      : { 0: { halign: 'left' } },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+    doc.text(`Page ${i} of ${pageCount}`, PW - ML, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+  }
+  return doc;
+}
+
+function downloadAttendancePDF(table, companyName) {
+  buildAttendancePDFDoc(table, companyName).save(`${table.title.replace(/[^\w\- ]/g,'')}.pdf`);
+}
+
+// Opens the same clean PDF in a new tab and triggers the browser's print
+// dialog on it — so "Print" produces the same well-formatted table as
+// "Download PDF" instead of printing the raw dashboard chrome.
+function printAttendancePDF(table, companyName) {
+  const doc = buildAttendancePDFDoc(table, companyName);
+  doc.autoPrint();
+  window.open(doc.output('bloburl'), '_blank');
+}
 
 // ── Shared components ─────────────────────────────────────────────────────────
 function StatusPill({ status }) {
@@ -304,6 +422,7 @@ export default function AttendancePage() {
   const daysInMonth = new Date(year,month,0).getDate();
   const days = Array.from({ length:daysInMonth },(_,i)=>i+1);
 
+  const { data:companyData }  = useQuery({ queryKey:['company-settings'], queryFn:()=>companySettingsAPI.get().then(r=>r.data?.data||r.data), staleTime:10*60*1000 });
   const { data:deptData }     = useQuery({ queryKey:['hr-departments'],  queryFn:()=>hrMastersAPI.listDepts().then(r=>r.data) });
   const { data:projectsData } = useQuery({ queryKey:['projects-active'], queryFn:()=>projectAPI.list({ is_active:true }).then(r=>r.data) });
   const { data:attData, isLoading } = useQuery({
@@ -416,6 +535,17 @@ export default function AttendancePage() {
   const dailyRows = allEmployees
     .filter(e=>!deptFilter||e.department_id===deptFilter)
     .filter(e=>!empSearch.trim()||`${e.name} ${e.employee_code||''}`.toLowerCase().includes(empSearch.trim().toLowerCase()));
+
+  // Print/PDF/Excel export whatever the admin is currently looking at.
+  // Timesheet is a single-employee drill-down, not a report shape — export
+  // is scoped to the three list/grid views where it makes sense.
+  const exportable = ['summary','grid','daily'].includes(view);
+  const getExportTable = () => buildExportTable({
+    view, month, year, dailyDate, summary, employees, attMap, days, dailyRows, dailyData,
+  });
+  const handlePrint    = () => printAttendancePDF(getExportTable(), companyData?.name);
+  const handleDownloadPDF   = () => downloadAttendancePDF(getExportTable(), companyData?.name);
+  const handleDownloadExcel = () => downloadAttendanceExcel(getExportTable());
 
   return (
     <div style={S.page}>
@@ -532,6 +662,23 @@ export default function AttendancePage() {
             <option value="">All projects</option>
             {(projectsData?.data||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+
+          {/* Print / PDF / Excel — export whatever view is currently active.
+              Hidden on Timesheet since that's a single-employee drill-down,
+              not a report shape. */}
+          {exportable && (
+            <div style={{ display:'flex', gap:6 }} title={`Exports the current "${TABS.find(t=>t.key===view)?.label}" view`}>
+              <button onClick={handlePrint} style={S.btn(false)} title="Print">
+                <Printer size={13}/> Print
+              </button>
+              <button onClick={handleDownloadPDF} style={S.btn(false)} title="Download PDF">
+                <FileDown size={13}/> PDF
+              </button>
+              <button onClick={handleDownloadExcel} style={S.btn(false)} title="Download Excel">
+                <FileSpreadsheet size={13}/> Excel
+              </button>
+            </div>
+          )}
 
           {/* Underline tabs */}
           <div style={{ marginLeft:'auto', display:'flex', borderBottom:'2px solid #E5E7EB' }}>

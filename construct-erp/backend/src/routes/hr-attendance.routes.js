@@ -1179,9 +1179,12 @@ router.get('/monthly-report', async (req, res) => {
        AND a.company_id = $1
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
-        AND u.is_active = TRUE
         AND u.email != ALL($${monthlySysIdx}::text[])
-        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+        -- Deliberately NOT filtering on is_active / employment_status here:
+        -- this is a historical report scoped to attendance actually recorded
+        -- in the requested month (via the INNER JOIN above), so someone who
+        -- worked that month and has since resigned/been terminated must
+        -- still appear — excluding them would silently rewrite history.
         -- unioned with sc_attendance below; drop the SC-roster duplicates
         AND NOT EXISTS (
           SELECT 1 FROM sc_workers w
