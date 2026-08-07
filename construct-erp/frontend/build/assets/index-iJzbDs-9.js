@@ -1,0 +1,1 @@
+import{ba as i}from"./index-DbwoThTT.js";import"./vendor-react-C3P8e1DV.js";import"./vendor-data-693MZDSQ.js";import"./vendor-ui-BL8pBBi4.js";import"./vendor-icons-CjZIDS5w.js";import"./vendor-forms-gVMGBE4b.js";const a=i("PushNotifications",{});export{a as PushNotifications};
