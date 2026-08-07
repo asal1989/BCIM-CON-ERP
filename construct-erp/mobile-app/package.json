@@ -8,7 +8,7 @@
     "ios": "expo run:ios"
   },
   "dependencies": {
-    "@expo/metro-config": "^54.0.16",
+    "@expo/metro-config": "^57.0.7",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
@@ -21,7 +21,7 @@
     "@tanstack/react-query-persist-client": "^5.51.23",
     "axios": "^1.7.2",
     "dayjs": "^1.11.13",
-    "expo": "~54.0.0",
+    "expo": "~57.0.11",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
