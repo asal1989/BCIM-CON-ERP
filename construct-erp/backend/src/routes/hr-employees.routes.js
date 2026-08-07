@@ -255,6 +255,20 @@ runSchemaInit('hr-onboarding-backfill-metadata-fix-v1', async () => {
   }
 });
 
+// Backfill the 5 new Welcome Checklist item_keys (emergency_contact_added,
+// reporting_manager_assigned, department_assigned, site_office_assigned,
+// nda_signed) onto every existing employee — same rationale as
+// hr-onboarding-backfill-checklist-v1 above, just a fresh key since
+// ensureLifecycleChecklist's ON CONFLICT DO NOTHING never re-runs for rows
+// that already exist under the old catalogue.
+runSchemaInit('hr-welcome-checklist-backfill-v1', async () => {
+  const { query: q } = require('../config/database');
+  const { rows } = await q(`SELECT user_id, company_id FROM employee_profiles`);
+  for (const r of rows) {
+    await ensureLifecycleChecklist(r.company_id, r.user_id, q);
+  }
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const employeeSelect = `
   SELECT u.id, u.employee_code, u.name, u.email, u.phone, u.role, u.designation,
@@ -302,9 +316,14 @@ const LIFECYCLE_ITEMS = [
   { stage: 'onboarding', item_key: 'joining_documents',  title: 'Joining documents collected',                owner_department: 'HR',            stage_group: 'documents',   sort_order: 20,  auto_source: 'any_doc' },
   { stage: 'onboarding', item_key: 'profile_basics',     title: 'Employee profile completed',                 owner_department: 'HR',            stage_group: 'profile',     sort_order: 30,  auto_source: 'profile' },
   { stage: 'onboarding', item_key: 'profile_photo',      title: 'Profile photo uploaded',                     owner_department: 'HR',            stage_group: 'profile',     sort_order: 40,  auto_source: 'photo' },
+  { stage: 'onboarding', item_key: 'emergency_contact_added',    title: 'Emergency contact added',                    owner_department: 'HR', stage_group: 'welcome', sort_order: 45,  auto_source: 'emergency_contact' },
+  { stage: 'onboarding', item_key: 'reporting_manager_assigned', title: 'Reporting manager assigned',                 owner_department: 'HR', stage_group: 'welcome', sort_order: 46,  auto_source: 'manager' },
+  { stage: 'onboarding', item_key: 'department_assigned',        title: 'Department assigned',                        owner_department: 'HR', stage_group: 'welcome', sort_order: 47,  auto_source: 'department' },
+  { stage: 'onboarding', item_key: 'site_office_assigned',       title: 'Site / office assigned',                     owner_department: 'HR', stage_group: 'welcome', sort_order: 48,  auto_source: 'work_location' },
   { stage: 'onboarding', item_key: 'doc_verify_pan',     title: 'PAN card verified',                          owner_department: 'HR',            stage_group: 'documents',   sort_order: 50,  auto_source: 'doc:pan' },
   { stage: 'onboarding', item_key: 'doc_verify_aadhaar', title: 'Aadhaar card verified',                      owner_department: 'HR',            stage_group: 'documents',   sort_order: 60,  auto_source: 'doc:aadhaar' },
   { stage: 'onboarding', item_key: 'bank_pf_esi',        title: 'Bank, PF and ESI details verified',          owner_department: 'HR / Accounts', stage_group: 'documents',   sort_order: 70,  auto_source: 'bank' },
+  { stage: 'onboarding', item_key: 'nda_signed',         title: 'NDA signed',                                 owner_department: 'HR',            stage_group: 'welcome',    sort_order: 75,  auto_source: null },
   { stage: 'onboarding', item_key: 'id_card',            title: 'ID card issued',                             owner_department: 'Admin',         stage_group: 'assets',      sort_order: 80,  auto_source: null },
   { stage: 'onboarding', item_key: 'asset_issue',        title: 'Laptop / assets issued',                     owner_department: 'Admin / IT',    stage_group: 'assets',      sort_order: 90,  auto_source: 'asset:laptop' },
   { stage: 'onboarding', item_key: 'email_setup',        title: 'Official email account created',             owner_department: 'IT',            stage_group: 'email',       sort_order: 100, auto_source: null },

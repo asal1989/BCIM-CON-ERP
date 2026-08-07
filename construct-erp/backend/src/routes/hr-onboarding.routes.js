@@ -106,6 +106,43 @@ async function reconcileDerived(companyId, userIds = null) {
       AND ep.bank_ifsc IS NOT NULL AND ep.bank_ifsc <> ''
   `, params);
 
+  // emergency_contact_added
+  await query(`
+    UPDATE employee_lifecycle_checklist lc SET status='done', completed_at=NOW(), updated_at=NOW()
+    FROM employee_profiles ep
+    WHERE lc.user_id = ep.user_id AND lc.company_id = $1 AND lc.stage='onboarding'
+      AND lc.item_key='emergency_contact_added' AND lc.status <> 'done' ${scope}
+      AND ep.emergency_contact_name IS NOT NULL AND ep.emergency_contact_name <> ''
+      AND ep.emergency_contact_phone IS NOT NULL AND ep.emergency_contact_phone <> ''
+  `, params);
+
+  // reporting_manager_assigned
+  await query(`
+    UPDATE employee_lifecycle_checklist lc SET status='done', completed_at=NOW(), updated_at=NOW()
+    FROM employee_profiles ep
+    WHERE lc.user_id = ep.user_id AND lc.company_id = $1 AND lc.stage='onboarding'
+      AND lc.item_key='reporting_manager_assigned' AND lc.status <> 'done' ${scope}
+      AND ep.reporting_manager_id IS NOT NULL
+  `, params);
+
+  // department_assigned
+  await query(`
+    UPDATE employee_lifecycle_checklist lc SET status='done', completed_at=NOW(), updated_at=NOW()
+    FROM employee_profiles ep
+    WHERE lc.user_id = ep.user_id AND lc.company_id = $1 AND lc.stage='onboarding'
+      AND lc.item_key='department_assigned' AND lc.status <> 'done' ${scope}
+      AND ep.department_id IS NOT NULL
+  `, params);
+
+  // site_office_assigned
+  await query(`
+    UPDATE employee_lifecycle_checklist lc SET status='done', completed_at=NOW(), updated_at=NOW()
+    FROM employee_profiles ep
+    WHERE lc.user_id = ep.user_id AND lc.company_id = $1 AND lc.stage='onboarding'
+      AND lc.item_key='site_office_assigned' AND lc.status <> 'done' ${scope}
+      AND ep.work_location IS NOT NULL AND ep.work_location <> ''
+  `, params);
+
   // joining_documents — any document at all
   await query(`
     UPDATE employee_lifecycle_checklist lc SET status='done', completed_at=NOW(), updated_at=NOW()
@@ -656,6 +693,97 @@ router.get('/charts/probation-status', async (req, res) => {
       [companyId, SYSTEM_ACCOUNT_EMAILS]
     );
     res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// GET /welcome-checklist — first-week checklist per new hire, auto-seeded
+// from employee_lifecycle_checklist. A curated subset of item_keys (some
+// shared with the full Onboarding Tracker, some new — see LIFECYCLE_ITEMS in
+// hr-employees.routes.js), with display labels matched to the Welcome
+// Checklist's own wording rather than the tracker's.
+// ═══════════════════════════════════════════════════════════
+const WELCOME_CHECKLIST_ITEMS = [
+  { item_key: 'offer_acceptance',            label: 'Appointment Letter Accepted' },
+  { item_key: 'profile_basics',              label: 'Employee Profile Created' },
+  { item_key: 'profile_photo',               label: 'Photograph Uploaded' },
+  { item_key: 'doc_verify_aadhaar',          label: 'Aadhaar Verified' },
+  { item_key: 'doc_verify_pan',              label: 'PAN Verified' },
+  { item_key: 'bank_pf_esi',                 label: 'Bank Details Added' },
+  { item_key: 'emergency_contact_added',     label: 'Emergency Contact Added' },
+  { item_key: 'reporting_manager_assigned',  label: 'Reporting Manager Assigned' },
+  { item_key: 'department_assigned',         label: 'Department Assigned' },
+  { item_key: 'site_office_assigned',        label: 'Site/Office Assigned' },
+  { item_key: 'orientation',                 label: 'HR Orientation Completed' },
+  { item_key: 'policy_ack',                  label: 'Policies Accepted' },
+  { item_key: 'nda_signed',                  label: 'NDA Signed' },
+];
+const WELCOME_ITEM_KEYS = WELCOME_CHECKLIST_ITEMS.map(i => i.item_key);
+
+router.get('/welcome-checklist', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    await seedMissingChecklists(companyId);
+    await reconcileDerived(companyId);
+
+    const { search, department_id, status } = req.query;
+    let extraWhere = '';
+    const params = [companyId, SYSTEM_ACCOUNT_EMAILS];
+    let idx = 3;
+    if (search) { extraWhere += ` AND (u.name ILIKE $${idx} OR u.employee_code ILIKE $${idx})`; params.push(`%${search}%`); idx++; }
+    if (department_id) { extraWhere += ` AND ep.department_id = $${idx}`; params.push(department_id); idx++; }
+
+    const { rows: population } = await query(
+      `${basePopulationSQL(extraWhere)} SELECT * FROM base ORDER BY date_of_joining DESC NULLS LAST`,
+      params
+    );
+    if (!population.length) return res.json({ data: [] });
+
+    const userIds = population.map(p => p.id);
+    // Backfill in case these employees were seeded before the Welcome
+    // Checklist item_keys existed on LIFECYCLE_ITEMS — cheap, ON CONFLICT DO NOTHING.
+    for (const id of userIds) await ensureLifecycleChecklist(companyId, id, query);
+
+    const { rows: items } = await query(
+      `SELECT * FROM employee_lifecycle_checklist
+       WHERE user_id = ANY($1::uuid[]) AND company_id = $2 AND stage='onboarding' AND item_key = ANY($3::text[])`,
+      [userIds, companyId, WELCOME_ITEM_KEYS]
+    );
+    const byUser = {};
+    for (const it of items) { (byUser[it.user_id] ||= []).push(it); }
+
+    const data = population.map(emp => {
+      const rows = byUser[emp.id] || [];
+      const checklist = WELCOME_CHECKLIST_ITEMS.map(def => {
+        const row = rows.find(r => r.item_key === def.item_key);
+        return {
+          id: row?.id || null,
+          item_key: def.item_key,
+          label: def.label,
+          status: row?.status === 'done' ? 'done' : 'pending',
+          remarks: row?.remarks || null,
+          due_date: row?.due_date || null,
+          completed_at: row?.completed_at || null,
+          auto_source: row?.auto_source || null,
+        };
+      });
+      const doneCount = checklist.filter(c => c.status === 'done').length;
+      const overallStatus = doneCount === 0 ? 'pending' : doneCount === checklist.length ? 'completed' : 'in_progress';
+      return {
+        id: emp.id,
+        employee_code: emp.employee_code,
+        name: emp.name,
+        department_name: emp.department_name,
+        designation_name: emp.designation_name,
+        date_of_joining: emp.date_of_joining,
+        checklist,
+        done_items: doneCount,
+        total_items: checklist.length,
+        overall_status: overallStatus,
+      };
+    });
+
+    res.json({ data: status ? data.filter(d => d.overall_status === status) : data });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
