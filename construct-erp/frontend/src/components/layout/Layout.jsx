@@ -351,6 +351,7 @@ const navGroups = [
     // ── 16. Asset Management ──
     { to: '/hr-admin/emp-assets',        icon: Package,         label: 'Employee Assets' },
     // ── 17. Exit Management ──
+    { to: '/hr-admin/exit',              icon: LogOut,          label: 'Exit Management' },
     { to: '/hr-admin/fnf',               icon: Wallet,          label: 'Full & Final' },
     // ── 18. ESS Management ──
     { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
@@ -602,7 +603,7 @@ const NAV_SECTIONS = {
     { label: 'Training & Development', paths: ['/hr-admin/training'] },
     { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/reports/confirmation','/hr-admin/policies','/hr-admin/letters'] },
     { label: 'Asset Management',      paths: ['/hr-admin/emp-assets'] },
-    { label: 'Exit Management',       paths: ['/hr-admin/fnf'] },
+    { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
     { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/import'] },
     { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/master-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },

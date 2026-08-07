@@ -568,6 +568,19 @@ export const hrFnfAPI = {
   gratuity:   (p)     => api.get('/hr-admin/fnf/calculate-gratuity', { params: p }),
 };
 
+export const hrExitAPI = {
+  list:            (p)      => api.get('/hr-admin/exit', { params: p }),
+  get:             (id)     => api.get(`/hr-admin/exit/${id}`),
+  create:          (d)      => api.post('/hr-admin/exit', d),
+  managerApproval: (id, d)  => api.patch(`/hr-admin/exit/${id}/manager-approval`, d),
+  startClearance:  (id)     => api.post(`/hr-admin/exit/${id}/start-clearance`),
+  actionClearance: (id, dept, d) => api.patch(`/hr-admin/exit/${id}/clearance/${dept}`, d),
+  submitInterview: (id, d)  => api.post(`/hr-admin/exit/${id}/interview`, d),
+  linkFnf:         (id)     => api.post(`/hr-admin/exit/${id}/link-fnf`),
+  complete:        (id)     => api.post(`/hr-admin/exit/${id}/complete`),
+  withdraw:        (id)     => api.patch(`/hr-admin/exit/${id}/withdraw`),
+};
+
 export const hrLettersAPI = {
   templates:   (p)      => api.get('/hr-admin/letters/templates', { params: p }),
   createTmpl:  (d)      => api.post('/hr-admin/letters/templates', d),
