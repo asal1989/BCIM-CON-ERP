@@ -267,20 +267,20 @@ export default function MonthlyStatusPage() {
         ) : rows.length === 0 ? (
           <div className="no-print" style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>No attendance data for {MONTHS[month-1]} {year}</div>
         ) : (
-          <table className="report-print-table" style={{ borderCollapse:'collapse', fontSize:10.5, width:'100%' }}>
+          <table className="mar-table" style={{ borderCollapse:'collapse', fontSize:10.5, width:'100%' }}>
             <thead>
               <tr>
-                <th style={{ ...thBase, position:'sticky', left:0, top:0, background:'#F1F5F9', zIndex:3, minWidth:44 }} rowSpan={2}>Emp ID</th>
-                <th style={{ ...thBase, position:'sticky', left:44, top:0, background:'#F1F5F9', zIndex:3, minWidth:160, textAlign:'left' }} rowSpan={2}>Name</th>
-                <th style={{ ...thBase, position:'sticky', left:204, top:0, background:'#F1F5F9', zIndex:3, minWidth:120, textAlign:'left' }} rowSpan={2}>Department</th>
-                <th style={{ ...thBase, position:'sticky', left:324, top:0, background:'#F1F5F9', zIndex:3, minWidth:140, textAlign:'left' }} rowSpan={2}>Company</th>
+                <th className="mar-c-emp"  style={{ ...thBase, position:'sticky', left:0, top:0, background:'#F1F5F9', zIndex:3, minWidth:44 }} rowSpan={2}>Emp ID</th>
+                <th className="mar-c-name" style={{ ...thBase, position:'sticky', left:44, top:0, background:'#F1F5F9', zIndex:3, minWidth:160, textAlign:'left' }} rowSpan={2}>Name</th>
+                <th className="mar-c-dept" style={{ ...thBase, position:'sticky', left:204, top:0, background:'#F1F5F9', zIndex:3, minWidth:120, textAlign:'left' }} rowSpan={2}>Department</th>
+                <th className="mar-c-co"   style={{ ...thBase, position:'sticky', left:324, top:0, background:'#F1F5F9', zIndex:3, minWidth:140, textAlign:'left' }} rowSpan={2}>Company</th>
                 {Array.from({length:days},(_,i)=>{
                   const d = i+1;
                   const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                   const isHoliday = holidaySet.has(dateStr);
                   const isSunday  = sundaySet.has(d);
                   return (
-                    <th key={d} colSpan={2} style={{
+                    <th key={d} style={{
                       ...thBase, position:'sticky', top:0, zIndex:2, minWidth:78,
                       background: isHoliday ? '#EDE9FE' : isSunday ? '#F1F5F9' : '#F8FAFC',
                       ...dayHeaderStyle(d),
@@ -296,10 +296,12 @@ export default function MonthlyStatusPage() {
                   const isSunday  = sundaySet.has(d);
                   const bg = isHoliday ? '#F5F3FF' : isSunday ? '#F8FAFC' : '#FCFCFD';
                   return (
-                    <React.Fragment key={d}>
-                      <th style={{ ...thBase, position:'sticky', top:26, background:bg, zIndex:1, minWidth:38, color:'#94A3B8', fontWeight:600 }}>In</th>
-                      <th style={{ ...thBase, position:'sticky', top:26, background:bg, zIndex:1, minWidth:38, color:'#94A3B8', fontWeight:600 }}>Out</th>
-                    </React.Fragment>
+                    <th key={d} style={{ ...thBase, position:'sticky', top:26, background:bg, zIndex:1, minWidth:78, color:'#94A3B8', fontWeight:600, padding:0 }}>
+                      <span className="mar-io">
+                        <span className="mar-io-in">In</span>
+                        <span className="mar-io-out">Out</span>
+                      </span>
+                    </th>
                   );
                 })}
               </tr>
@@ -307,10 +309,10 @@ export default function MonthlyStatusPage() {
             <tbody>
               {rows.map((r,idx) => (
                 <tr key={idx} className="mar-row">
-                  <td style={{ ...tdBase, position:'sticky', left:0, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', zIndex:1, fontWeight:600 }}>{r.emp_id}</td>
-                  <td style={{ ...tdBase, position:'sticky', left:44, background: idx%2 ? '#FAFAFA' : '#fff', fontWeight:700, color:'#1E293B', textAlign:'left', zIndex:1 }}>{r.name}</td>
-                  <td style={{ ...tdBase, position:'sticky', left:204, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', textAlign:'left', zIndex:1 }}>{r.department}</td>
-                  <td style={{ ...tdBase, position:'sticky', left:324, background: idx%2 ? '#FAFAFA' : '#fff', color:'#7C3AED', fontWeight:600, textAlign:'left', zIndex:1 }}>{r.company}</td>
+                  <td className="mar-c-emp"  style={{ ...tdBase, position:'sticky', left:0, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', zIndex:1, fontWeight:600 }}>{r.emp_id}</td>
+                  <td className="mar-c-name" style={{ ...tdBase, position:'sticky', left:44, background: idx%2 ? '#FAFAFA' : '#fff', fontWeight:700, color:'#1E293B', textAlign:'left', zIndex:1 }}>{r.name}</td>
+                  <td className="mar-c-dept" style={{ ...tdBase, position:'sticky', left:204, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', textAlign:'left', zIndex:1 }}>{r.department}</td>
+                  <td className="mar-c-co"   style={{ ...tdBase, position:'sticky', left:324, background: idx%2 ? '#FAFAFA' : '#fff', color:'#7C3AED', fontWeight:600, textAlign:'left', zIndex:1 }}>{r.company}</td>
                   {Array.from({length:days},(_,i) => {
                     const d = i+1;
                     const p = r.days[d];
@@ -320,21 +322,24 @@ export default function MonthlyStatusPage() {
 
                     if (cs.label) {
                       return (
-                        <td key={d} colSpan={2} style={{ ...tdBase, background: bg, color: cs.labelColor, fontWeight:800 }}>
+                        <td key={d} style={{ ...tdBase, background: bg, color: cs.labelColor, fontWeight:800 }}>
                           {cs.label}
                         </td>
                       );
                     }
+                    // In/Out share one column — side by side on screen, stacked
+                    // for print so all 31 days fit across the sheet.
                     return (
-                      <React.Fragment key={d}>
-                        <td
-                          title={cs.late ? `Late by ${p.lateMin} min` : undefined}
-                          style={{ ...tdBase, background: bg, color: p?.in ? (cs.late ? '#C2410C' : '#16A34A') : '#CBD5E1', fontWeight: cs.late ? 800 : 600, borderLeft: cs.late ? '2px solid #FB923C' : undefined }}
-                        >
-                          {p?.in || '—'}
-                        </td>
-                        <td style={{ ...tdBase, background: bg, color: p?.out ? '#DC2626' : '#CBD5E1', fontWeight:600 }}>{p?.out || '—'}</td>
-                      </React.Fragment>
+                      <td
+                        key={d}
+                        title={cs.late ? `Late by ${p.lateMin} min` : undefined}
+                        style={{ ...tdBase, background: bg, padding:0, borderLeft: cs.late ? '2px solid #FB923C' : undefined }}
+                      >
+                        <span className="mar-io">
+                          <span className="mar-io-in" style={{ color: p?.in ? (cs.late ? '#C2410C' : '#16A34A') : '#CBD5E1', fontWeight: cs.late ? 800 : 600 }}>{p?.in || '—'}</span>
+                          <span className="mar-io-out" style={{ color: p?.out ? '#DC2626' : '#CBD5E1', fontWeight:600 }}>{p?.out || '—'}</span>
+                        </span>
+                      </td>
                     );
                   })}
                 </tr>
@@ -349,8 +354,48 @@ export default function MonthlyStatusPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .mar-row:hover td { filter: brightness(0.97); }
+
+        /* One column per day holding both punches: side by side on screen. */
+        .mar-io { display:flex; width:100%; }
+        .mar-io-in, .mar-io-out {
+          flex:1 1 50%; padding:4px 5px; text-align:center; white-space:nowrap;
+        }
+        .mar-io-out { border-left:1px solid #EEF2F6; }
+
         @media print {
-          .mar-table-wrap { overflow:visible !important; max-height:none !important; border:none !important; box-shadow:none !important; }
+          /* Screen scroll box would otherwise clip every row past 68vh. */
+          .mar-table-wrap {
+            overflow:visible !important; max-height:none !important;
+            border:none !important; box-shadow:none !important; border-radius:0 !important;
+          }
+          /* The grid carries inline min-widths totalling ~2882px. Inline styles
+             beat plain stylesheet rules, and browsers clip an over-wide table
+             instead of scaling it — so without these !important resets the
+             sheet cuts off mid-month no matter how large the paper is. */
+          .mar-table {
+            width:100% !important; table-layout:fixed !important;
+            border-collapse:collapse !important;
+          }
+          .mar-table thead { display:table-header-group !important; }
+          .mar-table tr { page-break-inside:avoid !important; }
+          .mar-table th, .mar-table td {
+            position:static !important; min-width:0 !important;
+            padding:1px 2px !important; font-size:6.5pt !important;
+            border:0.5pt solid #9CA3AF !important; overflow:hidden !important;
+          }
+          /* 81mm of fixed columns leaves ~10.4mm per day across A3 landscape. */
+          .mar-c-emp  { width:9mm  !important; }
+          .mar-c-name { width:32mm !important; }
+          .mar-c-dept { width:19mm !important; }
+          .mar-c-co   { width:21mm !important; }
+
+          /* Stack the punches so a day needs one column, not two. */
+          .mar-io { display:block !important; }
+          .mar-io-in, .mar-io-out {
+            display:block !important; padding:0 1px !important;
+            font-size:6.5pt !important; line-height:1.25 !important;
+          }
+          .mar-io-out { border-left:none !important; border-top:0.5pt solid #D1D5DB !important; }
         }
       `}</style>
     </div>
