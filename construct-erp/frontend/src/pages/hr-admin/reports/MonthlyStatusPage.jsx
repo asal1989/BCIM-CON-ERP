@@ -133,6 +133,21 @@ export default function MonthlyStatusPage() {
     return { present, absent };
   }, [rows, days, year, month, holidaySet, sundaySet]);
 
+  // Per-employee monthly totals — the row-end "Total Present / Total
+  // Absent" columns. Same rules again, summed across the month per row.
+  const rowTotals = useMemo(() => rows.map(r => {
+    let present = 0, absent = 0;
+    for (let d = 1; d <= days; d++) {
+      const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      if (holidaySet.has(dateStr) || sundaySet.has(d)) continue;
+      const p = r.days[d];
+      if (!p || p.status === 'absent' || (!p.in && !p.out && !p.status)) { absent++; continue; }
+      if (p.status === 'leave' || p.status === 'half_day') continue;
+      present++;
+    }
+    return { present, absent };
+  }), [rows, days, year, month, holidaySet, sundaySet]);
+
   function dayHeaderStyle(d) {
     const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     if (holidaySet.has(dateStr)) return { color:'#7C3AED', fontWeight:800 };
@@ -289,10 +304,10 @@ export default function MonthlyStatusPage() {
           <table className="mar-table" style={{ borderCollapse:'collapse', fontSize:10.5, width:'100%' }}>
             <thead>
               <tr>
-                <th className="mar-c-emp"  style={{ ...thBase, position:'sticky', left:0, top:0, background:'#F1F5F9', zIndex:3, minWidth:44 }} rowSpan={2}>Emp ID</th>
-                <th className="mar-c-name" style={{ ...thBase, position:'sticky', left:44, top:0, background:'#F1F5F9', zIndex:3, minWidth:160, textAlign:'left' }} rowSpan={2}>Name</th>
-                <th className="mar-c-dept" style={{ ...thBase, position:'sticky', left:204, top:0, background:'#F1F5F9', zIndex:3, minWidth:120, textAlign:'left' }} rowSpan={2}>Department</th>
-                <th className="mar-c-co"   style={{ ...thBase, position:'sticky', left:324, top:0, background:'#F1F5F9', zIndex:3, minWidth:140, textAlign:'left' }} rowSpan={2}>Company</th>
+                <th className="mar-c-emp"  style={{ ...thBase, position:'sticky', left:0, top:0, background:'#F1F5F9', zIndex:3, minWidth:72 }} rowSpan={2}>Emp ID</th>
+                <th className="mar-c-name" style={{ ...thBase, position:'sticky', left:72, top:0, background:'#F1F5F9', zIndex:3, minWidth:160, textAlign:'left' }} rowSpan={2}>Name</th>
+                <th className="mar-c-dept" style={{ ...thBase, position:'sticky', left:232, top:0, background:'#F1F5F9', zIndex:3, minWidth:120, textAlign:'left' }} rowSpan={2}>Department</th>
+                <th className="mar-c-co"   style={{ ...thBase, position:'sticky', left:352, top:0, background:'#F1F5F9', zIndex:3, minWidth:140, textAlign:'left' }} rowSpan={2}>Company</th>
                 {Array.from({length:days},(_,i)=>{
                   const d = i+1;
                   const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -306,6 +321,8 @@ export default function MonthlyStatusPage() {
                     }}>{String(d).padStart(2,'0')}-{MONTHS[month-1].slice(0,3)}</th>
                   );
                 })}
+                <th className="mar-c-sum" style={{ ...thBase, top:0, zIndex:2, minWidth:50, background:'#F0FDF4', color:'#15803D' }} rowSpan={2}>Total<br/>Present</th>
+                <th className="mar-c-sum" style={{ ...thBase, top:0, zIndex:2, minWidth:50, background:'#FEF2F2', color:'#B91C1C' }} rowSpan={2}>Total<br/>Absent</th>
               </tr>
               <tr>
                 {Array.from({length:days},(_,i)=>{
@@ -329,9 +346,9 @@ export default function MonthlyStatusPage() {
               {rows.map((r,idx) => (
                 <tr key={idx} className="mar-row">
                   <td className="mar-c-emp"  style={{ ...tdBase, position:'sticky', left:0, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', zIndex:1, fontWeight:600 }}>{r.emp_id}</td>
-                  <td className="mar-c-name" style={{ ...tdBase, position:'sticky', left:44, background: idx%2 ? '#FAFAFA' : '#fff', fontWeight:700, color:'#1E293B', textAlign:'left', zIndex:1 }}>{r.name}</td>
-                  <td className="mar-c-dept" style={{ ...tdBase, position:'sticky', left:204, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', textAlign:'left', zIndex:1 }}>{r.department}</td>
-                  <td className="mar-c-co"   style={{ ...tdBase, position:'sticky', left:324, background: idx%2 ? '#FAFAFA' : '#fff', color:'#7C3AED', fontWeight:600, textAlign:'left', zIndex:1 }}>{r.company}</td>
+                  <td className="mar-c-name" style={{ ...tdBase, position:'sticky', left:72, background: idx%2 ? '#FAFAFA' : '#fff', fontWeight:700, color:'#1E293B', textAlign:'left', zIndex:1 }}>{r.name}</td>
+                  <td className="mar-c-dept" style={{ ...tdBase, position:'sticky', left:232, background: idx%2 ? '#FAFAFA' : '#fff', color:'#64748B', textAlign:'left', zIndex:1 }}>{r.department}</td>
+                  <td className="mar-c-co"   style={{ ...tdBase, position:'sticky', left:352, background: idx%2 ? '#FAFAFA' : '#fff', color:'#7C3AED', fontWeight:600, textAlign:'left', zIndex:1 }}>{r.company}</td>
                   {Array.from({length:days},(_,i) => {
                     const d = i+1;
                     const p = r.days[d];
@@ -365,6 +382,8 @@ export default function MonthlyStatusPage() {
                       </td>
                     );
                   })}
+                  <td className="mar-c-sum" style={{ ...tdBase, fontWeight:800, color:'#15803D', background:'#F0FDF4' }}>{rowTotals[idx]?.present ?? 0}</td>
+                  <td className="mar-c-sum" style={{ ...tdBase, fontWeight:800, color:'#B91C1C', background:'#FEF2F2' }}>{rowTotals[idx]?.absent ?? 0}</td>
                 </tr>
               ))}
             </tbody>
@@ -381,6 +400,8 @@ export default function MonthlyStatusPage() {
                   {dailyTotals.present.map((count, i) => (
                     <td key={i} style={{ ...tdBase, fontWeight:800, color:'#15803D', background:'#F0FDF4' }}>{count}</td>
                   ))}
+                  <td className="mar-c-sum" style={{ ...tdBase, fontWeight:800, color:'#15803D', background:'#DCFCE7' }}>{kpis.present}</td>
+                  <td className="mar-c-sum" style={{ ...tdBase, background:'#DCFCE7' }} />
                 </tr>
                 <tr style={{ background:'#FEF2F2', borderTop:'1px solid #FECACA' }}>
                   <td colSpan={4} className="mar-c-total-label" style={{ ...tdBase, textAlign:'right', fontWeight:800, color:'#B91C1C', position:'sticky', left:0, background:'#FEF2F2', zIndex:1 }}>
@@ -389,6 +410,8 @@ export default function MonthlyStatusPage() {
                   {dailyTotals.absent.map((count, i) => (
                     <td key={i} style={{ ...tdBase, fontWeight:800, color:'#B91C1C', background:'#FEF2F2' }}>{count}</td>
                   ))}
+                  <td className="mar-c-sum" style={{ ...tdBase, background:'#FEE2E2' }} />
+                  <td className="mar-c-sum" style={{ ...tdBase, fontWeight:800, color:'#B91C1C', background:'#FEE2E2' }}>{kpis.absent}</td>
                 </tr>
               </tfoot>
             )}
@@ -434,10 +457,12 @@ export default function MonthlyStatusPage() {
             border:0.5pt solid #9CA3AF !important; overflow:hidden !important;
           }
           /* 81mm of fixed columns leaves ~10.4mm per day across A3 landscape. */
-          .mar-c-emp  { width:9mm  !important; }
-          .mar-c-name { width:32mm !important; }
-          .mar-c-dept { width:19mm !important; }
-          .mar-c-co   { width:21mm !important; }
+          /* Emp IDs are 7 digits — 9mm clipped the last one. */
+          .mar-c-emp  { width:13mm !important; }
+          .mar-c-name { width:30mm !important; }
+          .mar-c-dept { width:17mm !important; }
+          .mar-c-co   { width:19mm !important; }
+          .mar-c-sum  { width:8mm  !important; }
 
           /* On screen every column uses a different colour (green In, red
              Out, purple Company, grey placeholders) to carry meaning
