@@ -81,8 +81,17 @@ const DEFAULT_TEMPLATES = [
 // DB race), every /templates request would 500 for the rest of that process's
 // life with no trace of why. runSchemaInit logs failures and retries on the
 // next boot until it actually succeeds.
-runSchemaInit('hr-letters-schema-v1', async () => {
-  await query(`CREATE TABLE IF NOT EXISTS hr_letter_templates (
+// v2: v1 created a table literally named hr_letter_templates, which
+// collides with an unrelated, older table of the same name created by
+// hr-advanced.routes.js (template_code/title/letter_type/body/status —
+// a completely different shape). Whichever module's CREATE TABLE IF NOT
+// EXISTS ran first at boot silently won; the other's queries 500'd
+// forever with "column does not exist" and no way to self-heal, since
+// IF NOT EXISTS never patches an existing table. Renamed to a
+// collision-free name and bumped the migration key so this actually
+// creates the (correctly-shaped) table instead of being a permanent no-op.
+runSchemaInit('hr-letters-schema-v2', async () => {
+  await query(`CREATE TABLE IF NOT EXISTS hr_letter_gen_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('offer','appointment','increment','relieving','experience','warning','show_cause','noc','probation_confirmation')),
@@ -98,7 +107,7 @@ runSchemaInit('hr-letters-schema-v1', async () => {
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
     employee_id UUID NOT NULL REFERENCES users(id),
-    template_id UUID REFERENCES hr_letter_templates(id),
+    template_id UUID REFERENCES hr_letter_gen_templates(id),
     letter_type VARCHAR(30) NOT NULL,
     reference_no VARCHAR(50),
     generated_on DATE DEFAULT CURRENT_DATE,
@@ -118,20 +127,20 @@ router.use(authenticate);
 router.get('/templates', authorize(...HR_ALL), async (req, res) => {
   try {
     const { rows } = await query(
-      `SELECT * FROM hr_letter_templates WHERE company_id=$1 ORDER BY type,name`,
+      `SELECT * FROM hr_letter_gen_templates WHERE company_id=$1 ORDER BY type,name`,
       [req.user.company_id]
     );
     // Seed defaults if none exist
     if (rows.length === 0) {
       for (const t of DEFAULT_TEMPLATES) {
         await query(
-          `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,is_default,created_by)
+          `INSERT INTO hr_letter_gen_templates(company_id,type,name,subject,body_html,is_default,created_by)
            VALUES($1,$2,$3,$4,$5,TRUE,$6) ON CONFLICT DO NOTHING`,
           [req.user.company_id, t.type, t.name, t.subject, t.body_html, req.user.id]
         );
       }
       const { rows: seeded } = await query(
-        `SELECT * FROM hr_letter_templates WHERE company_id=$1 ORDER BY type,name`,
+        `SELECT * FROM hr_letter_gen_templates WHERE company_id=$1 ORDER BY type,name`,
         [req.user.company_id]
       );
       return res.json({ data: seeded });
@@ -144,7 +153,7 @@ router.post('/templates', authorize(...HR_ROLES), async (req, res) => {
   try {
     const { type, name, subject, body_html } = req.body;
     const { rows } = await query(
-      `INSERT INTO hr_letter_templates(company_id,type,name,subject,body_html,created_by)
+      `INSERT INTO hr_letter_gen_templates(company_id,type,name,subject,body_html,created_by)
        VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
       [req.user.company_id, type, name, subject, body_html, req.user.id]
     );
@@ -156,7 +165,7 @@ router.put('/templates/:id', authorize(...HR_ROLES), async (req, res) => {
   try {
     const { name, subject, body_html } = req.body;
     const { rows } = await query(
-      `UPDATE hr_letter_templates SET name=$1,subject=$2,body_html=$3,updated_at=NOW()
+      `UPDATE hr_letter_gen_templates SET name=$1,subject=$2,body_html=$3,updated_at=NOW()
        WHERE id=$4 AND company_id=$5 RETURNING *`,
       [name, subject, body_html, req.params.id, req.user.company_id]
     );
@@ -202,7 +211,7 @@ router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
     const { employee_id, template_id, extra_data = {}, generated_on } = req.body;
     // Load template
     const { rows: [tmpl] } = await query(
-      `SELECT * FROM hr_letter_templates WHERE id=$1 AND company_id=$2`,
+      `SELECT * FROM hr_letter_gen_templates WHERE id=$1 AND company_id=$2`,
       [template_id, req.user.company_id]
     );
     if (!tmpl) return res.status(404).json({ error: 'Template not found' });
