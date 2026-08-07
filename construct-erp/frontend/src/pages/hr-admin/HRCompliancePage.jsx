@@ -9,9 +9,10 @@ import {
   HardHat, Gift, Star, Heart, TrendingUp, CheckCircle, XCircle, Send, Layers,
   LayoutDashboard, ArrowUpRight, ArrowDownRight, ArrowRight
 } from 'lucide-react';
-import { hrComplianceAPI } from '../../api/client';
+import { hrComplianceAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { REPORT_PRINT_CSS_A3_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../components/reports/ReportPrintKit';
 
 const fade = (d = 0) => ({ initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.3, delay: d } });
 const inr = (n) => Number(n || 0).toLocaleString('en-IN');
@@ -469,26 +470,37 @@ function MusterRoll({ depts }) {
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [year,  setYear]  = useState(CURRENT_YEAR);
   const [dept,  setDept]  = useState('');
+  const [project, setProject] = useState('');
+  const [company, setCompany] = useState('');
   const [category, setCategory] = useState('');
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
+  const { data: projects } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data||r.data||[]) });
+
   const { data: res, isLoading, refetch } = useQuery({
-    queryKey: ['compliance-muster', month, year, dept],
-    queryFn:  () => hrComplianceAPI.musterRoll({ month, year, dept: dept || undefined }).then(r => r.data),
+    queryKey: ['compliance-muster', month, year, dept, project],
+    queryFn:  () => hrComplianceAPI.musterRoll({ month, year, dept: dept || undefined, project_id: project || undefined }).then(r => r.data),
   });
 
   const allRows = res?.data || [];
   const days    = res?.days || [];
 
-  const rows = useMemo(() => {
-    if (!category) return allRows;
-    return allRows.filter(r => {
-      if (category === 'staff')   return !r.employee_category || r.employee_category === 'staff';
-      if (category === 'workman') return r.employee_category === 'workman';
-      return true;
-    });
-  }, [allRows, category]);
+  // "company" is per-employee (contractor name / BCIM STAFF-WORKERS), so it's
+  // filtered client-side against the already-fetched period, same as the
+  // Monthly Attendance Report.
+  const availableCompanies = useMemo(() => {
+    const seen = new Set();
+    allRows.forEach(r => { if (r.company) seen.add(r.company); });
+    return [...seen].sort();
+  }, [allRows]);
+
+  const rows = useMemo(() => allRows.filter(r => {
+    if (category === 'staff'   && r.employee_category !== 'staff')   return false;
+    if (category === 'workman' && r.employee_category !== 'workman') return false;
+    if (company && r.company !== company) return false;
+    return true;
+  }), [allRows, category, company]);
 
   const totalEmployees  = rows.length;
   const totalPresent    = rows.reduce((s, r) => s + (r.present   || 0), 0);
@@ -523,11 +535,40 @@ function MusterRoll({ depts }) {
     { label:'Total Absent Days',  value: totalAbsent,    sub:'This Period',        icon:'⚠️', iconBg:'#fff1f2', iconColor:'#e11d48' },
   ];
 
+  // Shared row markup for both the on-screen (paginated) and print (full
+  // listing) tbody -- keeps them from drifting apart.
+  const renderMusterRow = (r, displaySno, key) => (
+    <tr key={key} style={{ background: displaySno % 2 === 0 ? '#fafafa' : '#fff', borderBottom:'1px solid #f3f4f6' }}
+      onMouseEnter={e => e.currentTarget.style.background='#eff6ff'}
+      onMouseLeave={e => e.currentTarget.style.background = displaySno % 2 === 0 ? '#fafafa' : '#fff'}>
+      <td className="mroster-c-sno"   style={{ padding:'9px 10px', textAlign:'center', color:'#9ca3af', fontSize:11, position:'sticky', left:0, background:'inherit', zIndex:1 }}>{displaySno}</td>
+      <td className="mroster-c-code"  style={{ padding:'9px 10px', color:'#1d4ed8', fontWeight:700, fontSize:11, fontFamily:'monospace', position:'sticky', left:32, background:'inherit', zIndex:1, whiteSpace:'nowrap' }}>{r.employee_code || '—'}</td>
+      <td className="mroster-c-name"  style={{ padding:'9px 10px', fontWeight:600, color:'#111827', whiteSpace:'nowrap' }}>{r.name}</td>
+      <td className="mroster-c-dept"  style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap' }}>{r.department}</td>
+      <td className="mroster-c-desig" style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap', fontSize:11 }}>{r.designation || '—'}</td>
+      {(r.days || []).map((s, i) => {
+        const pill = STATUS_PILL[s] || { bg:'#f9fafb', color:'#6b7280', label: s };
+        return (
+          <td key={i} style={{ padding:'4px 2px', textAlign:'center' }}>
+            <span className="mroster-pill" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:22, height:22, borderRadius:5, background:pill.bg, color:pill.color, fontWeight:800, fontSize:9 }}>
+              {pill.label}
+            </span>
+          </td>
+        );
+      })}
+      <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#15803d', fontSize:13 }}>{r.present}</td>
+      <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#dc2626' }}>{r.absent || '—'}</td>
+      <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#d97706' }}>{r.half_day || '—'}</td>
+      <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8' }}>{r.leave || '—'}</td>
+    </tr>
+  );
+
   return (
     <div style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <style>{REPORT_PRINT_CSS_A3_LANDSCAPE}</style>
 
       {/* ── Page header ─────────────────────────────────────────────── */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+      <div className="no-print" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:'#111827', display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:20 }}>📋</span> Muster Roll Report
@@ -548,7 +589,7 @@ function MusterRoll({ depts }) {
       </div>
 
       {/* ── Filter bar ──────────────────────────────────────────────── */}
-      <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'14px 18px', marginBottom:18, display:'flex', flexWrap:'wrap', gap:12, alignItems:'center' }}>
+      <div className="no-print" style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'14px 18px', marginBottom:18, display:'flex', flexWrap:'wrap', gap:12, alignItems:'center' }}>
         <div style={{ color:'#6b7280', fontSize:12, fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
           <span>⚙️</span> FILTERS
         </div>
@@ -559,6 +600,15 @@ function MusterRoll({ depts }) {
             style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', fontSize:13, color:'#374151', background:'#fff', minWidth:160 }}>
             <option value="">All Departments</option>
             {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        {/* Project */}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <label style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 }}>Project</label>
+          <select value={project} onChange={e => { setProject(e.target.value); setPage(1); }}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', fontSize:13, color:'#374151', background:'#fff', minWidth:170 }}>
+            <option value="">All Projects</option>
+            {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         {/* Date Range */}
@@ -586,8 +636,17 @@ function MusterRoll({ depts }) {
             <option value="workman">Workman / Labour</option>
           </select>
         </div>
+        {/* Company */}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <label style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 }}>Company</label>
+          <select value={company} onChange={e => { setCompany(e.target.value); setPage(1); }}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', fontSize:13, color:'#374151', background:'#fff', minWidth:180 }}>
+            <option value="">All Companies</option>
+            {availableCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
-          <button onClick={() => { setDept(''); setCategory(''); setPage(1); refetch(); }}
+          <button onClick={() => { setDept(''); setProject(''); setCategory(''); setCompany(''); setPage(1); refetch(); }}
             style={{ padding:'8px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#6b7280', fontSize:13, cursor:'pointer' }}>
             Clear
           </button>
@@ -599,7 +658,7 @@ function MusterRoll({ depts }) {
       </div>
 
       {/* ── KPI cards ───────────────────────────────────────────────── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:20 }}>
+      <div className="no-print" style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:20 }}>
         {KPI.map(k => (
           <div key={k.label} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'16px 18px', display:'flex', alignItems:'center', gap:14 }}>
             <div style={{ width:44, height:44, borderRadius:10, background:k.iconBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
@@ -614,12 +673,17 @@ function MusterRoll({ depts }) {
         ))}
       </div>
 
-      {/* ── Table ───────────────────────────────────────────────────── */}
-      <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, overflow:'hidden' }}>
+      {/* ── Table (printable region) ───────────────────────────────── */}
+      <div id="report-print-root">
+      <ReportPrintHeader
+        reportTitle="Muster Roll Report"
+        subtitle={`${monthLabel}${company ? ' · ' + company : ''}${project ? ' · ' + ((projects||[]).find(p => String(p.id) === String(project))?.name || '') : ''}`}
+      />
+      <div className="mroster-card" style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, overflow:'hidden' }}>
         {/* Table header bar */}
-        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f3f4f6', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f3f4f6', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
           <span style={{ fontWeight:800, fontSize:13, color:'#111827', letterSpacing:0.3 }}>MUSTER ROLL DETAILS</span>
-          <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
             {[
               { code:'P',  bg:'#dcfce7', color:'#15803d', label:'P - Present'  },
               { code:'A',  bg:'#fee2e2', color:'#dc2626', label:'A - Absent'   },
@@ -636,17 +700,17 @@ function MusterRoll({ depts }) {
         </div>
 
         {isLoading ? (
-          <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Loading muster roll data…</div>
+          <div className="no-print" style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Loading muster roll data…</div>
         ) : (
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
+          <div className="mroster-wrap" style={{ overflowX:'auto' }}>
+            <table className="mroster-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
               <thead>
                 <tr style={{ background:'#f9fafb', borderBottom:'2px solid #e5e7eb' }}>
-                  <th style={{ padding:'10px 10px', textAlign:'center', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:0, background:'#f9fafb', zIndex:2 }}>#</th>
-                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:32, background:'#f9fafb', zIndex:2, minWidth:100 }}>Emp Code</th>
-                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:150 }}>Employee Name</th>
-                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:110 }}>Department</th>
-                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:120 }}>Designation</th>
+                  <th className="mroster-c-sno"   style={{ padding:'10px 10px', textAlign:'center', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:0, background:'#f9fafb', zIndex:2 }}>#</th>
+                  <th className="mroster-c-code"  style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:32, background:'#f9fafb', zIndex:2, minWidth:100 }}>Emp Code</th>
+                  <th className="mroster-c-name"  style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:150 }}>Employee Name</th>
+                  <th className="mroster-c-dept"  style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:110 }}>Department</th>
+                  <th className="mroster-c-desig" style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:120 }}>Designation</th>
                   {days.map(d => {
                     const dow = new Date(year, month-1, d.day).getDay();
                     const isSun = dow === 0;
@@ -657,38 +721,23 @@ function MusterRoll({ depts }) {
                       </th>
                     );
                   })}
-                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#15803d', fontSize:11, whiteSpace:'nowrap' }}>Total Present</th>
-                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#dc2626', fontSize:11 }}>Absent</th>
-                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#d97706', fontSize:11 }}>HD</th>
-                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8', fontSize:11 }}>Leave</th>
+                  <th className="mroster-c-sum" style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#15803d', fontSize:11, whiteSpace:'nowrap' }}>Present</th>
+                  <th className="mroster-c-sum" style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#dc2626', fontSize:11 }}>Absent</th>
+                  <th className="mroster-c-sum" style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#d97706', fontSize:11 }}>HD</th>
+                  <th className="mroster-c-sum" style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8', fontSize:11 }}>Leave</th>
                 </tr>
               </thead>
-              <tbody>
-                {paged.map((r, idx) => (
-                  <tr key={r.sno} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom:'1px solid #f3f4f6' }}
-                    onMouseEnter={e => e.currentTarget.style.background='#eff6ff'}
-                    onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafa'}>
-                    <td style={{ padding:'9px 10px', textAlign:'center', color:'#9ca3af', fontSize:11, position:'sticky', left:0, background:'inherit', zIndex:1 }}>{(page-1)*rowsPerPage + idx + 1}</td>
-                    <td style={{ padding:'9px 10px', color:'#1d4ed8', fontWeight:700, fontSize:11, fontFamily:'monospace', position:'sticky', left:32, background:'inherit', zIndex:1, whiteSpace:'nowrap' }}>{r.employee_code || '—'}</td>
-                    <td style={{ padding:'9px 10px', fontWeight:600, color:'#111827', whiteSpace:'nowrap' }}>{r.name}</td>
-                    <td style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap' }}>{r.department}</td>
-                    <td style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap', fontSize:11 }}>{r.designation || '—'}</td>
-                    {(r.days || []).map((s, i) => {
-                      const pill = STATUS_PILL[s] || { bg:'#f9fafb', color:'#6b7280', label: s };
-                      return (
-                        <td key={i} style={{ padding:'4px 2px', textAlign:'center' }}>
-                          <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:22, height:22, borderRadius:5, background:pill.bg, color:pill.color, fontWeight:800, fontSize:9 }}>
-                            {pill.label}
-                          </span>
-                        </td>
-                      );
-                    })}
-                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#15803d', fontSize:13 }}>{r.present}</td>
-                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#dc2626' }}>{r.absent || '—'}</td>
-                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#d97706' }}>{r.half_day || '—'}</td>
-                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8' }}>{r.leave || '—'}</td>
-                  </tr>
-                ))}
+              {/* Screen: current page only, for a readable interactive view. */}
+              <tbody className="no-print">
+                {paged.map((r, idx) => renderMusterRow(r, (page-1)*rowsPerPage + idx + 1, `s-${r.sno}`))}
+                {!rows.length && (
+                  <tr><td colSpan={50} style={{ padding:'48px 12px', textAlign:'center', color:'#9ca3af' }}>No attendance data for selected period</td></tr>
+                )}
+              </tbody>
+              {/* Print: the full statutory register needs every employee for the
+                  period, not just the on-screen page. */}
+              <tbody className="mroster-print-body">
+                {rows.map((r, idx) => renderMusterRow(r, idx + 1, `p-${r.sno}`))}
                 {!rows.length && (
                   <tr><td colSpan={50} style={{ padding:'48px 12px', textAlign:'center', color:'#9ca3af' }}>No attendance data for selected period</td></tr>
                 )}
@@ -696,9 +745,13 @@ function MusterRoll({ depts }) {
             </table>
           </div>
         )}
+      </div>
+      {!isLoading && rows.length > 0 && <ReportPrintSignature />}
+      </div>
 
-        {/* ── Pagination ──────────────────────────────────────────── */}
-        {rows.length > 0 && (
+      {/* ── Pagination ──────────────────────────────────────────── */}
+      {rows.length > 0 && (
+        <div className="no-print" style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 12px 12px' }}>
           <div style={{ padding:'12px 18px', borderTop:'1px solid #f3f4f6', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
             <span style={{ fontSize:12.5, color:'#6b7280' }}>
               Showing {Math.min((page-1)*rowsPerPage+1, rows.length)} to {Math.min(page*rowsPerPage, rows.length)} of <strong>{rows.length}</strong> entries
@@ -728,8 +781,47 @@ function MusterRoll({ depts }) {
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      <style>{`
+        @media print {
+          /* Screen-only overflow/clip wrappers must not carry into print --
+             same failure mode as the Monthly Attendance report: a fixed
+             box would silently drop whatever didn't fit inside it. */
+          .mroster-card, .mroster-wrap { overflow:visible !important; border:none !important; border-radius:0 !important; }
+          /* The grid carries inline min-widths (44+100+150+110+120 fixed,
+             28 per day, ~40 per summary col). Inline styles beat plain
+             stylesheet rules, and a browser clips an over-wide table rather
+             than scaling it -- so without these !important resets the sheet
+             cuts off well before all 31 days, no matter the paper size. */
+          .mroster-table { table-layout:fixed !important; width:100% !important; border-collapse:collapse !important; }
+          .mroster-table th, .mroster-table td {
+            position:static !important; min-width:0 !important; width:auto;
+            padding:1px 2px !important; font-size:6.5pt !important; line-height:1.2 !important;
+            border:0.5pt solid #9CA3AF !important; overflow:hidden !important;
+            white-space:nowrap !important; text-overflow:ellipsis !important;
+          }
+          /* Fixed + summary columns get explicit widths; the 31 day columns
+             are left unset so table-layout:fixed splits the remaining sheet
+             width evenly across them. */
+          .mroster-c-sno   { width:6mm  !important; }
+          .mroster-c-code  { width:13mm !important; }
+          .mroster-c-name  { width:32mm !important; }
+          .mroster-c-dept  { width:18mm !important; }
+          .mroster-c-desig { width:16mm !important; }
+          .mroster-c-sum   { width:9mm  !important; }
+          .mroster-pill {
+            width:auto !important; height:auto !important; padding:0 !important;
+            border-radius:2px !important; font-size:6.5pt !important;
+          }
+          /* Screen shows one page of rows; print needs the full register. */
+          .mroster-print-body { display:table-row-group !important; }
+        }
+        @media screen {
+          .mroster-print-body { display:none; }
+        }
+      `}</style>
     </div>
   );
 }

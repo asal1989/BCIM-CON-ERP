@@ -279,19 +279,42 @@ router.get('/employment-register', async (req, res) => {
    Monthly Attendance Muster Roll
 ══════════════════════════════════════════════════════ */
 router.get('/muster-roll', async (req, res) => {
-  const { month = new Date().getMonth() + 1, year = new Date().getFullYear(), dept } = req.query;
+  const { month = new Date().getMonth() + 1, year = new Date().getFullYear(), dept, project_id } = req.query;
   const m = parseInt(month); const y = parseInt(year);
   const totalDays = daysInMonth(m, y);
 
   try {
+    // Build optional filters first so the year placeholder index used inside
+    // the LATERAL shift lookup below is computed from the actual param list,
+    // not a hardcoded position -- that broke as soon as a second optional
+    // filter (project_id) was added.
+    const params = [req.user.company_id];
+    let deptFilter = '', projFilter = '';
+    if (dept)       { deptFilter = ` AND dep.id = $${params.length + 1}`;       params.push(dept); }
+    if (project_id) { projFilter = ` AND ep.project_id = $${params.length + 1}`; params.push(project_id); }
+    const yearIdx = params.length + 1;
+    params.push(y);
+
     // Get active employees, their gender/DOB, and their shift as of this
     // month (commencing/closing time, rest interval) -- a proper statutory
     // muster roll (see Form J / Register of Employment) needs these
     // alongside the day-wise attendance grid, not just P/A/L codes.
+    //
+    // "company" mirrors the Monthly Attendance Report's derivation: the
+    // contractor name when the employee is on a subcontractor's roll,
+    // otherwise BCIM STAFF/WORKERS by category -- there's no real
+    // multi-tenant company id at the employee level to filter on.
     let empSql = `
       SELECT u.id, u.name, u.employee_code,
         COALESCE(dep.name,'Unassigned') AS department,
-        ep.gender, ep.date_of_birth,
+        ep.gender, ep.date_of_birth, ep.employee_category,
+        CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
         sh.start_time, sh.end_time, sh.break_minutes
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
@@ -301,18 +324,17 @@ router.get('/muster-roll', async (req, res) => {
         FROM hr_employee_shifts es
         JOIN hr_shifts s ON s.id = es.shift_id
         WHERE es.employee_id = u.id
-          AND es.effective_from <= (make_date($${dept ? 3 : 2}::int, ${m}, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date
-          AND (es.effective_to IS NULL OR es.effective_to >= make_date($${dept ? 3 : 2}::int, ${m}, 1))
+          AND es.effective_from <= (make_date($${yearIdx}::int, ${m}, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date
+          AND (es.effective_to IS NULL OR es.effective_to >= make_date($${yearIdx}::int, ${m}, 1))
         ORDER BY es.effective_from DESC LIMIT 1
       ) sh ON TRUE
       WHERE u.company_id = $1
         AND u.is_active = TRUE
         AND u.role NOT IN ('super_admin','vendor','customer','contractor')
         AND COALESCE(ep.employment_status,'active') = 'active'
+        ${deptFilter}
+        ${projFilter}
     `;
-    const params = [req.user.company_id];
-    if (dept) { empSql += ` AND dep.id = $${params.length + 1}`; params.push(dept); }
-    params.push(y);
     empSql += ' ORDER BY dep.name, u.name';
     const { rows: employees } = await query(empSql, params);
 
@@ -390,6 +412,8 @@ router.get('/muster-roll', async (req, res) => {
         employee_code: emp.employee_code,
         name:          emp.name,
         department:    emp.department,
+        company:       emp.company,
+        employee_category: emp.employee_category || 'staff',
         gender:        emp.gender || '',
         age:           calcAge(emp.date_of_birth),
         shift_start:   emp.start_time || null,
