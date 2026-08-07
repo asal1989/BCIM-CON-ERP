@@ -1,1 +1,0 @@
-import{j as e}from"./vendor-react-C3P8e1DV.js";import{O as t}from"./OnboardingPlaceholderPage-BQx2r8zq.js";import"./vendor-icons-BUsau7eS.js";function a(){return e.jsx(t,{title:"Offer & Appointment",description:"Generate and track offer letters and appointment letters. See also Letter Generation under Employee Services."})}export{a as default};
