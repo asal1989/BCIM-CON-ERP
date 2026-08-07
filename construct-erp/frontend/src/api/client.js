@@ -2033,13 +2033,14 @@ export const hrOnboardingAPI = {
 };
 
 export const hrDocVerificationAPI = {
-  taxonomy:   ()             => api.get('/hr-admin/document-verification/taxonomy'),
-  dashboard:  ()             => api.get('/hr-admin/document-verification/dashboard'),
-  queue:      (params)       => api.get('/hr-admin/document-verification/queue', { params }),
-  employee:   (userId)       => api.get(`/hr-admin/document-verification/employee/${userId}`),
-  verify:     (id)           => api.patch(`/hr-admin/document-verification/${id}/verify`),
-  reject:     (id, reason)   => api.patch(`/hr-admin/document-verification/${id}/reject`, { rejection_reason: reason }),
-  history:    (id)           => api.get(`/hr-admin/document-verification/${id}/history`),
+  catalog:    ()            => api.get('/hr-admin/document-verification/catalog'),
+  summary:    ()            => api.get('/hr-admin/document-verification/summary'),
+  pending:    (params)      => api.get('/hr-admin/document-verification/pending', { params }),
+  rejected:   (params)      => api.get('/hr-admin/document-verification/rejected', { params }),
+  missing:    (params)      => api.get('/hr-admin/document-verification/missing', { params }),
+  remind:     (id)          => api.post(`/hr-admin/document-verification/missing/${id}/remind`),
+  employees:  (params)      => api.get('/hr-admin/document-verification/employees', { params }),
+  employee:   (id)          => api.get(`/hr-admin/document-verification/employees/${id}`),
 };
 
 export const hrLeaveAPI = {

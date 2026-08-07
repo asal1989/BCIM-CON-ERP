@@ -910,6 +910,20 @@ function notifyDocumentRejected(companyId, employee, docName, reason) {
   });
 }
 
+function notifyDocumentReminder(companyId, employee, missingTypes) {
+  notify({
+    company_id: companyId,
+    user_id: employee.id,
+    type: 'document_reminder',
+    title: 'Documents Pending Upload',
+    message: `Please upload: ${missingTypes.join(', ')}.`,
+    link: '/profile',
+    severity: 'warning',
+    related_type: 'employee_document',
+    related_id: employee.id,
+  });
+}
+
 function notifyProbationEndingSoon(companyId, employee, daysLeft) {
   notify({
     company_id: companyId,
@@ -965,5 +979,5 @@ module.exports = {
   notifyScPaymentRecorded,
   // Onboarding
   notifyOnboardingStarted, notifyOnboardingTaskOverdue, notifyOnboardingCompleted,
-  notifyDocumentRejected, notifyProbationEndingSoon,
+  notifyDocumentRejected, notifyDocumentReminder, notifyProbationEndingSoon,
 };
