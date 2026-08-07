@@ -617,6 +617,23 @@ export const hrRecruitmentAPI = {
   addInterview:   (id,d)   => api.post(`/hr-admin/recruitment/applicants/${id}/interviews`, d),
   updateInterview:(id,d)   => api.patch(`/hr-admin/recruitment/interviews/${id}`, d),
   pipeline:       ()       => api.get('/hr-admin/recruitment/pipeline'),
+
+  requisitions:       (p)      => api.get('/hr-admin/recruitment/requisitions', { params: p }),
+  createRequisition:  (d)      => api.post('/hr-admin/recruitment/requisitions', d),
+  hrReviewRequisition: (id,d)  => api.patch(`/hr-admin/recruitment/requisitions/${id}/hr-review`, d),
+  managementApproveRequisition: (id,d) => api.patch(`/hr-admin/recruitment/requisitions/${id}/management-approval`, d),
+  convertRequisition: (id)     => api.post(`/hr-admin/recruitment/requisitions/${id}/convert-to-opening`),
+
+  approvals:      (id)     => api.get(`/hr-admin/recruitment/applicants/${id}/approvals`),
+  startApprovals: (id)     => api.post(`/hr-admin/recruitment/applicants/${id}/approvals/start`),
+  actionApproval: (id, stage, d) => api.patch(`/hr-admin/recruitment/applicants/${id}/approvals/${stage}`, d),
+
+  offers:         (id)     => api.get(`/hr-admin/recruitment/applicants/${id}/offers`),
+  createOffer:    (id, d)  => api.post(`/hr-admin/recruitment/applicants/${id}/offers`, d),
+  updateOffer:    (id, d)  => api.patch(`/hr-admin/recruitment/offers/${id}`, d),
+
+  joiningTracker:       ()      => api.get('/hr-admin/recruitment/joining-tracker'),
+  updateJoiningTracker: (id, d) => api.patch(`/hr-admin/recruitment/joining-tracker/${id}`, d),
 };
 
 export const hrSalaryExtAPI = {

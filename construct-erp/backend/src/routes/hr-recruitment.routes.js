@@ -88,7 +88,126 @@ const upload = multer({
     feedback TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
+
+  // ── Job Requisition — the approval workflow that precedes a job opening ──
+  await safe(`CREATE TABLE IF NOT EXISTS hr_job_requisitions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    requisition_no TEXT UNIQUE,
+    project_id UUID REFERENCES projects(id),
+    department VARCHAR(100),
+    position VARCHAR(200) NOT NULL,
+    vacancies INT DEFAULT 1,
+    employment_type VARCHAR(30) DEFAULT 'full_time',
+    salary_budget_min NUMERIC(12,2),
+    salary_budget_max NUMERIC(12,2),
+    experience_required VARCHAR(100),
+    qualification VARCHAR(200),
+    required_skills TEXT,
+    hiring_reason TEXT,
+    priority VARCHAR(20) DEFAULT 'medium' CHECK (priority IN ('low','medium','high','urgent')),
+    expected_joining_date DATE,
+    status VARCHAR(30) DEFAULT 'pending_hr_review'
+      CHECK (status IN ('pending_hr_review','pending_management_approval','approved','rejected','converted')),
+    raised_by UUID REFERENCES users(id),
+    hr_reviewed_by UUID REFERENCES users(id),
+    hr_reviewed_at TIMESTAMPTZ,
+    hr_remarks TEXT,
+    management_approved_by UUID REFERENCES users(id),
+    management_approved_at TIMESTAMPTZ,
+    management_remarks TEXT,
+    rejection_reason TEXT,
+    job_id UUID REFERENCES hr_job_postings(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await safe(`ALTER TABLE hr_job_postings ADD COLUMN IF NOT EXISTS requisition_id UUID REFERENCES hr_job_requisitions(id)`);
+
+  // ── Interview evaluation — structured scores alongside the existing
+  // free-text feedback/rating (rating doubles as "Overall Rating"). ────────
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS technical_knowledge INT CHECK (technical_knowledge BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS communication_score INT CHECK (communication_score BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS experience_score INT CHECK (experience_score BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS problem_solving_score INT CHECK (problem_solving_score BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS behaviour_score INT CHECK (behaviour_score BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS safety_awareness_score INT CHECK (safety_awareness_score BETWEEN 1 AND 5)`);
+  await safe(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS recommendation VARCHAR(20) CHECK (recommendation IN ('hire','hold','reject'))`);
+
+  // ── Candidate Approval — sequential multi-stage sign-off ─────────────────
+  await safe(`CREATE TABLE IF NOT EXISTS hr_candidate_approvals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    applicant_id UUID NOT NULL REFERENCES hr_applicants(id) ON DELETE CASCADE,
+    stage VARCHAR(30) NOT NULL CHECK (stage IN ('hr','department_manager','project_manager','hr_head')),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    approver_id UUID REFERENCES users(id),
+    approved_at TIMESTAMPTZ,
+    remarks TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(applicant_id, stage)
+  )`);
+
+  // ── Offer Management ──────────────────────────────────────────────────────
+  await safe(`CREATE TABLE IF NOT EXISTS hr_offers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    applicant_id UUID NOT NULL REFERENCES hr_applicants(id) ON DELETE CASCADE,
+    position VARCHAR(200),
+    department VARCHAR(100),
+    salary NUMERIC(12,2),
+    allowances NUMERIC(12,2) DEFAULT 0,
+    joining_bonus NUMERIC(12,2) DEFAULT 0,
+    probation_months INT DEFAULT 3,
+    notice_buyout NUMERIC(12,2) DEFAULT 0,
+    joining_date DATE,
+    status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft','pending_approval','sent','accepted','declined')),
+    created_by UUID REFERENCES users(id),
+    sent_at TIMESTAMPTZ,
+    responded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // ── Joining Tracker — offer acceptance through to employee record ────────
+  await safe(`CREATE TABLE IF NOT EXISTS hr_joining_tracker (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    applicant_id UUID NOT NULL REFERENCES hr_applicants(id) ON DELETE CASCADE UNIQUE,
+    offer_id UUID REFERENCES hr_offers(id),
+    offer_accepted_at TIMESTAMPTZ,
+    documents_submitted BOOLEAN DEFAULT FALSE,
+    documents_submitted_at TIMESTAMPTZ,
+    background_verification_status VARCHAR(20) DEFAULT 'pending' CHECK (background_verification_status IN ('pending','verified','failed','not_required')),
+    medical_clearance_status VARCHAR(20) DEFAULT 'pending' CHECK (medical_clearance_status IN ('pending','cleared','failed','not_required')),
+    joining_confirmed BOOLEAN DEFAULT FALSE,
+    joining_confirmed_at TIMESTAMPTZ,
+    employee_user_id UUID REFERENCES users(id),
+    hr_owner UUID REFERENCES users(id),
+    pending_tasks TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
 })();
+
+const APPROVAL_STAGES = ['hr', 'department_manager', 'project_manager', 'hr_head'];
+const APPROVAL_STAGE_LABEL = { hr: 'HR', department_manager: 'Department Manager', project_manager: 'Project Manager', hr_head: 'HR Head' };
+
+async function nextRequisitionNo(companyId) {
+  const { rows } = await query(`SELECT COUNT(*)::int AS cnt FROM hr_job_requisitions WHERE company_id=$1`, [companyId]);
+  const yr = new Date().getFullYear();
+  return `REQ-${yr}-${String(rows[0].cnt + 1).padStart(4, '0')}`;
+}
+
+// Recomputed on every read rather than stored, so a stage added later
+// (e.g. a joining tracker row created before offer_id existed) doesn't
+// need a backfill migration to stay accurate.
+function joiningProgress(t) {
+  const steps = [
+    !!t.offer_accepted_at, t.documents_submitted,
+    ['verified', 'not_required'].includes(t.background_verification_status),
+    ['cleared', 'not_required'].includes(t.medical_clearance_status),
+    t.joining_confirmed, !!t.employee_user_id,
+  ];
+  return Math.round((steps.filter(Boolean).length / steps.length) * 100);
+}
 
 router.use(authenticate);
 
@@ -213,11 +332,24 @@ router.post('/applicants/:id/interviews', authorize(...HR_ROLES), async (req, re
 });
 
 router.patch('/interviews/:id', authorize(...HR_ROLES), async (req, res) => {
-  const { result, rating, feedback, scheduled_on } = req.body;
+  const {
+    result, rating, feedback, scheduled_on,
+    technical_knowledge, communication_score, experience_score,
+    problem_solving_score, behaviour_score, safety_awareness_score, recommendation,
+  } = req.body;
   const { rows } = await query(
-    `UPDATE hr_interviews SET result=$1,rating=$2,feedback=$3,scheduled_on=COALESCE($4,scheduled_on)
-     WHERE id=$5 AND company_id=$6 RETURNING *`,
-    [result, rating, feedback, scheduled_on||null, req.params.id, req.user.company_id]
+    `UPDATE hr_interviews SET
+       result=COALESCE($1,result), rating=COALESCE($2,rating), feedback=COALESCE($3,feedback),
+       scheduled_on=COALESCE($4,scheduled_on),
+       technical_knowledge=COALESCE($5,technical_knowledge), communication_score=COALESCE($6,communication_score),
+       experience_score=COALESCE($7,experience_score), problem_solving_score=COALESCE($8,problem_solving_score),
+       behaviour_score=COALESCE($9,behaviour_score), safety_awareness_score=COALESCE($10,safety_awareness_score),
+       recommendation=COALESCE($11,recommendation)
+     WHERE id=$12 AND company_id=$13 RETURNING *`,
+    [result || null, rating ?? null, feedback || null, scheduled_on || null,
+     technical_knowledge ?? null, communication_score ?? null, experience_score ?? null,
+     problem_solving_score ?? null, behaviour_score ?? null, safety_awareness_score ?? null,
+     recommendation || null, req.params.id, req.user.company_id]
   );
   res.json({ data: rows[0] });
 });
@@ -239,6 +371,218 @@ router.get('/pipeline', authorize(...HR_ALL), async (req, res) => {
     [req.user.company_id]
   );
   res.json({ data: rows });
+});
+
+// ── Job Requisitions ──────────────────────────────────────────────────────
+router.get('/requisitions', authorize(...HR_ALL), async (req, res) => {
+  const { status } = req.query;
+  const conds = ['r.company_id=$1']; const params = [req.user.company_id]; let i = 2;
+  if (status) { conds.push(`r.status=$${i++}`); params.push(status); }
+  const { rows } = await query(`
+    SELECT r.*, p.name AS project_name, u.name AS raised_by_name,
+           hru.name AS hr_reviewed_by_name, mgu.name AS management_approved_by_name
+    FROM hr_job_requisitions r
+    LEFT JOIN projects p ON p.id = r.project_id
+    LEFT JOIN users u ON u.id = r.raised_by
+    LEFT JOIN users hru ON hru.id = r.hr_reviewed_by
+    LEFT JOIN users mgu ON mgu.id = r.management_approved_by
+    WHERE ${conds.join(' AND ')} ORDER BY r.created_at DESC
+  `, params);
+  res.json({ data: rows });
+});
+
+router.post('/requisitions', authorize(...HR_ALL), async (req, res) => {
+  const d = req.body;
+  if (!d.position) return res.status(400).json({ error: 'Position is required' });
+  const requisition_no = await nextRequisitionNo(req.user.company_id);
+  const { rows } = await query(`
+    INSERT INTO hr_job_requisitions
+      (company_id, requisition_no, project_id, department, position, vacancies, employment_type,
+       salary_budget_min, salary_budget_max, experience_required, qualification, required_skills,
+       hiring_reason, priority, expected_joining_date, raised_by)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *
+  `, [req.user.company_id, requisition_no, d.project_id || null, d.department, d.position, d.vacancies || 1,
+      d.employment_type || 'full_time', d.salary_budget_min || null, d.salary_budget_max || null,
+      d.experience_required, d.qualification, d.required_skills, d.hiring_reason,
+      d.priority || 'medium', d.expected_joining_date || null, req.user.id]);
+  res.status(201).json({ data: rows[0] });
+});
+
+router.patch('/requisitions/:id/hr-review', authorize(...HR_ROLES), async (req, res) => {
+  const { action, remarks } = req.body; // 'approve' | 'reject'
+  if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  const status = action === 'approve' ? 'pending_management_approval' : 'rejected';
+  const { rows } = await query(`
+    UPDATE hr_job_requisitions SET status=$1, hr_reviewed_by=$2, hr_reviewed_at=NOW(), hr_remarks=$3,
+      rejection_reason = CASE WHEN $1='rejected' THEN $3 ELSE rejection_reason END
+    WHERE id=$4 AND company_id=$5 AND status='pending_hr_review' RETURNING *
+  `, [status, req.user.id, remarks || null, req.params.id, req.user.company_id]);
+  if (!rows.length) return res.status(404).json({ error: 'Requisition not found or not pending HR review' });
+  res.json({ data: rows[0] });
+});
+
+router.patch('/requisitions/:id/management-approval', authorize(...HR_ROLES, 'managing_director', 'director', 'md', 'ceo', 'management'), async (req, res) => {
+  const { action, remarks } = req.body;
+  if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  const status = action === 'approve' ? 'approved' : 'rejected';
+  const { rows } = await query(`
+    UPDATE hr_job_requisitions SET status=$1, management_approved_by=$2, management_approved_at=NOW(), management_remarks=$3,
+      rejection_reason = CASE WHEN $1='rejected' THEN $3 ELSE rejection_reason END
+    WHERE id=$4 AND company_id=$5 AND status='pending_management_approval' RETURNING *
+  `, [status, req.user.id, remarks || null, req.params.id, req.user.company_id]);
+  if (!rows.length) return res.status(404).json({ error: 'Requisition not found or not pending management approval' });
+  res.json({ data: rows[0] });
+});
+
+router.post('/requisitions/:id/convert-to-opening', authorize(...HR_ROLES), async (req, res) => {
+  const reqRes = await query(`SELECT * FROM hr_job_requisitions WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+  const r = reqRes.rows[0];
+  if (!r) return res.status(404).json({ error: 'Requisition not found' });
+  if (r.status !== 'approved') return res.status(400).json({ error: 'Only an approved requisition can be converted to a job opening' });
+
+  const jobRes = await query(`
+    INSERT INTO hr_job_postings
+      (company_id, title, department, vacancies, qualification, job_type, salary_min, salary_max,
+       skills_required, status, requisition_id, created_by)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10,$11) RETURNING *
+  `, [req.user.company_id, r.position, r.department, r.vacancies, r.qualification, r.employment_type,
+      r.salary_budget_min, r.salary_budget_max, r.required_skills, r.id, req.user.id]);
+
+  await query(`UPDATE hr_job_requisitions SET status='converted', job_id=$1 WHERE id=$2`, [jobRes.rows[0].id, r.id]);
+  res.status(201).json({ data: jobRes.rows[0] });
+});
+
+// ── Candidate Approval workflow ───────────────────────────────────────────
+router.get('/applicants/:id/approvals', authorize(...HR_ALL), async (req, res) => {
+  const { rows } = await query(`
+    SELECT a.*, u.name AS approver_name
+    FROM hr_candidate_approvals a LEFT JOIN users u ON u.id = a.approver_id
+    WHERE a.applicant_id=$1 AND a.company_id=$2
+  `, [req.params.id, req.user.company_id]);
+  // Stable stage order regardless of insertion order.
+  const byStage = Object.fromEntries(rows.map(r => [r.stage, r]));
+  res.json({ data: APPROVAL_STAGES.map(s => byStage[s] || { stage: s, status: 'not_started', label: APPROVAL_STAGE_LABEL[s] }) });
+});
+
+router.post('/applicants/:id/approvals/start', authorize(...HR_ROLES), async (req, res) => {
+  for (const stage of APPROVAL_STAGES) {
+    await query(`
+      INSERT INTO hr_candidate_approvals (company_id, applicant_id, stage)
+      VALUES ($1,$2,$3) ON CONFLICT (applicant_id, stage) DO NOTHING
+    `, [req.user.company_id, req.params.id, stage]);
+  }
+  res.status(201).json({ message: 'Approval workflow started' });
+});
+
+router.patch('/applicants/:id/approvals/:stage', authorize(...HR_ALL), async (req, res) => {
+  const { stage } = req.params;
+  if (!APPROVAL_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage' });
+  const { action, remarks } = req.body;
+  if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  const status = action === 'approve' ? 'approved' : 'rejected';
+
+  const { rows } = await query(`
+    UPDATE hr_candidate_approvals SET status=$1, approver_id=$2, approved_at=NOW(), remarks=$3
+    WHERE applicant_id=$4 AND stage=$5 AND company_id=$6 RETURNING *
+  `, [status, req.user.id, remarks || null, req.params.id, stage, req.user.company_id]);
+  if (!rows.length) return res.status(404).json({ error: 'Approval stage not found — has the workflow been started?' });
+
+  if (status === 'rejected') {
+    await query(`UPDATE hr_applicants SET status='rejected', rejection_reason=$1, updated_at=NOW() WHERE id=$2`, [remarks || `Rejected at ${APPROVAL_STAGE_LABEL[stage]} stage`, req.params.id]);
+  } else if (stage === 'hr_head') {
+    // Last stage approved — candidate is fully cleared for an offer.
+    await query(`UPDATE hr_applicants SET status='selected', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+  }
+  res.json({ data: rows[0] });
+});
+
+// ── Offer Management ───────────────────────────────────────────────────────
+router.get('/applicants/:id/offers', authorize(...HR_ALL), async (req, res) => {
+  const { rows } = await query(`SELECT * FROM hr_offers WHERE applicant_id=$1 AND company_id=$2 ORDER BY created_at DESC`, [req.params.id, req.user.company_id]);
+  res.json({ data: rows });
+});
+
+router.post('/applicants/:id/offers', authorize(...HR_ROLES), async (req, res) => {
+  const d = req.body;
+  const { rows } = await query(`
+    INSERT INTO hr_offers
+      (company_id, applicant_id, position, department, salary, allowances, joining_bonus,
+       probation_months, notice_buyout, joining_date, status, created_by)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft',$11) RETURNING *
+  `, [req.user.company_id, req.params.id, d.position, d.department, d.salary || null,
+      d.allowances || 0, d.joining_bonus || 0, d.probation_months || 3, d.notice_buyout || 0,
+      d.joining_date || null, req.user.id]);
+  res.status(201).json({ data: rows[0] });
+});
+
+router.patch('/offers/:id', authorize(...HR_ROLES), async (req, res) => {
+  const { status, salary, allowances, joining_bonus, probation_months, notice_buyout, joining_date } = req.body;
+  const sets = []; const params = []; let i = 1;
+  const add = (col, val) => { if (val !== undefined) { sets.push(`${col}=$${i++}`); params.push(val); } };
+  add('salary', salary); add('allowances', allowances); add('joining_bonus', joining_bonus);
+  add('probation_months', probation_months); add('notice_buyout', notice_buyout); add('joining_date', joining_date);
+  if (status) {
+    sets.push(`status=$${i++}`); params.push(status);
+    if (status === 'sent') { sets.push(`sent_at=NOW()`); }
+    if (['accepted', 'declined'].includes(status)) { sets.push(`responded_at=NOW()`); }
+  }
+  if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+  params.push(req.params.id, req.user.company_id);
+  const { rows } = await query(`UPDATE hr_offers SET ${sets.join(',')} WHERE id=$${i++} AND company_id=$${i} RETURNING *`, params);
+  if (!rows.length) return res.status(404).json({ error: 'Offer not found' });
+
+  if (status === 'sent') await query(`UPDATE hr_applicants SET status='offer_sent', updated_at=NOW() WHERE id=$1`, [rows[0].applicant_id]);
+  if (status === 'accepted') {
+    await query(`UPDATE hr_applicants SET status='offer_accepted', updated_at=NOW() WHERE id=$1`, [rows[0].applicant_id]);
+    // Auto-open a joining tracker row the moment an offer is accepted.
+    await query(`
+      INSERT INTO hr_joining_tracker (company_id, applicant_id, offer_id, offer_accepted_at, hr_owner)
+      VALUES ($1,$2,$3,NOW(),$4) ON CONFLICT (applicant_id) DO UPDATE SET offer_id=$3, offer_accepted_at=NOW()
+    `, [req.user.company_id, rows[0].applicant_id, rows[0].id, req.user.id]);
+  }
+  if (status === 'declined') await query(`UPDATE hr_applicants SET status='offer_declined', updated_at=NOW() WHERE id=$1`, [rows[0].applicant_id]);
+
+  res.json({ data: rows[0] });
+});
+
+// ── Joining Tracker ────────────────────────────────────────────────────────
+router.get('/joining-tracker', authorize(...HR_ALL), async (req, res) => {
+  const { rows } = await query(`
+    SELECT t.*, a.name AS candidate_name, a.email, a.phone, o.position, o.department, o.joining_date,
+           hu.name AS hr_owner_name, eu.name AS employee_name
+    FROM hr_joining_tracker t
+    JOIN hr_applicants a ON a.id = t.applicant_id
+    LEFT JOIN hr_offers o ON o.id = t.offer_id
+    LEFT JOIN users hu ON hu.id = t.hr_owner
+    LEFT JOIN users eu ON eu.id = t.employee_user_id
+    WHERE t.company_id=$1 ORDER BY t.created_at DESC
+  `, [req.user.company_id]);
+  res.json({ data: rows.map(t => ({ ...t, progress_pct: joiningProgress(t) })) });
+});
+
+router.patch('/joining-tracker/:id', authorize(...HR_ROLES), async (req, res) => {
+  const { documents_submitted, background_verification_status, medical_clearance_status,
+          joining_confirmed, employee_user_id, hr_owner, pending_tasks } = req.body;
+  const sets = ['updated_at=NOW()']; const params = []; let i = 1;
+  const add = (col, val) => { if (val !== undefined) { sets.push(`${col}=$${i++}`); params.push(val); } };
+  add('documents_submitted', documents_submitted);
+  if (documents_submitted === true) sets.push('documents_submitted_at=NOW()');
+  add('background_verification_status', background_verification_status);
+  add('medical_clearance_status', medical_clearance_status);
+  add('joining_confirmed', joining_confirmed);
+  if (joining_confirmed === true) sets.push('joining_confirmed_at=NOW()');
+  add('employee_user_id', employee_user_id);
+  add('hr_owner', hr_owner);
+  add('pending_tasks', pending_tasks);
+
+  params.push(req.params.id, req.user.company_id);
+  const { rows } = await query(`UPDATE hr_joining_tracker SET ${sets.join(',')} WHERE id=$${i++} AND company_id=$${i} RETURNING *`, params);
+  if (!rows.length) return res.status(404).json({ error: 'Joining tracker record not found' });
+
+  if (employee_user_id) {
+    await query(`UPDATE hr_applicants SET status='joined', updated_at=NOW() WHERE id=$1`, [rows[0].applicant_id]);
+  }
+  res.json({ data: { ...rows[0], progress_pct: joiningProgress(rows[0]) } });
 });
 
 module.exports = router;
