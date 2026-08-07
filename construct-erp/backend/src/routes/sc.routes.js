@@ -10,6 +10,7 @@ const dayjs = require('dayjs');
 const esslService = require('../services/essl.service');
 const { notifyScBillSubmitted, notifyScWoSubmitted } = require('../services/notif.helper');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { logAudit } = require('../utils/auditLog');
 const { splitDayHours } = require('../utils/attendanceHours');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
@@ -3040,6 +3041,80 @@ router.patch('/nmr/:id/approve', authorize(...ADMIN,'project_manager','qs_engine
     if (!r.rows.length) return res.status(404).json({ error: 'NMR not found or not ready for approval' });
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /sc/nmr/:id/repoint-wo — move an existing NMR onto a different WO
+// version of the same subcontractor (e.g. after the WO was amended) and
+// recompute wages against that WO's rates. A WO amendment creates a whole
+// new sc_work_orders row rather than updating the original in place, so an
+// NMR created/approved before the amendment keeps pointing at the stale
+// pre-amendment rates until explicitly repointed here — this is that fix.
+router.patch('/nmr/:id/repoint-wo', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { wo_id: newWoId } = req.body;
+    if (!newWoId) return res.status(400).json({ error: 'wo_id is required' });
+
+    const nmrRes = await query(`SELECT * FROM sc_nmr WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    const nmr = nmrRes.rows[0];
+    if (!nmr) return res.status(404).json({ error: 'NMR not found' });
+    if (nmr.status === 'billed') return res.status(400).json({ error: 'Cannot repoint a billed NMR — delete the bill first.' });
+
+    const newWoRes = await query(`SELECT * FROM sc_work_orders WHERE id=$1 AND company_id=$2 AND sc_id=$3`, [newWoId, CID(req), nmr.sc_id]);
+    const newWo = newWoRes.rows[0];
+    if (!newWo) return res.status(404).json({ error: 'Target work order not found for this subcontractor' });
+
+    // Re-derive the same skill-wise attendance groups the original creation
+    // used (sc.routes.js POST /nmr), from this NMR's stored sc_id/period —
+    // attendance itself never changes, only which WO's rates price it.
+    const workers = await query(`SELECT id, skill_type FROM sc_workers WHERE sc_id=$1 AND (wo_id=$2 OR wo_id IS NULL)`, [nmr.sc_id, newWoId]);
+    const skillMap = {};
+    for (const w of workers.rows) skillMap[w.id] = w.skill_type;
+
+    const attendance = await query(
+      `SELECT worker_id, hours_worked, overtime_hours, wage_amount, overtime_amount
+         FROM sc_attendance WHERE sc_id=$1 AND company_id=$2 AND attendance_date BETWEEN $3 AND $4`,
+      [nmr.sc_id, CID(req), nmr.period_from, nmr.period_to]
+    );
+    const hoursBySkill = {}, otBySkill = {};
+    for (const a of attendance.rows) {
+      const skill = skillMap[a.worker_id] || 'Unskilled';
+      hoursBySkill[skill] = (hoursBySkill[skill] || 0) + (parseFloat(a.hours_worked) || 0);
+      otBySkill[skill]    = (otBySkill[skill]    || 0) + (parseFloat(a.overtime_hours) || 0);
+    }
+    const skillGroups = Object.keys(hoursBySkill).map(skill_type => ({
+      skill_type, total_hours: hoursBySkill[skill_type], total_ot_hours: otBySkill[skill_type] || 0,
+    }));
+
+    const woItemsForRate = await query(`SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [newWoId]);
+    const { matches, unmatched } = matchWOItemsToSkills(woItemsForRate.rows, skillGroups);
+    let totalWages = 0, skilledWages = 0, unskilledWages = 0;
+    for (const m of matches) {
+      totalWages += m.wage;
+      const isSkilled = m.skills.some(s => NMR_SKILLED_TRADES.includes(s.skill_type));
+      if (isSkilled) skilledWages += m.wage; else unskilledWages += m.wage;
+    }
+    if (unmatched.length) {
+      for (const a of attendance.rows) {
+        const skill = skillMap[a.worker_id] || 'Unskilled';
+        if (!unmatched.some(s => s.skill_type === skill)) continue;
+        const dayWage = (parseFloat(a.wage_amount) || 0) + (parseFloat(a.overtime_amount) || 0);
+        totalWages += dayWage;
+        if (NMR_SKILLED_TRADES.includes(skill)) skilledWages += dayWage; else unskilledWages += dayWage;
+      }
+    }
+
+    const r = await query(
+      `UPDATE sc_nmr SET wo_id=$1, total_wages=$2, skilled_wages=$3, unskilled_wages=$4, updated_at=NOW()
+       WHERE id=$5 AND company_id=$6 RETURNING *`,
+      [newWoId, parseFloat(totalWages.toFixed(2)), parseFloat(skilledWages.toFixed(2)), parseFloat(unskilledWages.toFixed(2)), req.params.id, CID(req)]
+    );
+    logAudit(req, {
+      action: 'update', tableName: 'sc_nmr', recordId: req.params.id,
+      oldValues: { wo_id: nmr.wo_id, total_wages: nmr.total_wages },
+      newValues: { wo_id: newWoId, wo_number: newWo.wo_number, total_wages: r.rows[0].total_wages },
+    });
+    res.json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // DELETE /sc/nmr/:id — delete an NMR (blocked if already billed)
