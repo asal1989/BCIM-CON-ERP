@@ -317,7 +317,13 @@ const HREmployeeDetailPage  = lazy(() => import('./pages/hr-admin/EmployeeDetail
 const OnboardingDashboardPage      = lazy(() => import('./pages/hr-admin/onboarding/OnboardingDashboardPage'));
 const EmployeeOnboardingTrackerPage = lazy(() => import('./pages/hr-admin/onboarding/EmployeeOnboardingTrackerPage'));
 const WelcomeChecklistPage         = lazy(() => import('./pages/hr-admin/onboarding/WelcomeChecklistPage'));
-const OnboardingDocumentVerificationPage = lazy(() => import('./pages/hr-admin/onboarding/DocumentVerificationPage'));
+const DocVerificationDashboardPage = lazy(() => import('./pages/hr-admin/onboarding/document-verification/DashboardPage'));
+const DocVerificationPendingPage   = lazy(() => import('./pages/hr-admin/onboarding/document-verification/PendingVerificationPage'));
+const DocVerificationEmployeesPage = lazy(() => import('./pages/hr-admin/onboarding/document-verification/EmployeeDocumentsPage'));
+const DocVerificationUploadPage    = lazy(() => import('./pages/hr-admin/onboarding/document-verification/UploadDocumentsPage'));
+const DocVerificationVerifyPage    = lazy(() => import('./pages/hr-admin/onboarding/document-verification/VerifyDocumentsPage'));
+const DocVerificationRejectedPage  = lazy(() => import('./pages/hr-admin/onboarding/document-verification/RejectedDocumentsPage'));
+const DocVerificationMissingPage   = lazy(() => import('./pages/hr-admin/onboarding/document-verification/MissingDocumentsPage'));
 const OfferAppointmentPage         = lazy(() => import('./pages/hr-admin/onboarding/OfferAppointmentPage'));
 const OnboardingAssetAllocationPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingAssetAllocationPage'));
 const IDCardGenerationPage         = lazy(() => import('./pages/hr-admin/onboarding/IDCardGenerationPage'));
@@ -949,7 +955,13 @@ export default function App() {
                 <Route path="hr-admin/onboarding" element={<RequireModule module="HR & Admin"><OnboardingDashboardPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/employee/:id" element={<RequireModule module="HR & Admin"><EmployeeOnboardingTrackerPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/welcome-checklist" element={<RequireModule module="HR & Admin"><WelcomeChecklistPage /></RequireModule>} />
-                <Route path="hr-admin/onboarding/document-verification" element={<RequireModule module="HR & Admin"><OnboardingDocumentVerificationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification" element={<RequireModule module="HR & Admin"><DocVerificationDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/pending" element={<RequireModule module="HR & Admin"><DocVerificationPendingPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/employees" element={<RequireModule module="HR & Admin"><DocVerificationEmployeesPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/upload" element={<RequireModule module="HR & Admin"><DocVerificationUploadPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/verify" element={<RequireModule module="HR & Admin"><DocVerificationVerifyPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/rejected" element={<RequireModule module="HR & Admin"><DocVerificationRejectedPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification/missing" element={<RequireModule module="HR & Admin"><DocVerificationMissingPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferAppointmentPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/asset-allocation" element={<RequireModule module="HR & Admin"><OnboardingAssetAllocationPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/id-card" element={<RequireModule module="HR & Admin"><IDCardGenerationPage /></RequireModule>} />

@@ -2015,6 +2015,17 @@ export const hrOnboardingAPI = {
   welcomeChecklist:(params)     => api.get('/hr-admin/onboarding/welcome-checklist', { params }),
 };
 
+export const hrDocVerificationAPI = {
+  catalog:    ()            => api.get('/hr-admin/document-verification/catalog'),
+  summary:    ()            => api.get('/hr-admin/document-verification/summary'),
+  pending:    (params)      => api.get('/hr-admin/document-verification/pending', { params }),
+  rejected:   (params)      => api.get('/hr-admin/document-verification/rejected', { params }),
+  missing:    (params)      => api.get('/hr-admin/document-verification/missing', { params }),
+  remind:     (id)          => api.post(`/hr-admin/document-verification/missing/${id}/remind`),
+  employees:  (params)      => api.get('/hr-admin/document-verification/employees', { params }),
+  employee:   (id)          => api.get(`/hr-admin/document-verification/employees/${id}`),
+};
+
 export const hrLeaveAPI = {
   getBalances:   (params) => api.get('/hr-admin/leave/balances', { params }),
   updateBalance: (id, d)  => api.put(`/hr-admin/leave/balances/${id}`, d),
