@@ -114,6 +114,25 @@ export default function MonthlyStatusPage() {
     return { employees: rows.length, present, absent, leave, halfDay, late };
   }, [rows, days, year, month, holidaySet, sundaySet]);
 
+  // Day-wise headcount for the table's total row — same present/absent
+  // rules as the KPI strip above, just broken out per date instead of
+  // summed across the whole month.
+  const dailyTotals = useMemo(() => {
+    const present = new Array(days).fill(0);
+    const absent  = new Array(days).fill(0);
+    rows.forEach(r => {
+      for (let d = 1; d <= days; d++) {
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        if (holidaySet.has(dateStr) || sundaySet.has(d)) continue;
+        const p = r.days[d];
+        if (!p || p.status === 'absent' || (!p.in && !p.out && !p.status)) { absent[d-1]++; continue; }
+        if (p.status === 'leave' || p.status === 'half_day') continue;
+        present[d-1]++;
+      }
+    });
+    return { present, absent };
+  }, [rows, days, year, month, holidaySet, sundaySet]);
+
   function dayHeaderStyle(d) {
     const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     if (holidaySet.has(dateStr)) return { color:'#7C3AED', fontWeight:800 };
@@ -349,6 +368,30 @@ export default function MonthlyStatusPage() {
                 </tr>
               ))}
             </tbody>
+            {/* Total row — day-wise Present/Absent headcount across all
+                currently filtered employees, same rules as the KPI strip
+                above (holidays/Sundays excluded, Leave/Half-day counted in
+                neither). Matches the Muster Roll report's total row. */}
+            {rows.length > 0 && (
+              <tfoot>
+                <tr style={{ background:'#F0FDF4', borderTop:'2px solid #BBF7D0' }}>
+                  <td colSpan={4} className="mar-c-total-label" style={{ ...tdBase, textAlign:'right', fontWeight:800, color:'#15803D', position:'sticky', left:0, background:'#F0FDF4', zIndex:1 }}>
+                    TOTAL PRESENT
+                  </td>
+                  {dailyTotals.present.map((count, i) => (
+                    <td key={i} style={{ ...tdBase, fontWeight:800, color:'#15803D', background:'#F0FDF4' }}>{count}</td>
+                  ))}
+                </tr>
+                <tr style={{ background:'#FEF2F2', borderTop:'1px solid #FECACA' }}>
+                  <td colSpan={4} className="mar-c-total-label" style={{ ...tdBase, textAlign:'right', fontWeight:800, color:'#B91C1C', position:'sticky', left:0, background:'#FEF2F2', zIndex:1 }}>
+                    TOTAL ABSENT
+                  </td>
+                  {dailyTotals.absent.map((count, i) => (
+                    <td key={i} style={{ ...tdBase, fontWeight:800, color:'#B91C1C', background:'#FEF2F2' }}>{count}</td>
+                  ))}
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </div>
@@ -400,10 +443,13 @@ export default function MonthlyStatusPage() {
              Out, purple Company, grey placeholders) to carry meaning
              visually — on a black & white/low-toner office printer those
              all render as faint grey and become unreadable. Force solid
-             black + bold everywhere in print instead; the P/A/L/HD letters
-             and cell shading already carry the status without colour. */
+             black text everywhere in print instead — NOT bold: bold at
+             this small a print font size, combined with the tinted cell
+             backgrounds, turned the whole sheet into an illegible dark
+             smudge. Plain black is legible; the P/A/L/HD letters and cell
+             shading already carry the status without needing weight too. */
           .mar-table th, .mar-table td, .mar-io-in, .mar-io-out, .mar-status {
-            color:#000 !important; font-weight:800 !important;
+            color:#000 !important; font-weight:normal !important;
           }
 
           /* Stack the punches so a day needs one column, not two. */

@@ -151,7 +151,7 @@ export default function DailyAttendanceReportPage() {
   });
 
   const rows = reportData?.data || [];
-  const companyName = reportData?.companyName || 'BCIM';
+  const companyName = reportData?.companyName || 'BCIM ENGINEERING PRIVATE LIMITED';
   const projectName = reportData?.projectName || (project ? (projects||[]).find(p=>p.id===project)?.name : '') || '';
   const present  = rows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='present').length;
   const absent   = rows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='absent').length;

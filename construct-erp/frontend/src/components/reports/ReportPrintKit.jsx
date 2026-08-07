@@ -74,7 +74,7 @@ export const REPORT_PRINT_CSS_A3_LANDSCAPE = REPORT_PRINT_CSS.replace(
   '@page { size: A3 landscape; margin: 10mm 8mm; }'
 );
 
-export function ReportPrintHeader({ companyName = 'BCIM', reportTitle, subtitle }) {
+export function ReportPrintHeader({ companyName = 'BCIM ENGINEERING PRIVATE LIMITED', reportTitle, subtitle }) {
   return (
     <div className="print-only" style={{ borderBottom: '3px solid #1B3A6B', paddingBottom: 10, marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -102,7 +102,7 @@ const DEFAULT_SIGNATORIES = [
   { role: 'Approved By',  name: 'Management / Director' },
 ];
 
-export function ReportPrintSignature({ companyName = 'BCIM', signatories = DEFAULT_SIGNATORIES }) {
+export function ReportPrintSignature({ companyName = 'BCIM ENGINEERING PRIVATE LIMITED', signatories = DEFAULT_SIGNATORIES }) {
   return (
     <div className="print-only report-sig-section" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
