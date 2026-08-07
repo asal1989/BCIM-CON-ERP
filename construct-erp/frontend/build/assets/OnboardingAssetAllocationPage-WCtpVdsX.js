@@ -1,1 +1,0 @@
-import{j as e}from"./vendor-react-BAVvCkcf.js";import{O as s}from"./OnboardingPlaceholderPage-DNtizkug.js";import"./vendor-icons-GLdod_X9.js";function n(){return e.jsx(s,{title:"IT Asset Allocation",description:"Assign laptops, phones, and other IT assets to new hires. See also Employee Assets under Employee Services."})}export{n as default};

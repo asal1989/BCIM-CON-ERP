@@ -95,7 +95,7 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
              des.name AS designation_name,
              (SELECT COUNT(*) FROM hr_exit_clearance c WHERE c.exit_request_id=e.id AND c.status='cleared')::int AS clearance_done_count,
              (SELECT COUNT(*) FROM hr_exit_clearance c WHERE c.exit_request_id=e.id)::int AS clearance_total_count,
-             (SELECT COUNT(*) FROM hr_employee_assets a WHERE a.user_id=e.employee_id AND a.status='assigned')::int AS assets_pending_return
+             (SELECT COUNT(*) FROM hr_employee_assets a WHERE a.employee_id=e.employee_id AND a.status='assigned')::int AS assets_pending_return
       FROM hr_exit_requests e
       JOIN users u ON u.id = e.employee_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
@@ -112,7 +112,7 @@ router.get('/:id', authorize(...HR_ALL), async (req, res) => {
     const e = await getScoped(req, req.params.id);
     const clearance = await query(`SELECT c.*, u.name AS cleared_by_name FROM hr_exit_clearance c LEFT JOIN users u ON u.id=c.cleared_by WHERE c.exit_request_id=$1 ORDER BY c.department`, [req.params.id]);
     const interview = await query(`SELECT i.*, u.name AS conducted_by_name FROM hr_exit_interviews i LEFT JOIN users u ON u.id=i.conducted_by WHERE i.exit_request_id=$1`, [req.params.id]);
-    const assets = await query(`SELECT id, asset_name, asset_code, status FROM hr_employee_assets WHERE user_id=$1 AND status != 'returned'`, [e.employee_id]);
+    const assets = await query(`SELECT id, asset_name, asset_code, status FROM hr_employee_assets WHERE employee_id=$1 AND status != 'returned'`, [e.employee_id]);
     res.json({ data: { ...e, progress_pct: exitProgress(e.status), clearance: clearance.rows, interview: interview.rows[0] || null, pending_assets: assets.rows } });
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
