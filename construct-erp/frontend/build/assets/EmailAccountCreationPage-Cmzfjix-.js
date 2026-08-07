@@ -1,1 +1,0 @@
-import{j as t}from"./vendor-react-BAVvCkcf.js";import{O as o}from"./OnboardingPlaceholderPage-DOPygfT1.js";import"./vendor-icons-DfVhxm5V.js";function i(){return t.jsx(o,{title:"Email & Account Creation",description:"Track email and system account creation for new hires."})}export{i as default};

@@ -1,0 +1,1 @@
+import{j as s}from"./vendor-react-BAVvCkcf.js";import{O as e}from"./OnboardingPlaceholderPage-6pnZKecA.js";import"./vendor-icons-iIy5jY5T.js";function t(){return s.jsx(e,{title:"Access Permissions",description:"Assign ERP module and system access for new hires."})}export{t as default};

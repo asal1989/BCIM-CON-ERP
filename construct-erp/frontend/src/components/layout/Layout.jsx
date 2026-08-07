@@ -260,13 +260,25 @@ const navGroups = [
     { to: '/accounts/settings',                         icon: Settings,        label: 'Settings' },
   ]},
   { label: 'HR & Admin', items: [
-    // ── Overview ──
+    // ── 1. Dashboard ──
     { to: '/hr-admin',                   icon: LayoutDashboard, label: 'HR Dashboard' },
     { to: '/hr-admin/analytics',         icon: BarChart2,       label: 'Analytics Hub' },
     { to: '/hr-admin/checklist',         icon: ClipboardList,   label: 'HR Checklist' },
     { to: '/hr-admin/ops-checklist',     icon: ClipboardCheck,  label: 'HR Ops Checklist' },
-    { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
-    // ── Onboarding ──
+    // ── 2. Employee Management ──
+    { to: '/hr-admin/employees',         icon: Users,           label: 'Employees' },
+    { to: '/hr-admin/directory',         icon: Users,           label: 'Employee Directory' },
+    { to: '/hr-admin/segments',          icon: Users,           label: 'Employee Segment' },
+    { to: '/hr-admin/emp-filters',       icon: Users,           label: 'Employee Filter' },
+    { to: '/hr-admin/emp-categories',    icon: Users,           label: 'Employee Categories' },
+    // ── 3. Organization Structure ──
+    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
+    { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
+    { to: '/hr-admin/project-staff',     icon: FolderKanban,    label: 'Project-wise Staff' },
+    { to: '/hr/workers',                 icon: HardHat,         label: 'Site Workers' },
+    // ── 4. Recruitment ──
+    { to: '/hr-admin/recruitment',       icon: Briefcase,       label: 'Recruitment' },
+    // ── 5. Onboarding ──
     { to: '/hr-admin/onboarding',                        icon: LayoutDashboard, label: 'Onboarding Dashboard' },
     { to: '/hr-admin/employees/new',                     icon: UserPlus,        label: 'New Employee' },
     { to: '/hr-admin/onboarding/welcome-checklist',      icon: ClipboardCheck,  label: 'Welcome Checklist' },
@@ -284,51 +296,59 @@ const navGroups = [
     { to: '/hr-admin/onboarding/feedback',               icon: MessageSquare,   label: 'Onboarding Feedback' },
     { to: '/hr-admin/onboarding/reports',                icon: FileBarChart,    label: 'Onboarding Reports' },
     { to: '/hr-admin/onboarding/settings',               icon: Settings,        label: 'Onboarding Settings' },
-    // ── People ──
-    { to: '/hr-admin/employees',         icon: Users,           label: 'Employees' },
-    { to: '/hr-admin/project-staff',     icon: FolderKanban,    label: 'Project-wise Staff' },
-    { to: '/hr-admin/directory',         icon: Users,           label: 'Employee Directory' },
-    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
-    { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
-    // ── Attendance ──
+    // ── 6. Attendance ──
     { to: '/hr-admin/attendance',              icon: Clock,           label: 'Attendance' },
     { to: '/hr-admin/attendance/dashboard',    icon: LayoutDashboard, label: 'Attendance Dashboard' },
     { to: '/hr-admin/attendance/biometric',    icon: Fingerprint,     label: 'Biometric Attendance' },
     { to: '/hr-admin/attendance/regularization', icon: ClipboardCheck, label: 'Attendance Regularization' },
     { to: '/hr-admin/attendance/bulk-correction', icon: AlertTriangle, label: 'Bulk Attendance Correction' },
     { to: '/hr-admin/attendance/timesheet',    icon: FileSpreadsheet, label: 'Timesheet Report' },
-    { to: '/hr-admin/shifts',                  icon: Clock,           label: 'Shift Management' },
-    // ── Leaves & Holidays ──
+    { to: '/hr/attendance',                    icon: Clock3,          label: 'Worker Attendance' },
+    { to: '/hr-admin/outdoor-entries',         icon: MapPin,          label: 'Outdoor Entries' },
+    { to: '/hr-admin/geofences',               icon: Globe,           label: 'Geofences' },
+    { to: '/hr-admin/work-codes',              icon: Cog,             label: 'Work Codes' },
+    // ── 7. Leave Management ──
     { to: '/hr-admin/leaves',            icon: CalendarOff,     label: 'Leave Management' },
+    { to: '/hr-admin/leave-entries',     icon: CalendarOff,     label: 'Leave Entries' },
+    // ── 8. Shift Management ──
+    { to: '/hr-admin/shifts',            icon: Clock,           label: 'Shift Management' },
+    { to: '/hr-admin/shift-calendar',    icon: CalendarDays,    label: 'Shift Calendar' },
+    { to: '/hr-admin/shift-roster',      icon: ClipboardList,   label: 'Shift Roster' },
+    { to: '/hr-admin/emp-shifts',        icon: Clock,           label: 'Employee Shifts' },
+    { to: '/hr-admin/shift-schedule',    icon: Clock,           label: 'Shift Schedule' },
+    // ── 9. Holiday Calendar ──
     { to: '/hr-admin/holidays',          icon: CalendarDays,    label: 'Holiday Calendar' },
-    // ── Payroll ──
+    // ── 10. Payroll ──
     { to: '/hr-admin/payroll',           icon: CreditCard,      label: 'Payroll' },
     { to: '/hr-admin/payroll-reports',   icon: FileText,        label: 'Payroll Reports' },
     { to: '/hr-admin/salary-structures', icon: Banknote,        label: 'Salary Structures' },
     { to: '/hr-admin/employee-salaries', icon: IndianRupee,     label: 'Employee Salaries' },
-    { to: '/hr-admin/loans',             icon: Wallet,          label: 'Loans & Advances' },
-    { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Expense Claims' },
     { to: '/hr-admin/lop-days',          icon: MinusCircle,     label: 'LOP Days' },
     { to: '/hr-admin/stop-salary',       icon: CircleSlash,     label: 'Stop Salary' },
-    { to: '/hr-admin/fnf',               icon: Wallet,          label: 'Full & Final' },
-    // ── Performance & Growth ──
+    { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
+    // ── 11. Claims & Reimbursements ──
+    { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Expense Claims' },
+    { to: '/hr-admin/travel',            icon: MapPin,          label: 'Travel Requests' },
+    // ── 12. Loans & Advances ──
+    { to: '/hr-admin/loans',             icon: Wallet,          label: 'Loans & Advances' },
+    // ── 13. Performance Management ──
     { to: '/hr-admin/appraisals',        icon: Star,            label: 'Appraisals' },
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
-    { to: '/hr-admin/recruitment',       icon: Briefcase,       label: 'Recruitment' },
+    // ── 14. Training & Development ──
     { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
-    { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
-    // ── Employee Services ──
-    { to: '/hr-admin/letters',           icon: FileText,        label: 'Letter Generation' },
-    { to: '/hr-admin/policies',          icon: FileText,        label: 'Company Policies & Forms' },
+    // ── 15. Compliance ──
+    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
+    { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
+    { to: '/hr-admin/reports/confirmation', icon: BadgeCheck,    label: 'Confirmation Report' },
+    { to: '/hr-admin/policies',           icon: FileText,        label: 'Company Policies & Forms' },
+    { to: '/hr-admin/letters',            icon: FileText,        label: 'Letter Generation' },
+    // ── 16. Asset Management ──
     { to: '/hr-admin/emp-assets',        icon: Package,         label: 'Employee Assets' },
-    { to: '/hr-admin/travel',            icon: MapPin,          label: 'Travel Requests' },
-    { to: '/hr-admin/segments',          icon: Users,           label: 'Employee Segment' },
-    { to: '/hr-admin/emp-filters',       icon: Users,           label: 'Employee Filter' },
-    // ── Site Workers ──
-    { to: '/hr/workers',                 icon: HardHat,         label: 'Site Workers' },
-    { to: '/hr/attendance',              icon: Clock3,          label: 'Worker Attendance' },
-    { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
-    // ── Reports ──
+    // ── 17. Exit Management ──
+    { to: '/hr-admin/fnf',               icon: Wallet,          label: 'Full & Final' },
+    // ── 18. ESS Management ──
+    { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
+    // ── 19. Reports ──
     { to: '/hr-admin/reports',                    icon: FileBarChart,    label: 'HR Reports' },
     { to: '/hr-admin/reports/daily-attendance',   icon: ClipboardList,   label: 'Daily Attendance Report' },
     { to: '/hr-admin/reports/monthly-status',     icon: BarChart2,       label: 'Monthly Status' },
@@ -342,6 +362,11 @@ const navGroups = [
     { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
     { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
     { to: '/hr-admin/import',                     icon: Upload,          label: 'Import Data' },
+    // ── 20. Settings ──
+    { to: '/hr-admin/company-settings',  icon: Settings,        label: 'Company Settings' },
+    { to: '/hr-admin/master-settings',   icon: Cog,             label: 'Master Settings' },
+    { to: '/hr-admin/sms-settings',      icon: MessageSquare,   label: 'SMS Settings' },
+    { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
   ]},
   { label: 'Setup & Tools', superAdminOnly: true, items: [
     { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
@@ -555,16 +580,26 @@ const NAV_SECTIONS = {
     { label: 'Settings',    paths: ['/accounts/settings'] },
   ],
   'HR & Admin': [
-    { label: 'Overview',          paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist','/ess'] },
-    { label: 'Onboarding',        paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
-    { label: 'People',            paths: ['/hr-admin/employees','/hr-admin/project-staff','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/departments'] },
-    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
-    { label: 'Leaves & Holidays', paths: ['/hr-admin/leaves','/hr-admin/holidays'] },
-    { label: 'Payroll',           paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary','/hr-admin/fnf'] },
-    { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },
-    { label: 'Emp. Services',     paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/segments','/hr-admin/emp-filters'] },
-    { label: 'Site Workers',      paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
-    { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
+    { label: 'Dashboard',             paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist'] },
+    { label: 'Employee Management',   paths: ['/hr-admin/employees','/hr-admin/directory','/hr-admin/segments','/hr-admin/emp-filters','/hr-admin/emp-categories'] },
+    { label: 'Organization Structure',paths: ['/hr-admin/org-chart','/hr-admin/departments','/hr-admin/project-staff','/hr/workers'] },
+    { label: 'Recruitment',           paths: ['/hr-admin/recruitment'] },
+    { label: 'Onboarding',            paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
+    { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
+    { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leave-entries'] },
+    { label: 'Shift Management',      paths: ['/hr-admin/shifts','/hr-admin/shift-calendar','/hr-admin/shift-roster','/hr-admin/emp-shifts','/hr-admin/shift-schedule'] },
+    { label: 'Holiday Calendar',      paths: ['/hr-admin/holidays'] },
+    { label: 'Payroll',               paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/lop-days','/hr-admin/stop-salary','/hr/payroll'] },
+    { label: 'Claims & Reimbursements', paths: ['/hr-admin/expenses','/hr-admin/travel'] },
+    { label: 'Loans & Advances',      paths: ['/hr-admin/loans'] },
+    { label: 'Performance Management', paths: ['/hr-admin/appraisals','/hr-admin/performance'] },
+    { label: 'Training & Development', paths: ['/hr-admin/training'] },
+    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/reports/confirmation','/hr-admin/policies','/hr-admin/letters'] },
+    { label: 'Asset Management',      paths: ['/hr-admin/emp-assets'] },
+    { label: 'Exit Management',       paths: ['/hr-admin/fnf'] },
+    { label: 'ESS Management',        paths: ['/ess'] },
+    { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/import'] },
+    { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/master-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },
   ],
   'Bill Tracker': [
     { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
