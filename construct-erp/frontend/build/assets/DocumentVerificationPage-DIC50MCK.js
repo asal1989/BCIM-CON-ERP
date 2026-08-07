@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-BAVvCkcf.js";import{O as e}from"./OnboardingPlaceholderPage-DOPygfT1.js";import"./vendor-icons-DfVhxm5V.js";function n(){return o.jsx(e,{title:"Document Verification",description:"Verify ID proof, address proof, and educational documents for new hires."})}export{n as default};

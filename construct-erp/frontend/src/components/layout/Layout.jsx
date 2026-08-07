@@ -16,7 +16,8 @@ import {
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
-  RefreshCw, Shuffle, Globe, Database, CloudSun
+  RefreshCw, Shuffle, Globe, Database, CloudSun,
+  UserPlus, GraduationCap, Timer, FileCheck2, IdCard, Award,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -265,6 +266,24 @@ const navGroups = [
     { to: '/hr-admin/checklist',         icon: ClipboardList,   label: 'HR Checklist' },
     { to: '/hr-admin/ops-checklist',     icon: ClipboardCheck,  label: 'HR Ops Checklist' },
     { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
+    // ── Onboarding ──
+    { to: '/hr-admin/onboarding',                        icon: LayoutDashboard, label: 'Onboarding Dashboard' },
+    { to: '/hr-admin/employees/new',                     icon: UserPlus,        label: 'New Employee' },
+    { to: '/hr-admin/onboarding/welcome-checklist',      icon: ClipboardCheck,  label: 'Welcome Checklist' },
+    { to: '/hr-admin/onboarding/document-verification',  icon: FileCheck2,      label: 'Document Verification' },
+    { to: '/hr-admin/onboarding/offer-appointment',      icon: FileSignature,   label: 'Offer & Appointment' },
+    { to: '/hr-admin/onboarding/asset-allocation',       icon: Package,         label: 'IT Asset Allocation' },
+    { to: '/hr-admin/onboarding/id-card',                icon: IdCard,          label: 'ID Card Generation' },
+    { to: '/hr-admin/onboarding/email-account',          icon: Mail,            label: 'Email & Account Creation' },
+    { to: '/hr-admin/onboarding/access-permissions',     icon: Key,             label: 'Access Permissions' },
+    { to: '/hr-admin/onboarding/training',               icon: GraduationCap,   label: 'Training Assignment' },
+    { to: '/hr-admin/onboarding/orientation',            icon: CalendarDays,    label: 'Orientation Schedule' },
+    { to: '/hr-admin/onboarding/compliance-forms',       icon: ShieldCheck,     label: 'Compliance Forms' },
+    { to: '/hr-admin/onboarding/probation',              icon: Timer,           label: 'Probation Tracking' },
+    { to: '/hr-admin/onboarding/confirmation',           icon: Award,           label: 'Confirmation Process' },
+    { to: '/hr-admin/onboarding/feedback',               icon: MessageSquare,   label: 'Onboarding Feedback' },
+    { to: '/hr-admin/onboarding/reports',                icon: FileBarChart,    label: 'Onboarding Reports' },
+    { to: '/hr-admin/onboarding/settings',               icon: Settings,        label: 'Onboarding Settings' },
     // ── People ──
     { to: '/hr-admin/employees',         icon: Users,           label: 'Employees' },
     { to: '/hr-admin/project-staff',     icon: FolderKanban,    label: 'Project-wise Staff' },
@@ -537,6 +556,7 @@ const NAV_SECTIONS = {
   ],
   'HR & Admin': [
     { label: 'Overview',          paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist','/ess'] },
+    { label: 'Onboarding',        paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
     { label: 'People',            paths: ['/hr-admin/employees','/hr-admin/project-staff','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/departments'] },
     { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
     { label: 'Leaves & Holidays', paths: ['/hr-admin/leaves','/hr-admin/holidays'] },

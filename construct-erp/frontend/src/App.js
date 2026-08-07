@@ -312,6 +312,24 @@ const HRDashboardPage       = lazy(() => import('./pages/hr-admin/HRDashboardPag
 const HREmployeeListPage    = lazy(() => import('./pages/hr-admin/EmployeeListPage'));
 const HREmployeeFormPage    = lazy(() => import('./pages/hr-admin/EmployeeFormPage'));
 const HREmployeeDetailPage  = lazy(() => import('./pages/hr-admin/EmployeeDetailPage'));
+// ── Onboarding ── navigation shell; most of these are placeholders pending
+// the real workflow (Offer Letter → ... → Confirmation) build-out.
+const OnboardingDashboardPage      = lazy(() => import('./pages/hr-admin/onboarding/OnboardingDashboardPage'));
+const WelcomeChecklistPage         = lazy(() => import('./pages/hr-admin/onboarding/WelcomeChecklistPage'));
+const OnboardingDocumentVerificationPage = lazy(() => import('./pages/hr-admin/onboarding/DocumentVerificationPage'));
+const OfferAppointmentPage         = lazy(() => import('./pages/hr-admin/onboarding/OfferAppointmentPage'));
+const OnboardingAssetAllocationPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingAssetAllocationPage'));
+const IDCardGenerationPage         = lazy(() => import('./pages/hr-admin/onboarding/IDCardGenerationPage'));
+const EmailAccountCreationPage     = lazy(() => import('./pages/hr-admin/onboarding/EmailAccountCreationPage'));
+const AccessPermissionsPage        = lazy(() => import('./pages/hr-admin/onboarding/AccessPermissionsPage'));
+const TrainingAssignmentPage       = lazy(() => import('./pages/hr-admin/onboarding/TrainingAssignmentPage'));
+const OrientationSchedulePage      = lazy(() => import('./pages/hr-admin/onboarding/OrientationSchedulePage'));
+const OnboardingComplianceFormsPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingComplianceFormsPage'));
+const ProbationTrackingPage        = lazy(() => import('./pages/hr-admin/onboarding/ProbationTrackingPage'));
+const OnboardingConfirmationProcessPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingConfirmationProcessPage'));
+const OnboardingFeedbackPage       = lazy(() => import('./pages/hr-admin/onboarding/OnboardingFeedbackPage'));
+const OnboardingReportsPage        = lazy(() => import('./pages/hr-admin/onboarding/OnboardingReportsPage'));
+const OnboardingSettingsPage       = lazy(() => import('./pages/hr-admin/onboarding/OnboardingSettingsPage'));
 const HRAttendancePage            = lazy(() => import('./pages/hr-admin/AttendancePage'));
 const HRAttendanceDashboardPage   = lazy(() => import('./pages/hr-admin/attendance/AttendanceDashboardPage'));
 const HRBiometricAttendancePage   = lazy(() => import('./pages/hr-admin/attendance/BiometricAttendancePage'));
@@ -926,6 +944,23 @@ export default function App() {
                 <Route path="hr-admin/employees/new" element={<RequireModule module="HR & Admin"><HREmployeeFormPage /></RequireModule>} />
                 <Route path="hr-admin/employees/:id" element={<RequireModule module="HR & Admin"><HREmployeeDetailPage /></RequireModule>} />
                 <Route path="hr-admin/employees/:id/edit" element={<RequireModule module="HR & Admin"><HREmployeeFormPage /></RequireModule>} />
+                {/* ── Onboarding ── */}
+                <Route path="hr-admin/onboarding" element={<RequireModule module="HR & Admin"><OnboardingDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/welcome-checklist" element={<RequireModule module="HR & Admin"><WelcomeChecklistPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/document-verification" element={<RequireModule module="HR & Admin"><OnboardingDocumentVerificationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferAppointmentPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/asset-allocation" element={<RequireModule module="HR & Admin"><OnboardingAssetAllocationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card" element={<RequireModule module="HR & Admin"><IDCardGenerationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/email-account" element={<RequireModule module="HR & Admin"><EmailAccountCreationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/access-permissions" element={<RequireModule module="HR & Admin"><AccessPermissionsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/training" element={<RequireModule module="HR & Admin"><TrainingAssignmentPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/orientation" element={<RequireModule module="HR & Admin"><OrientationSchedulePage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/compliance-forms" element={<RequireModule module="HR & Admin"><OnboardingComplianceFormsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/probation" element={<RequireModule module="HR & Admin"><ProbationTrackingPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/confirmation" element={<RequireModule module="HR & Admin"><OnboardingConfirmationProcessPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/feedback" element={<RequireModule module="HR & Admin"><OnboardingFeedbackPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/reports" element={<RequireModule module="HR & Admin"><OnboardingReportsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/settings" element={<RequireModule module="HR & Admin"><OnboardingSettingsPage /></RequireModule>} />
                 <Route path="hr-admin/attendance" element={<RequireModule module="HR & Admin"><HRAttendancePage /></RequireModule>} />
                 <Route path="hr-admin/attendance/dashboard" element={<RequireModule module="HR & Admin"><HRAttendanceDashboardPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/biometric" element={<RequireModule module="HR & Admin"><HRBiometricAttendancePage /></RequireModule>} />

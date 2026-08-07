@@ -1,0 +1,1 @@
+import{j as e}from"./vendor-react-BAVvCkcf.js";import{O as r}from"./OnboardingPlaceholderPage-DOPygfT1.js";import"./vendor-icons-DfVhxm5V.js";function o(){return e.jsx(r,{title:"ID Card Generation",description:"Generate and print employee ID cards."})}export{o as default};

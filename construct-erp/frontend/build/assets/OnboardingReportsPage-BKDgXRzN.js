@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-BAVvCkcf.js";import{O as t}from"./OnboardingPlaceholderPage-DOPygfT1.js";import"./vendor-icons-DfVhxm5V.js";function n(){return o.jsx(t,{title:"Onboarding Reports",description:"Reports on onboarding pipeline status, time-to-productivity, and completion rates."})}export{n as default};

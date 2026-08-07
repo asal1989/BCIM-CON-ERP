@@ -1,0 +1,1 @@
+import{j as r}from"./vendor-react-BAVvCkcf.js";import{O as o}from"./OnboardingPlaceholderPage-DOPygfT1.js";import"./vendor-icons-DfVhxm5V.js";function i(){return r.jsx(o,{title:"Onboarding Dashboard",description:"Overview of every new hire currently moving through onboarding."})}export{i as default};
