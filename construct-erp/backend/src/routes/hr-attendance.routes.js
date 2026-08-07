@@ -87,13 +87,18 @@ runSchemaInit('hr_attendance_muster_columns', async () => {
 // ═══════════════════════════════════════════════════════════
 router.get('/', async (req, res) => {
   try {
-    const { user_id, month, year, department_id, date, project_id } = req.query;
+    const { user_id, month, year, department_id, date, project_id, company } = req.query;
     // explicit filter wins; otherwise auto-scope by role
     const projectId = project_id || await getProjectScope(req);
 
+    // Same company-source semantics as GET /summary above.
+    const includeStaff = !company || company === 'all' || company === 'staff';
+    const includeSC    = !company || company === 'all' || (company !== 'staff');
+    const scId          = (company && company !== 'all' && company !== 'staff') ? company : null;
+
     let sql = `
       SELECT a.*, u.name as employee_name, u.employee_code,
-             ep.department_id, dep.name as department_name
+             ep.department_id, dep.name as department_name, NULL::text as company_name
       FROM hr_attendance a
       JOIN users u ON u.id = a.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
@@ -115,9 +120,40 @@ router.get('/', async (req, res) => {
     if (department_id){ sql += ` AND ep.department_id=$${idx}`; params.push(department_id); idx++; }
     if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
+    // SC worker attendance, same date/project scoping, unioned in — matches
+    // the "company" filter semantics on GET /summary.
+    let scSql = null, scParams = null;
+    if (includeSC && !user_id) { // user_id is a staff users.id; never matches a worker
+      scParams = [req.user.company_id];
+      let sIdx = 2;
+      scSql = `
+        SELECT a.id, a.worker_id as user_id, a.company_id, a.attendance_date, a.status,
+               a.in_time, a.out_time, 0 as late_minutes, 0 as early_exit_minutes,
+               'sc' as source, NULL::uuid as leave_request_id, a.remarks,
+               w.worker_name as employee_name, w.worker_code as employee_code,
+               NULL::uuid as department_id, COALESCE(sc.name,'SC Workers') as department_name,
+               sc.name as company_name
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+        WHERE a.company_id = $1`;
+      if (date) { scSql += ` AND a.attendance_date = $${sIdx}`; scParams.push(date); sIdx++; }
+      else {
+        const m = parseInt(month) || new Date().getMonth() + 1;
+        const y = parseInt(year)  || new Date().getFullYear();
+        scSql += ` AND EXTRACT(MONTH FROM a.attendance_date) = $${sIdx} AND EXTRACT(YEAR FROM a.attendance_date) = $${sIdx+1}`;
+        scParams.push(m, y); sIdx += 2;
+      }
+      if (projectId !== null) { scSql += ` AND w.project_id=$${sIdx}`; scParams.push(projectId); sIdx++; }
+      if (scId)                { scSql += ` AND w.sc_id=$${sIdx}`;      scParams.push(scId);      sIdx++; }
+    }
+
     sql += ' ORDER BY u.name, a.attendance_date';
-    const { rows } = await query(sql, params);
-    res.json({ data: rows });
+    const [staffRes, scRes] = await Promise.all([
+      includeStaff ? query(sql, params) : Promise.resolve({ rows: [] }),
+      scSql ? query(scSql, scParams) : Promise.resolve({ rows: [] }),
+    ]);
+    res.json({ data: [...staffRes.rows, ...scRes.rows] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -127,7 +163,7 @@ router.get('/', async (req, res) => {
 // /summary — per-employee monthly summary (month/year) OR department-grouped (from/to)
 router.get('/summary', async (req, res) => {
   try {
-    const { month, year, from, to, department_id, project_id } = req.query;
+    const { month, year, from, to, department_id, project_id, company } = req.query;
     const cid = req.user.company_id;
     // explicit filter wins; otherwise auto-scope by role — see GET '/' above
     const scopeProject = await getProjectScope(req);
@@ -138,41 +174,84 @@ router.get('/summary', async (req, res) => {
       const m = parseInt(month) || new Date().getMonth() + 1;
       const y = parseInt(year)  || new Date().getFullYear();
 
-      const params = [cid, m, y];
+      // `company` filter: unset/'all' = staff + every subcontractor merged
+      // (matches the department-grouped report below, which has always
+      // unioned the two sources); 'staff' = direct staff only; a
+      // sc_subcontractors.id = that subcontractor's workers only. Staff have
+      // no subcontractor company, so 'staff' and a specific sc id are
+      // mutually exclusive with each other's source table.
+      const includeStaff = !company || company === 'all' || company === 'staff';
+      const includeSC    = !company || company === 'all' || (company !== 'staff');
+      const scId          = (company && company !== 'all' && company !== 'staff') ? company : null;
+
+      const staffParams = [cid, m, y];
       let deptFilter = '', projFilter = '';
       let idx = 4;
-      if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
-      if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
-      params.push(SYSTEM_ACCOUNT_EMAILS);
+      if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; staffParams.push(department_id); }
+      if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    staffParams.push(effProject); }
+      staffParams.push(SYSTEM_ACCOUNT_EMAILS);
       const sysIdx = idx;
 
-      const { rows } = await query(`
-        SELECT u.id AS user_id,
-               u.name,
-               u.employee_code,
-               ep.department_id,
-               COALESCE(dep.name, u.department, '—') AS department_name,
-               COUNT(*) FILTER (WHERE a.status='present')  AS present,
-               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
-               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
-               COUNT(*) FILTER (WHERE a.status='leave')    AS on_leave,
-               COUNT(*)                                    AS total_marked
-        FROM users u
-        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-        LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
-        LEFT JOIN hr_attendance a      ON a.user_id = u.id
-                                      AND a.company_id = $1
-                                      AND EXTRACT(MONTH FROM a.attendance_date) = $2
-                                      AND EXTRACT(YEAR  FROM a.attendance_date) = $3
-        WHERE u.company_id = $1
-          AND u.is_active = TRUE
-          AND u.email != ALL($${sysIdx}::text[])
-          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
-          ${deptFilter}
-          ${projFilter}
-        GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
-        ORDER BY dep.name NULLS LAST, u.name
-      `, params);
+      const scParams = [cid, m, y];
+      let scProjFilter = '', scIdFilter = '';
+      let scIdx = 4;
+      if (effProject) { scProjFilter = ` AND w.project_id=$${scIdx++}`; scParams.push(effProject); }
+      if (scId)        { scIdFilter  = ` AND w.sc_id=$${scIdx++}`;       scParams.push(scId); }
+
+      const [staffRows, scRows] = await Promise.all([
+        includeStaff ? query(`
+          SELECT u.id AS user_id,
+                 u.name,
+                 u.employee_code,
+                 ep.department_id,
+                 COALESCE(dep.name, u.department, '—') AS department_name,
+                 NULL::text AS company_name,
+                 COUNT(*) FILTER (WHERE a.status='present')  AS present,
+                 COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+                 COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+                 COUNT(*) FILTER (WHERE a.status='leave')    AS on_leave,
+                 COUNT(*)                                    AS total_marked
+          FROM users u
+          LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+          LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+          LEFT JOIN hr_attendance a      ON a.user_id = u.id
+                                        AND a.company_id = $1
+                                        AND EXTRACT(MONTH FROM a.attendance_date) = $2
+                                        AND EXTRACT(YEAR  FROM a.attendance_date) = $3
+          WHERE u.company_id = $1
+            AND u.is_active = TRUE
+            AND u.email != ALL($${sysIdx}::text[])
+            AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+            ${deptFilter}
+            ${projFilter}
+          GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
+        `, staffParams) : Promise.resolve({ rows: [] }),
+        includeSC ? query(`
+          SELECT w.id AS user_id,
+                 w.worker_name AS name,
+                 w.worker_code AS employee_code,
+                 NULL::uuid AS department_id,
+                 COALESCE(sc.name, 'SC Workers') AS department_name,
+                 sc.name AS company_name,
+                 COUNT(*) FILTER (WHERE a.status='present')  AS present,
+                 COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+                 COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+                 0                                            AS on_leave,
+                 COUNT(*) FILTER (WHERE a.id IS NOT NULL)     AS total_marked
+          FROM sc_workers w
+          LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+          LEFT JOIN sc_attendance a ON a.worker_id = w.id
+                                    AND a.company_id = $1
+                                    AND EXTRACT(MONTH FROM a.attendance_date) = $2
+                                    AND EXTRACT(YEAR  FROM a.attendance_date) = $3
+          WHERE w.company_id = $1 AND w.status = 'active'
+            ${scProjFilter} ${scIdFilter}
+          GROUP BY w.id, w.worker_name, w.worker_code, sc.name
+        `, scParams) : Promise.resolve({ rows: [] }),
+      ]);
+
+      const rows = [...staffRows.rows, ...scRows.rows]
+        .sort((a, b) => (a.department_name || '').localeCompare(b.department_name || '') || a.name.localeCompare(b.name));
 
       return res.json({ data: rows });
     }

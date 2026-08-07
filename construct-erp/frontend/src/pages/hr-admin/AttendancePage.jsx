@@ -9,7 +9,7 @@ import {
   CalendarCheck, Clock, Mail, Send, Search, Users, UserCheck,
   UserX, Clock3, Palmtree, ChevronRight, Printer, FileDown, FileSpreadsheet,
 } from 'lucide-react';
-import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI, companySettingsAPI } from '../../api/client';
+import { hrAttendanceAPI, hrMastersAPI, hrEsslAPI, projectAPI, companySettingsAPI, scAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ function buildExportTable({ view, month, year, dailyDate, summary, employees, at
   if (view === 'summary') {
     return {
       title: `Attendance Summary — ${MONTHS[month-1]} ${year}`,
-      headers: ['Employee', 'Employee ID', 'Department', 'Present', 'Absent', 'Half Day', 'Leave', 'Total Marked'],
+      headers: ['Employee', 'Employee ID', 'Department', 'Company', 'Present', 'Absent', 'Half Day', 'Leave', 'Total Marked'],
       rows: summary.map(s => [
-        s.name, s.employee_code || '', s.department_name || '—',
+        s.name, s.employee_code || '', s.department_name || '—', s.company_name || 'Staff',
         s.present || 0, s.absent || 0, s.half_day || 0, s.on_leave || 0, s.total_marked || 0,
       ]),
     };
@@ -453,6 +453,9 @@ export default function AttendancePage() {
   const [year,         setYear]         = useState(now.getFullYear());
   const [deptFilter,   setDeptFilter]   = useState('');
   const [projectFilter,setProjectFilter]= useState('');
+  // '' = All (staff + every subcontractor merged), 'staff' = direct staff
+  // only, or a sc_subcontractors.id for one subcontractor's workers only.
+  const [companyFilter,setCompanyFilter]= useState('');
   const [view,         setView]         = useState('summary');
   const [syncing,      setSyncing]      = useState(false);
   const [syncResult,   setSyncResult]   = useState(null);
@@ -466,17 +469,29 @@ export default function AttendancePage() {
   const { data:companyData }  = useQuery({ queryKey:['company-settings'], queryFn:()=>companySettingsAPI.get().then(r=>r.data?.data||r.data), staleTime:10*60*1000 });
   const { data:deptData }     = useQuery({ queryKey:['hr-departments'],  queryFn:()=>hrMastersAPI.listDepts().then(r=>r.data) });
   const { data:projectsData } = useQuery({ queryKey:['projects-active'], queryFn:()=>projectAPI.list({ is_active:true }).then(r=>r.data) });
+  // Subcontractor companies — the "Company" filter options. Attendance page
+  // previously showed only direct staff (hr_attendance); this merges in
+  // sc_attendance so a specific subcontractor's workers can be isolated.
+  // NOTE: scAPI.listSC() hits sc_subcontractors, which is what sc_workers.sc_id
+  // actually references — NOT subcontractorAPI.listSubcontractors(), which
+  // queries the unrelated `vendors` table (different ID space entirely; using
+  // those IDs as a sc_id filter would silently match zero workers).
+  const { data:subcontractorsData } = useQuery({
+    queryKey:['sc-subcontractors-list'],
+    queryFn:()=>scAPI.listSC().then(r=>r.data?.data||r.data||[]),
+  });
+  const subcontractors = subcontractorsData || [];
   const { data:attData, isLoading } = useQuery({
-    queryKey:['hr-attendance-grid', month, year, deptFilter, projectFilter],
-    queryFn:()=>hrAttendanceAPI.list({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
+    queryKey:['hr-attendance-grid', month, year, deptFilter, projectFilter, companyFilter],
+    queryFn:()=>hrAttendanceAPI.list({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
   });
   const { data:summaryData } = useQuery({
-    queryKey:['hr-attendance-summary', month, year, deptFilter, projectFilter],
-    queryFn:()=>hrAttendanceAPI.summary({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
+    queryKey:['hr-attendance-summary', month, year, deptFilter, projectFilter, companyFilter],
+    queryFn:()=>hrAttendanceAPI.summary({ month, year, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
   });
   const { data:dailyData, isLoading:dailyLoading } = useQuery({
-    queryKey:['hr-attendance-daily', dailyDate, deptFilter, projectFilter],
-    queryFn:()=>hrAttendanceAPI.list({ date:dailyDate, department_id:deptFilter||undefined, project_id:projectFilter||undefined }).then(r=>r.data),
+    queryKey:['hr-attendance-daily', dailyDate, deptFilter, projectFilter, companyFilter],
+    queryFn:()=>hrAttendanceAPI.list({ date:dailyDate, department_id:deptFilter||undefined, project_id:projectFilter||undefined, company:companyFilter||undefined }).then(r=>r.data),
     enabled: view==='daily',
   });
 
@@ -715,6 +730,11 @@ export default function AttendancePage() {
             <option value="">All projects</option>
             {(projectsData?.data||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          <select value={companyFilter} onChange={e=>setCompanyFilter(e.target.value)} style={S.select} aria-label="Company">
+            <option value="">All companies</option>
+            <option value="staff">Direct staff only</option>
+            {subcontractors.map(sc=><option key={sc.id} value={sc.id}>{sc.name}</option>)}
+          </select>
 
           {/* Print / PDF / Excel — export whatever view is currently active.
               Hidden on Timesheet since that's a single-employee drill-down,
@@ -918,6 +938,7 @@ export default function AttendancePage() {
                   <tr>
                     <th style={{ ...S.th, minWidth:200 }}>Employee</th>
                     <th style={S.th}>Department</th>
+                    <th style={S.th}>Company</th>
                     <th style={{ ...S.th, minWidth:160 }}>Attendance</th>
                     <th style={{ ...S.th, textAlign:'right' }}>Present</th>
                     <th style={{ ...S.th, textAlign:'right' }}>Absent</th>
@@ -946,6 +967,11 @@ export default function AttendancePage() {
                         </span>
                       </td>
                       <td style={S.td}>
+                        {s.company_name
+                          ? <span style={{ background:'#FEF3C7', color:'#92400E', fontSize:11, padding:'3px 8px', borderRadius:6, fontWeight:700 }}>{s.company_name}</span>
+                          : <span style={{ background:'#DBEAFE', color:'#1D4ED8', fontSize:11, padding:'3px 8px', borderRadius:6, fontWeight:700 }}>Staff</span>}
+                      </td>
+                      <td style={S.td}>
                         <AttBar p={parseInt(s.present)||0} a={parseInt(s.absent)||0} h={parseInt(s.half_day)||0} l={parseInt(s.on_leave)||0}/>
                       </td>
                       <td style={{ ...S.td, textAlign:'right', color:'#057A55', fontWeight:700, fontVariantNumeric:'tabular-nums' }}>{s.present}</td>
@@ -956,7 +982,7 @@ export default function AttendancePage() {
                     </tr>
                   ))}
                   {summary.length===0&&(
-                    <tr><td colSpan={8} style={{ textAlign:'center', padding:'56px 0' }}>
+                    <tr><td colSpan={9} style={{ textAlign:'center', padding:'56px 0' }}>
                       <Calendar size={32} color="#E5E7EB" style={{ margin:'0 auto 10px' }}/>
                       <p style={{ color:'#6B7280', fontWeight:600 }}>No attendance data</p>
                       <p style={{ color:'#9CA3AF', fontSize:12, marginTop:4 }}>{MONTHS[month-1]} {year}</p>
