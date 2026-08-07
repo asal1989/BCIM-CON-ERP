@@ -505,7 +505,17 @@ function MusterRoll({ depts }) {
   const totalEmployees  = rows.length;
   const totalPresent    = rows.reduce((s, r) => s + (r.present   || 0), 0);
   const totalAbsent     = rows.reduce((s, r) => s + (r.absent    || 0), 0);
+  const totalHalfDay    = rows.reduce((s, r) => s + (r.half_day  || 0), 0);
+  const totalLeave      = rows.reduce((s, r) => s + (r.leave     || 0), 0);
   const totalWorking    = days.filter(d => !d.is_sunday).length;
+
+  // Per-day headcount — for each date column, how many of the currently
+  // filtered employees were marked Present that day (r.days[i] lines up
+  // with days[i], both ordered 1..last-day-of-month).
+  const dailyPresentCount = useMemo(
+    () => days.map((_, i) => rows.reduce((s, r) => s + ((r.days || [])[i] === 'P' ? 1 : 0), 0)),
+    [rows, days]
+  );
   const avgAttendance   = totalEmployees && totalWorking
     ? ((totalPresent / (totalEmployees * totalWorking)) * 100).toFixed(1)
     : '0.0';
@@ -514,7 +524,11 @@ function MusterRoll({ depts }) {
   const paged       = rows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   const fmtTime     = (t) => t ? t.slice(0, 5) : '—';
 
-  const monthLabel  = `${String(month).padStart(2,'0')} ${MONTHS[month-1].slice(0,3)} ${year}`;
+  // This is a monthly report — MONTHS[month-1] ("July") + year, not a single
+  // date. The old version zero-padded the month NUMBER (07) in front of the
+  // month name ("07 Jul 2026"), which reads as "7th of July" — a specific
+  // date the report was never scoped to.
+  const monthLabel  = `${MONTHS[month-1]} ${year}`;
   const rangeLabel  = `01 ${MONTHS[month-1]} ${year} – ${new Date(year, month, 0).getDate()} ${MONTHS[month-1]} ${year}`;
 
   const exportData  = rows.map(r => ({
@@ -742,6 +756,26 @@ function MusterRoll({ depts }) {
                   <tr><td colSpan={50} style={{ padding:'48px 12px', textAlign:'center', color:'#9ca3af' }}>No attendance data for selected period</td></tr>
                 )}
               </tbody>
+              {/* Total row — day-wise headcount (how many employees were
+                  Present on each date, e.g. the "01" column = 1st of the
+                  month) plus the month's grand totals for the summary
+                  columns. Shown once regardless of on-screen pagination. */}
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr style={{ background:'#f3f4f6', borderTop:'2px solid #d1d5db' }}>
+                    <td colSpan={5} className="mroster-c-total-label" style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, color:'#111827', fontSize:11, position:'sticky', left:0, background:'#f3f4f6' }}>
+                      TOTAL PRESENT (Day-wise)
+                    </td>
+                    {dailyPresentCount.map((count, i) => (
+                      <td key={i} style={{ padding:'4px 2px', textAlign:'center', fontWeight:800, color:'#15803d', fontSize:10.5 }}>{count}</td>
+                    ))}
+                    <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#15803d', fontSize:13 }}>{totalPresent}</td>
+                    <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#dc2626', fontSize:13 }}>{totalAbsent}</td>
+                    <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#d97706', fontSize:13 }}>{totalHalfDay}</td>
+                    <td className="mroster-c-sum" style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#1d4ed8', fontSize:13 }}>{totalLeave}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         )}
