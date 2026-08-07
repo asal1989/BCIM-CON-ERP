@@ -1988,6 +1988,7 @@ export const hrOnboardingAPI = {
   trainingChart:  ()            => api.get('/hr-admin/onboarding/charts/training-progress'),
   probationChart: ()            => api.get('/hr-admin/onboarding/charts/probation-status'),
   report:         (key, params) => api.get(`/hr-admin/onboarding/reports/${key}`, { params }),
+  welcomeChecklist:(params)     => api.get('/hr-admin/onboarding/welcome-checklist', { params }),
 };
 
 export const hrDocVerificationAPI = {
