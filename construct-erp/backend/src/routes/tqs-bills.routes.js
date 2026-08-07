@@ -4419,20 +4419,6 @@ async function autoMarkPaidIfZeroBalance(billId, actorId) {
     actorId);
 }
 
-// Reusable guard — throws if MD signature not yet collected for a bill
-async function requireMdSignature(billId) {
-  const r = await query(
-    `SELECT u.qs_sign_date FROM tqs_bill_updates u WHERE u.bill_id = $1`,
-    [billId]
-  );
-  if (!r.rows.length || !r.rows[0].qs_sign_date) {
-    throw Object.assign(
-      new Error('MD signature not collected. Complete "QS — MD Signature Collection" before recording payment.'),
-      { statusCode: 400 }
-    );
-  }
-}
-
 // ── PATCH /tqs/bills/:id/mark-paid — force-mark a bill as fully paid ─────────
 router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res) => {
   try {

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Download, Fingerprint, Users, UserCheck, UserX, Clock, CalendarOff, Timer, Printer } from 'lucide-react';
-import { REPORT_PRINT_CSS_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
+import { REPORT_PRINT_CSS_A3_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CY = new Date().getFullYear();
@@ -169,7 +169,7 @@ export default function MonthlyStatusPage() {
 
   return (
     <div style={{ padding: '20px 24px', background: '#F8FAFC', minHeight: '100vh' }}>
-      <style>{REPORT_PRINT_CSS_LANDSCAPE}</style>
+      <style>{REPORT_PRINT_CSS_A3_LANDSCAPE}</style>
 
       {/* Header */}
       <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18, flexWrap:'wrap', gap:12 }}>
@@ -258,7 +258,7 @@ export default function MonthlyStatusPage() {
       {/* Biometric-style In/Out grid */}
       <div id="report-print-root">
         <ReportPrintHeader reportTitle="Monthly Attendance Report" subtitle={`${MONTHS[month-1]} ${year}${company ? ' · ' + company : ''}`} />
-      <div style={{ overflow:'auto', background:'#fff', borderRadius:12, border:'1px solid #E2E8F0', maxHeight:'68vh', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div className="mar-table-wrap" style={{ overflow:'auto', background:'#fff', borderRadius:12, border:'1px solid #E2E8F0', maxHeight:'68vh', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         {isLoading ? (
           <div className="no-print" style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>
             <div style={{ width:28, height:28, border:'3px solid #EDE9FE', borderTopColor:'#7C3AED', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 0.8s linear infinite' }} />
@@ -349,6 +349,9 @@ export default function MonthlyStatusPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .mar-row:hover td { filter: brightness(0.97); }
+        @media print {
+          .mar-table-wrap { overflow:visible !important; max-height:none !important; border:none !important; box-shadow:none !important; }
+        }
       `}</style>
     </div>
   );
