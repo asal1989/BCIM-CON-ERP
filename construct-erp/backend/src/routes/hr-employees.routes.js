@@ -1029,7 +1029,7 @@ router.patch('/:id/documents/:docId/verify', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.post('/:id/documents', upload.single('file'), async (req, res) => {
   try {
-    const { doc_type, doc_name } = req.body;
+    const { doc_type, doc_name, document_type_id } = req.body;
     const localUrl = req.file ? `/uploads/hr-docs/${req.file.filename}` : req.body.file_url;
     const displayName = doc_name || req.file?.originalname || doc_type;
 
@@ -1057,9 +1057,9 @@ router.post('/:id/documents', upload.single('file'), async (req, res) => {
 
     const { rows } = await query(
       `INSERT INTO employee_documents
-         (user_id, doc_type, doc_name, file_url, sharepoint_id, sharepoint_url, uploaded_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.params.id, doc_type, displayName, fileUrl, spId, spUrl, req.user.id]
+         (user_id, doc_type, doc_name, file_url, sharepoint_id, sharepoint_url, uploaded_by, document_type_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.params.id, doc_type, displayName, fileUrl, spId, spUrl, req.user.id, document_type_id || null]
     );
     await query(
       `INSERT INTO employee_timeline
@@ -1067,6 +1067,13 @@ router.post('/:id/documents', upload.single('file'), async (req, res) => {
        VALUES ($1,$2,'document','Document uploaded',$3,$4)`,
       [req.params.id, req.user.company_id, displayName, req.user.id]
     );
+    // Best-effort — table may not exist yet if hr-document-verification hasn't
+    // initialized on this instance; verification history isn't upload-blocking.
+    query(
+      `INSERT INTO document_verification_history (document_id, action, actor_id, remarks)
+       VALUES ($1,'uploaded',$2,$3)`,
+      [rows[0].id, req.user.id, displayName]
+    ).catch(() => {});
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
