@@ -483,6 +483,7 @@ function EvalFormModal({ editing, onClose }) {
     training_required:     editing?.training_required     || '',
     comments_remarks:      editing?.comments_remarks      || '',
     increment_recommended: editing?.increment_recommended || '',
+    promotion_recommended: editing?.promotion_recommended || false,
   }));
 
   // Month/Quarter + Year pickers that compose form.eval_period (e.g. "July 2026" / "Q2 2026")
@@ -691,11 +692,18 @@ function EvalFormModal({ editing, onClose }) {
             </div>
           </div>
 
-          <div className="w-48">
-            <label className={lbl}>Increment Recommended (%)</label>
-            <input type="number" min="0" max="100" step="0.5"
-              value={form.increment_recommended} onChange={e => set('increment_recommended', e.target.value)}
-              className={inp} placeholder="0" />
+          <div className="flex items-end gap-6">
+            <div className="w-48">
+              <label className={lbl}>Increment Recommended (%)</label>
+              <input type="number" min="0" max="100" step="0.5"
+                value={form.increment_recommended} onChange={e => set('increment_recommended', e.target.value)}
+                className={inp} placeholder="0" />
+            </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 pb-2.5">
+              <input type="checkbox" checked={form.promotion_recommended} onChange={e => set('promotion_recommended', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+              Promotion Recommended
+            </label>
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t">
@@ -946,6 +954,9 @@ export default function PerformancePage() {
                       {ev.overall_rating
                         ? <span className={`text-xs font-semibold ${rc.text}`}>{ev.overall_rating}</span>
                         : <span className="text-gray-300">—</span>}
+                      {ev.promotion_recommended && (
+                        <div className="mt-1"><span className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">↑ Promotion</span></div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${sc.text}`}>

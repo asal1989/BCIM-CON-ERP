@@ -381,6 +381,8 @@ const navGroups = [
     // ── 13. Performance Management ──
     { to: '/hr-admin/appraisals',        icon: Star,            label: 'Appraisals' },
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
+    { to: '/hr-admin/advanced?tab=performance', icon: Target,   label: 'KPI Setup' },
+    { to: '/hr-admin/advanced?tab=performance', icon: Target,   label: 'Goal Setting' },
     // ── 14. Training & Development ──
     { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
     { to: '/hr-admin/training/certifications', icon: Award,     label: 'Certifications' },
