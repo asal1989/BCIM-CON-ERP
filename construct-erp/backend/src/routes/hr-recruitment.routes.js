@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { sendMail } = require('../services/mail.service');
 
 const HR_ROLES = ['super_admin','admin','hr_admin','hr_manager'];
 const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
@@ -185,6 +186,58 @@ const upload = multer({
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   )`);
+
+  // ── Phase 2: Offer Letter, Talent Pool, Settings masters ────────────────
+  await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS letter_html TEXT`);
+  await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS letter_sent_at TIMESTAMPTZ`);
+  await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS reporting_manager TEXT`);
+  await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS terms TEXT`);
+
+  await safe(`CREATE TABLE IF NOT EXISTS hr_talent_pool (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    email VARCHAR(200),
+    phone VARCHAR(30),
+    category VARCHAR(100),
+    experience_years NUMERIC(4,1) DEFAULT 0,
+    current_company VARCHAR(200),
+    qualification VARCHAR(200),
+    resume_url TEXT,
+    notes TEXT,
+    added_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // Settings masters — flat lookup lists, editable without a code change.
+  await safe(`CREATE TABLE IF NOT EXISTS hr_recruitment_sources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    UNIQUE(company_id, name)
+  )`);
+  await safe(`CREATE TABLE IF NOT EXISTS hr_recruitment_skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    UNIQUE(company_id, name)
+  )`);
+  await safe(`CREATE TABLE IF NOT EXISTS hr_job_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    UNIQUE(company_id, name)
+  )`);
+
+  // Seed talent pool categories as job categories too, matching the spec's
+  // construction-specific role list — safe to re-run (ON CONFLICT DO NOTHING).
+  const DEFAULT_CATEGORIES = ['Civil Engineers', 'Site Engineers', 'QA/QC Engineers', 'Safety Officers', 'Quantity Surveyors', 'Store Keepers', 'Equipment Operators', 'Electricians', 'Welders'];
+  for (const cat of DEFAULT_CATEGORIES) {
+    await safe(`INSERT INTO hr_job_categories (company_id, name) SELECT id, '${cat.replace(/'/g, "''")}' FROM companies ON CONFLICT DO NOTHING`);
+  }
 })();
 
 const APPROVAL_STAGES = ['hr', 'department_manager', 'project_manager', 'hr_head'];
@@ -584,5 +637,143 @@ router.patch('/joining-tracker/:id', authorize(...HR_ROLES), async (req, res) =>
   }
   res.json({ data: { ...rows[0], progress_pct: joiningProgress(rows[0]) } });
 });
+
+// ── Offer Letter (print/email — matches the HTML-letter + browser-print
+// pattern already used elsewhere in this app, rather than a new PDF
+// pipeline) ────────────────────────────────────────────────────────────
+function buildOfferLetterHtml({ company, applicant, offer }) {
+  const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  return `
+  <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#0f172a">
+    <div style="border-bottom:3px solid #1B3A6B;padding-bottom:14px;margin-bottom:20px">
+      <h2 style="margin:0;color:#1B3A6B">${company.name || 'BCIM'}</h2>
+      <p style="margin:2px 0 0;font-size:12px;color:#555">${company.address || ''}</p>
+    </div>
+    <p>Date: ${today}</p>
+    <p>Dear <strong>${applicant.name}</strong>,</p>
+    <p>We are pleased to offer you the position of <strong>${offer.position || 'the discussed role'}</strong>
+       ${offer.department ? `in the <strong>${offer.department}</strong> department` : ''} at ${company.name || 'our company'}.
+       Please find the terms of your offer below:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
+      <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;width:40%">Position</td><td style="padding:8px;border:1px solid #e2e8f0">${offer.position || '—'}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Annual CTC</td><td style="padding:8px;border:1px solid #e2e8f0">${inr(offer.salary)}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Allowances</td><td style="padding:8px;border:1px solid #e2e8f0">${inr(offer.allowances)}</td></tr>
+      ${Number(offer.joining_bonus) > 0 ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Joining Bonus</td><td style="padding:8px;border:1px solid #e2e8f0">${inr(offer.joining_bonus)}</td></tr>` : ''}
+      <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Probation Period</td><td style="padding:8px;border:1px solid #e2e8f0">${offer.probation_months || 3} months</td></tr>
+      <tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Date of Joining</td><td style="padding:8px;border:1px solid #e2e8f0">${offer.joining_date ? new Date(offer.joining_date).toLocaleDateString('en-IN') : 'To be confirmed'}</td></tr>
+      ${offer.reporting_manager ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600">Reporting Manager</td><td style="padding:8px;border:1px solid #e2e8f0">${offer.reporting_manager}</td></tr>` : ''}
+    </table>
+    ${offer.terms ? `<p style="font-size:13px;color:#334155"><strong>Terms &amp; Conditions:</strong><br>${offer.terms.replace(/\n/g, '<br>')}</p>` : ''}
+    <p>Please confirm your acceptance of this offer at the earliest. We look forward to welcoming you to the team.</p>
+    <p style="margin-top:24px">Regards,<br><strong>${company.name || 'HR Team'}</strong></p>
+  </div>`;
+}
+
+router.post('/offers/:id/letter', authorize(...HR_ROLES), async (req, res) => {
+  try {
+    const { rows } = await query(`SELECT o.*, a.name, a.email FROM hr_offers o JOIN hr_applicants a ON a.id=o.applicant_id WHERE o.id=$1 AND o.company_id=$2`, [req.params.id, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Offer not found' });
+    const offer = rows[0];
+    const { reporting_manager, terms } = req.body;
+    if (reporting_manager !== undefined || terms !== undefined) {
+      await query(`UPDATE hr_offers SET reporting_manager=COALESCE($1,reporting_manager), terms=COALESCE($2,terms) WHERE id=$3`, [reporting_manager || null, terms || null, req.params.id]);
+      Object.assign(offer, { reporting_manager: reporting_manager || offer.reporting_manager, terms: terms || offer.terms });
+    }
+    const companyRes = await query(`SELECT name, address FROM companies WHERE id=$1`, [req.user.company_id]);
+    const html = buildOfferLetterHtml({ company: companyRes.rows[0] || {}, applicant: { name: offer.name, email: offer.email }, offer });
+    await query(`UPDATE hr_offers SET letter_html=$1 WHERE id=$2`, [html, req.params.id]);
+    res.json({ data: { html } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/offers/:id/send-letter', authorize(...HR_ROLES), async (req, res) => {
+  try {
+    const { rows } = await query(`SELECT o.*, a.name, a.email FROM hr_offers o JOIN hr_applicants a ON a.id=o.applicant_id WHERE o.id=$1 AND o.company_id=$2`, [req.params.id, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Offer not found' });
+    const offer = rows[0];
+    if (!offer.email) return res.status(400).json({ error: 'Candidate has no email on file' });
+    if (!offer.letter_html) return res.status(400).json({ error: 'Generate the letter first' });
+
+    const result = await sendMail({ to: offer.email, subject: `Offer of Employment — ${offer.position || 'BCIM'}`, html: offer.letter_html });
+    await query(`UPDATE hr_offers SET letter_sent_at=NOW(), status=CASE WHEN status='draft' THEN 'sent' ELSE status END, sent_at=COALESCE(sent_at, NOW()) WHERE id=$1`, [req.params.id]);
+    await query(`UPDATE hr_applicants SET status=CASE WHEN status NOT IN ('offer_accepted','offer_declined','joined') THEN 'offer_sent' ELSE status END, updated_at=NOW() WHERE id=$1`, [offer.applicant_id]);
+    res.json({ message: result.sent ? 'Offer letter emailed' : 'Mail not sent — check mail settings', sent: !!result.sent });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Talent Pool ────────────────────────────────────────────────────────
+router.get('/talent-pool', authorize(...HR_ALL), async (req, res) => {
+  try {
+    const { category, search } = req.query;
+    const conds = ['company_id=$1']; const params = [req.user.company_id]; let i = 2;
+    if (category) { conds.push(`category=$${i++}`); params.push(category); }
+    if (search) { conds.push(`(name ILIKE $${i} OR email ILIKE $${i})`); params.push(`%${search}%`); i++; }
+    const { rows } = await query(`SELECT * FROM hr_talent_pool WHERE ${conds.join(' AND ')} ORDER BY created_at DESC`, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/talent-pool', authorize(...HR_ALL), async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.name) return res.status(400).json({ error: 'Name is required' });
+    const { rows } = await query(`
+      INSERT INTO hr_talent_pool (company_id, name, email, phone, category, experience_years, current_company, qualification, resume_url, notes, added_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
+    `, [req.user.company_id, d.name, d.email || null, d.phone || null, d.category || null, d.experience_years || 0, d.current_company || null, d.qualification || null, d.resume_url || null, d.notes || null, req.user.id]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/talent-pool/:id', authorize(...HR_ROLES), async (req, res) => {
+  try {
+    const { rows } = await query(`DELETE FROM hr_talent_pool WHERE id=$1 AND company_id=$2 RETURNING id`, [req.params.id, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Move a talent-pool contact into the real ATS pipeline once a matching opening exists.
+router.post('/talent-pool/:id/convert', authorize(...HR_ROLES), async (req, res) => {
+  try {
+    const { job_id } = req.body;
+    if (!job_id) return res.status(400).json({ error: 'job_id is required' });
+    const pool = await query(`SELECT * FROM hr_talent_pool WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    if (!pool.rows.length) return res.status(404).json({ error: 'Not found' });
+    const p = pool.rows[0];
+    const { rows } = await query(`
+      INSERT INTO hr_applicants (company_id, job_id, name, email, phone, experience_years, current_company, qualification, resume_url, source, notes, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'referral',$10,$11) RETURNING *
+    `, [req.user.company_id, job_id, p.name, p.email, p.phone, p.experience_years, p.current_company, p.qualification, p.resume_url, `From Talent Pool: ${p.notes || ''}`, req.user.id]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Recruitment Settings — masters (sources, skills, job categories) ─────
+function masterCrud(table, path) {
+  router.get(`/settings/${path}`, authorize(...HR_ALL), async (req, res) => {
+    try {
+      const { rows } = await query(`SELECT * FROM ${table} WHERE company_id=$1 ORDER BY name`, [req.user.company_id]);
+      res.json({ data: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.post(`/settings/${path}`, authorize(...HR_ROLES), async (req, res) => {
+    try {
+      if (!req.body.name) return res.status(400).json({ error: 'Name is required' });
+      const { rows } = await query(`INSERT INTO ${table} (company_id, name) VALUES ($1,$2) ON CONFLICT (company_id, name) DO UPDATE SET active=TRUE RETURNING *`, [req.user.company_id, req.body.name]);
+      res.status(201).json({ data: rows[0] });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.delete(`/settings/${path}/:id`, authorize(...HR_ROLES), async (req, res) => {
+    try {
+      await query(`UPDATE ${table} SET active=FALSE WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+}
+masterCrud('hr_recruitment_sources', 'sources');
+masterCrud('hr_recruitment_skills', 'skills');
+masterCrud('hr_job_categories', 'job-categories');
 
 module.exports = router;

@@ -647,6 +647,24 @@ export const hrRecruitmentAPI = {
 
   joiningTracker:       ()      => api.get('/hr-admin/recruitment/joining-tracker'),
   updateJoiningTracker: (id, d) => api.patch(`/hr-admin/recruitment/joining-tracker/${id}`, d),
+
+  generateOfferLetter: (id, d) => api.post(`/hr-admin/recruitment/offers/${id}/letter`, d),
+  sendOfferLetter:     (id)    => api.post(`/hr-admin/recruitment/offers/${id}/send-letter`),
+
+  talentPool:        (p)    => api.get('/hr-admin/recruitment/talent-pool', { params: p }),
+  addTalent:         (d)    => api.post('/hr-admin/recruitment/talent-pool', d),
+  deleteTalent:      (id)   => api.delete(`/hr-admin/recruitment/talent-pool/${id}`),
+  convertTalent:     (id,d) => api.post(`/hr-admin/recruitment/talent-pool/${id}/convert`, d),
+
+  sources:      ()     => api.get('/hr-admin/recruitment/settings/sources'),
+  addSource:    (d)    => api.post('/hr-admin/recruitment/settings/sources', d),
+  deleteSource: (id)   => api.delete(`/hr-admin/recruitment/settings/sources/${id}`),
+  skillsMaster:      ()     => api.get('/hr-admin/recruitment/settings/skills'),
+  addSkillMaster:    (d)    => api.post('/hr-admin/recruitment/settings/skills', d),
+  deleteSkillMaster: (id)   => api.delete(`/hr-admin/recruitment/settings/skills/${id}`),
+  jobCategories:      ()     => api.get('/hr-admin/recruitment/settings/job-categories'),
+  addJobCategory:     (d)    => api.post('/hr-admin/recruitment/settings/job-categories', d),
+  deleteJobCategory:  (id)   => api.delete(`/hr-admin/recruitment/settings/job-categories/${id}`),
 };
 
 export const hrSalaryExtAPI = {

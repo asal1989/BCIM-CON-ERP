@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, X, Pencil, Users, Briefcase, ClipboardList, UserCheck, Send,
   TrendingUp, CheckCircle2, Calendar, Star, ChevronRight, ThumbsUp, ThumbsDown,
+  FileText, UserPlus, Settings, Trash2, Mail, Printer,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -18,7 +19,7 @@ import { FIELD_HL } from '../../constants/fieldStyles';
 
 const INP = `w-full h-9 rounded-lg px-3 text-xs font-medium outline-none transition-all border ${FIELD_HL}`;
 const TA  = `w-full rounded-lg px-3 py-2 text-xs outline-none transition-all border ${FIELD_HL} resize-none`;
-const TABS = ['Requisitions', 'Job Openings', 'Candidates', 'Joining Tracker'];
+const TABS = ['Requisitions', 'Job Openings', 'Candidates', 'Joining Tracker', 'Talent Pool', 'Settings'];
 
 const REQ_STATUS_C = { pending_hr_review: 'amber', pending_management_approval: 'blue', approved: 'green', rejected: 'red', converted: 'slate' };
 const REQ_STATUS_LABEL = { pending_hr_review: 'Pending HR Review', pending_management_approval: 'Pending Management Approval', approved: 'Approved', rejected: 'Rejected', converted: 'Converted' };
@@ -488,6 +489,24 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
     onSuccess: () => { toast.success('Updated'); refreshAll(); },
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
+  const [letterFor, setLetterFor] = useState(null);
+  const [letterHtml, setLetterHtml] = useState('');
+  const genLetterMut = useMutation({
+    mutationFn: (id) => hrRecruitmentAPI.generateOfferLetter(id, {}),
+    onSuccess: (r) => { setLetterHtml(r.data?.data?.html || ''); toast.success('Letter generated'); refreshAll(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  const sendLetterMut = useMutation({
+    mutationFn: (id) => hrRecruitmentAPI.sendOfferLetter(id),
+    onSuccess: () => { toast.success('Offer letter emailed to candidate'); setLetterFor(null); refreshAll(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to send'),
+  });
+  const printLetter = () => {
+    const w = window.open('', '_blank');
+    w.document.write(letterHtml);
+    w.document.close();
+    w.print();
+  };
 
   if (!app) return null;
   const SUBTABS = [
@@ -607,8 +626,10 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
                       <span>Bonus: ₹{Number(o.joining_bonus || 0).toLocaleString('en-IN')}</span>
                       <span>Probation: {o.probation_months}mo</span>
                     </div>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 flex-wrap">
                       {o.status === 'draft' && <button onClick={() => offerActionMut.mutate({ id: o.id, status: 'sent' })} className="h-7 px-2.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-semibold">Send Offer</button>}
+                      <button onClick={() => { setLetterFor(o); setLetterHtml(o.letter_html || ''); genLetterMut.mutate(o.id); }} className="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold flex items-center gap-1"><FileText size={11} /> {o.letter_html ? 'View' : 'Generate'} Letter</button>
+                      {o.letter_sent_at && <Badge color="emerald">Letter emailed {dayjs(o.letter_sent_at).format('DD-MM-YYYY')}</Badge>}
                       {o.status === 'sent' && (
                         <>
                           <button onClick={() => offerActionMut.mutate({ id: o.id, status: 'accepted' })} className="h-7 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-semibold">Mark Accepted</button>
@@ -628,6 +649,27 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
       {showInterviewForm && <InterviewForm applicantId={applicantId} onClose={() => setShowInterviewForm(false)} onSaved={refreshAll} />}
       {evalTarget && <InterviewEvalForm interview={evalTarget} onClose={() => setEvalTarget(null)} onSaved={refreshAll} />}
       {showOfferForm && <OfferForm applicantId={applicantId} applicant={app} onClose={() => setShowOfferForm(false)} onSaved={refreshAll} />}
+      {letterFor && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={() => setLetterFor(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h3 className="text-sm font-semibold">Offer Letter</h3>
+              <button onClick={() => setLetterFor(null)}><X size={16} /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5">
+              {genLetterMut.isPending ? <p className="text-center py-10 text-slate-400 text-sm">Generating…</p> :
+                <div className="border rounded-lg p-4 text-xs" dangerouslySetInnerHTML={{ __html: letterHtml }} />}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t">
+              <button onClick={printLetter} disabled={!letterHtml} className="h-9 px-4 rounded-xl border text-xs flex items-center gap-1.5 disabled:opacity-50"><Printer size={13} /> Print</button>
+              <button onClick={() => sendLetterMut.mutate(letterFor.id)} disabled={!letterHtml || sendLetterMut.isPending || !app.email} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50">
+                <Mail size={13} /> {sendLetterMut.isPending ? 'Sending…' : 'Email to Candidate'}
+              </button>
+            </div>
+            {!app.email && <p className="text-[11px] text-red-500 px-5 pb-3">Candidate has no email on file — add one to send.</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -728,6 +770,158 @@ function JoiningTrackerTab() {
   );
 }
 
+/* ═══════════════════════════ Talent Pool ═══════════════════════════ */
+function TalentForm({ onClose, onSaved }) {
+  const [f, setF] = useState({ name: '', email: '', phone: '', category: '', experience_years: '', current_company: '', qualification: '', notes: '' });
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const mut = useMutation({
+    mutationFn: (d) => hrRecruitmentAPI.addTalent(d),
+    onSuccess: () => { toast.success('Added to talent pool'); onSaved(); onClose(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold mb-3">Add to Talent Pool</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Name *" wide><input value={f.name} onChange={e => set('name', e.target.value)} className={INP} /></Field>
+          <Field label="Phone"><input value={f.phone} onChange={e => set('phone', e.target.value)} className={INP} /></Field>
+          <Field label="Email"><input type="email" value={f.email} onChange={e => set('email', e.target.value)} className={INP} /></Field>
+          <Field label="Category"><input value={f.category} onChange={e => set('category', e.target.value)} className={INP} /></Field>
+          <Field label="Experience (yrs)"><input type="number" value={f.experience_years} onChange={e => set('experience_years', e.target.value)} className={INP} /></Field>
+          <Field label="Current Company"><input value={f.current_company} onChange={e => set('current_company', e.target.value)} className={INP} /></Field>
+          <Field label="Qualification"><input value={f.qualification} onChange={e => set('qualification', e.target.value)} className={INP} /></Field>
+          <Field label="Notes" wide><textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} className={TA} /></Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="h-9 px-4 rounded-xl border text-xs">Cancel</button>
+          <button onClick={() => mut.mutate(f)} disabled={mut.isPending || !f.name} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50">
+            {mut.isPending ? 'Saving…' : 'Add'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConvertTalentForm({ talent, jobs, onClose, onSaved }) {
+  const [jobId, setJobId] = useState('');
+  const mut = useMutation({
+    mutationFn: () => hrRecruitmentAPI.convertTalent(talent.id, { job_id: jobId }),
+    onSuccess: () => { toast.success('Converted to candidate'); onSaved(); onClose(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold mb-3">Move {talent.name} into Hiring Pipeline</h3>
+        <Field label="Job Opening *">
+          <select value={jobId} onChange={e => setJobId(e.target.value)} className={INP}>
+            <option value="">Select job…</option>
+            {jobs.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
+          </select>
+        </Field>
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="h-9 px-4 rounded-xl border text-xs">Cancel</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending || !jobId} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50">
+            {mut.isPending ? 'Converting…' : 'Convert'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TalentPoolTab({ jobs }) {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [convertTarget, setConvertTarget] = useState(null);
+  const { data: pool = [] } = useQuery({ queryKey: ['hr-talent-pool', search], queryFn: () => hrRecruitmentAPI.talentPool({ search: search || undefined }).then(r => r.data?.data || []) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['hr-talent-pool'] });
+  const delMut = useMutation({
+    mutationFn: (id) => hrRecruitmentAPI.deleteTalent(id),
+    onSuccess: () => { toast.success('Removed'); refresh(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex justify-between mb-3 gap-2">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, category, company…" className={`${INP} max-w-xs`} />
+        <button onClick={() => setShowForm(true)} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-2 flex-shrink-0"><UserPlus size={14} /> Add Contact</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3">
+        {pool.map(t => (
+          <div key={t.id} className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-semibold text-slate-800">{t.name}</div>
+                {t.category && <Badge color="blue">{t.category}</Badge>}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{t.current_company || '—'} · {t.qualification || '—'} · {t.experience_years || 0} yrs exp</div>
+              <div className="text-[10px] text-slate-400 mt-1">{t.email || '—'} · {t.phone || '—'}</div>
+              {t.notes && <p className="text-[11px] text-slate-500 mt-1">{t.notes}</p>}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => setConvertTarget(t)} className="h-7 px-2.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-semibold">Move to Pipeline</button>
+              <button onClick={() => window.confirm('Remove from talent pool?') && delMut.mutate(t.id)} className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center"><Trash2 size={12} className="text-red-500" /></button>
+            </div>
+          </div>
+        ))}
+        {pool.length === 0 && <div className="text-center py-16 text-slate-400 text-sm">No talent pool contacts yet</div>}
+      </div>
+      {showForm && <TalentForm onClose={() => setShowForm(false)} onSaved={refresh} />}
+      {convertTarget && <ConvertTalentForm talent={convertTarget} jobs={jobs} onClose={() => setConvertTarget(null)} onSaved={refresh} />}
+    </div>
+  );
+}
+
+/* ═══════════════════════════ Settings (masters) ═══════════════════════════ */
+function MasterList({ title, listFn, addFn, delFn, queryKey }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const { data: rows = [] } = useQuery({ queryKey: [queryKey], queryFn: () => listFn().then(r => r.data?.data || []) });
+  const refresh = () => qc.invalidateQueries({ queryKey: [queryKey] });
+  const addMut = useMutation({
+    mutationFn: (d) => addFn(d),
+    onSuccess: () => { setName(''); refresh(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  const delMut = useMutation({
+    mutationFn: (id) => delFn(id),
+    onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <h4 className="text-xs font-bold text-slate-700 mb-3">{title}</h4>
+      <div className="flex gap-2 mb-3">
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Add new…" className={INP} />
+        <button onClick={() => name.trim() && addMut.mutate({ name: name.trim() })} disabled={!name.trim() || addMut.isPending} className="h-9 px-3 rounded-lg bg-blue-600 text-white text-xs font-semibold flex-shrink-0 disabled:opacity-50">Add</button>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map(r => (
+          <div key={r.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 text-xs">
+            <span>{r.name}</span>
+            <button onClick={() => delMut.mutate(r.id)} className="text-red-500 hover:text-red-700"><Trash2 size={12} /></button>
+          </div>
+        ))}
+        {rows.length === 0 && <p className="text-[11px] text-slate-400 py-2">None yet</p>}
+      </div>
+    </div>
+  );
+}
+
+function RecruitmentSettingsTab() {
+  return (
+    <div className="max-w-4xl grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <MasterList title="Sources" queryKey="hr-rec-sources" listFn={hrRecruitmentAPI.sources} addFn={hrRecruitmentAPI.addSource} delFn={hrRecruitmentAPI.deleteSource} />
+      <MasterList title="Skills" queryKey="hr-rec-skills" listFn={hrRecruitmentAPI.skillsMaster} addFn={hrRecruitmentAPI.addSkillMaster} delFn={hrRecruitmentAPI.deleteSkillMaster} />
+      <MasterList title="Job Categories" queryKey="hr-rec-categories" listFn={hrRecruitmentAPI.jobCategories} addFn={hrRecruitmentAPI.addJobCategory} delFn={hrRecruitmentAPI.deleteJobCategory} />
+    </div>
+  );
+}
+
 /* ═══════════════════════════ Page shell ═══════════════════════════ */
 export default function RecruitmentPage() {
   const qc = useQueryClient();
@@ -763,6 +957,8 @@ export default function RecruitmentPage() {
             {t === 'Job Openings' && <Briefcase size={13} />}
             {t === 'Candidates' && <Users size={13} />}
             {t === 'Joining Tracker' && <TrendingUp size={13} />}
+            {t === 'Talent Pool' && <UserPlus size={13} />}
+            {t === 'Settings' && <Settings size={13} />}
             {t}
           </button>
         ))}
@@ -776,6 +972,8 @@ export default function RecruitmentPage() {
             filterStatus={filterStatus} setFilterStatus={setFilterStatus} onOpen={setOpenApplicantId} />
         )}
         {tab === 'Joining Tracker' && <JoiningTrackerTab />}
+        {tab === 'Talent Pool' && <TalentPoolTab jobs={jobs} />}
+        {tab === 'Settings' && <RecruitmentSettingsTab />}
       </div>
 
       {showJobForm && <JobForm job={editJob} onClose={() => { setShowJobForm(false); setEditJob(null); }} onSaved={refresh} />}
