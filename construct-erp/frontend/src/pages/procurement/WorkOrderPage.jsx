@@ -13,6 +13,7 @@ import {
   Activity, Check, UserCheck, Edit2, XCircle, Lock, Trash2, GitBranch,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI, mrsAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
@@ -26,6 +27,68 @@ import WOPrintTemplate from './WOPrintTemplate';
 
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 const inr = v => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const inrCompact = v => {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
+/* ─── Kpi3DCard — tilt-on-hover 3D stat tile (matches Purchase Order page) ─── */
+function Kpi3DCard({ icon: Icon, value, label, sub, iconBg, iconText, accent, active, onClick, index = 0, title }) {
+  const ref = useRef(null);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const handleMove = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    setTilt({ rx: (0.5 - py) * 12, ry: (px - 0.5) * 12, gx: px * 100, gy: py * 100 });
+  };
+  const handleLeave = () => setTilt({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const Tag = onClick ? motion.button : motion.div;
+  return (
+    <Tag
+      ref={ref}
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      title={title}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.035, ease: 'easeOut' }}
+      style={{ perspective: 700 }}
+      className="relative text-left"
+    >
+      <motion.div
+        animate={{ rotateX: tilt.rx, rotateY: tilt.ry, scale: tilt.rx || tilt.ry ? 1.03 : 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+        style={{ transformStyle: 'preserve-3d' }}
+        className={clsx(
+          'relative bg-white border rounded-2xl p-4 overflow-hidden',
+          active ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-lg' : 'border-slate-200 shadow-sm hover:shadow-xl'
+        )}
+      >
+        {accent && <div className={clsx('absolute left-0 top-0 bottom-0 w-1', accent)} />}
+        <div className="pointer-events-none absolute inset-0 rounded-2xl transition-opacity duration-200"
+          style={{
+            opacity: tilt.rx || tilt.ry ? 1 : 0,
+            background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(99,102,241,0.14), transparent 62%)`,
+          }} />
+        <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center mb-3 shadow-sm', iconBg)}
+          style={{ transform: 'translateZ(24px)' }}>
+          <Icon className={clsx('w-4.5 h-4.5', iconText)} style={{ transform: 'translateZ(4px)' }} />
+        </div>
+        <div className="text-2xl font-bold text-slate-800 leading-tight tabular-nums" style={{ transform: 'translateZ(18px)' }}>{value}</div>
+        <div className="text-xs text-slate-400 mt-0.5 font-medium" style={{ transform: 'translateZ(10px)' }}>{label}</div>
+        {sub && <div className="text-[11px] text-slate-400 mt-1 truncate" style={{ transform: 'translateZ(10px)' }}>{sub}</div>}
+      </motion.div>
+    </Tag>
+  );
+}
 
 const STATUS_CONFIG = {
   draft:      { label: 'Draft',                cls: 'bg-slate-100  text-slate-700  border-slate-200' },
@@ -1881,17 +1944,24 @@ export default function WorkOrderPage() {
   const today  = dayjs();
 
   /* ── KPI metrics ── */
-  const totalValue       = allWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
+  // Terminated WOs are no longer a live commitment — excluded from every
+  // aggregate total (KPI card, table footer) so "Contract Value"/"Total"
+  // reflects only what's actually still committed.
+  const totalValue       = allWOs.filter(w => w.status !== 'terminated').reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const activeWOs        = allWOs.filter(w => ['active', 'approved'].includes(w.status));
   const activeValue      = activeWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const pendingApproval  = allWOs.filter(w => ['draft', 'pending', 'submitted'].includes(w.status));
+  const pendingValue     = pendingApproval.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const completedWOs     = allWOs.filter(w => ['completed', 'closed'].includes(w.status));
+  const completedValue   = completedWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const overdueWOs       = allWOs.filter(w => w.end_date && today.isAfter(dayjs(w.end_date)) && !['completed', 'closed', 'terminated', 'rejected'].includes(w.status));
+  const overdueValue     = overdueWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const expiringSoon     = allWOs.filter(w => {
     if (!w.end_date) return false;
     const daysLeft = dayjs(w.end_date).diff(today, 'day');
     return daysLeft >= 0 && daysLeft <= 30 && !['completed', 'closed', 'terminated', 'rejected'].includes(w.status);
   });
+  const expiringValue    = expiringSoon.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
 
   /* ── Unique categories from data ── */
   const categories = [...new Set(allWOs.map(w => w.work_category).filter(Boolean))].sort();
@@ -1983,13 +2053,30 @@ export default function WorkOrderPage() {
 
         {/* ── KPI Cards ── */}
         {(() => {
+          const isOverdue = overdueWOs.length > 0;
           const kpiStats = [
-            { key: '',           label: 'Work Orders',     count: allWOs.length,            icon: FileText,    accent: 'bg-indigo-500', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600' },
-            { key: '__value__',  label: 'Contract Value',  value: `₹${(totalValue/100000).toFixed(1)}L`, icon: IndianRupee, accent: 'bg-blue-500', iconBg: 'bg-blue-50',    iconText: 'text-blue-600' },
-            { key: 'active',     label: 'Active',          count: activeWOs.length,         icon: Activity,    accent: 'bg-teal-500', iconBg: 'bg-teal-50',   iconText: 'text-teal-600'   },
-            { key: '__pending__',label: 'Pending Approval',count: pendingApproval.length,   icon: Clock,       accent: 'bg-amber-500', iconBg: 'bg-amber-50',  iconText: 'text-amber-600'  },
-            { key: '__expire__', label: 'Expiring Soon',   count: expiringSoon.length,      icon: AlertCircle, accent: 'bg-orange-500', iconBg: 'bg-orange-50', iconText: 'text-orange-500' },
-            { key: 'completed',  label: overdueWOs.length > 0 ? 'Overdue' : 'Completed', count: overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length, icon: overdueWOs.length > 0 ? XCircle : CheckCircle2, accent: overdueWOs.length > 0 ? 'bg-red-500' : 'bg-emerald-500', iconBg: overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50', iconText: overdueWOs.length > 0 ? 'text-red-500' : 'text-emerald-600' },
+            { key: '',            label: 'Work Orders',     value: allWOs.length,
+              sub: 'All work orders', icon: FileText, iconBg: 'bg-indigo-50', iconText: 'text-indigo-600' },
+            { key: '__value__',   label: 'Contract Value',  value: inrCompact(totalValue),
+              sub: `₹${inr(totalValue)}`, title: `₹${inr(totalValue)}`,
+              icon: IndianRupee, iconBg: 'bg-blue-50', iconText: 'text-blue-600' },
+            { key: 'active',      label: 'Active',          value: activeWOs.length,
+              sub: activeWOs.length ? inrCompact(activeValue) : '—',
+              icon: Activity, iconBg: 'bg-teal-50', iconText: 'text-teal-600' },
+            { key: '__pending__', label: 'Pending Approval', value: pendingApproval.length,
+              sub: pendingApproval.length ? inrCompact(pendingValue) : '—',
+              icon: Clock, iconBg: 'bg-amber-50', iconText: 'text-amber-600' },
+            { key: '__expire__',  label: 'Expiring Soon',   value: expiringSoon.length,
+              sub: expiringSoon.length ? `${inrCompact(expiringValue)} · within 30 days` : 'None due',
+              icon: AlertCircle, iconBg: 'bg-orange-50', iconText: 'text-orange-500' },
+            { key: 'completed',   label: isOverdue ? 'Overdue' : 'Completed',
+              value: isOverdue ? overdueWOs.length : completedWOs.length,
+              sub: isOverdue
+                ? (overdueValue ? inrCompact(overdueValue) : '—')
+                : (completedValue ? inrCompact(completedValue) : '—'),
+              icon: isOverdue ? XCircle : CheckCircle2,
+              iconBg: isOverdue ? 'bg-red-50' : 'bg-emerald-50',
+              iconText: isOverdue ? 'text-red-500' : 'text-emerald-600' },
           ];
           const isClickable = s => s.key !== '__value__' && s.key !== '__expire__';
           const isActive = s => filterStatus === s.key || (s.key === '' && !filterStatus) || (s.key === '__pending__' && filterStatus === 'pending');
@@ -2001,23 +2088,11 @@ export default function WorkOrderPage() {
           };
           return (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {kpiStats.map(s => (
-                <button key={s.key} onClick={() => handleKpiClick(s)}
-                  className={clsx(
-                    'relative overflow-hidden bg-white border rounded-xl pl-5 pr-4 py-4 shadow-sm text-left transition-all',
-                    isClickable(s) ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : 'cursor-default',
-                    isActive(s) ? 'border-indigo-400 ring-1 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'
-                  )}>
-                  <div className={clsx('absolute left-0 top-0 bottom-0 w-1', s.accent)} />
-                  <div className="flex items-center justify-between mb-3">
-                    <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', s.iconBg)}>
-                      <s.icon className={clsx('w-4 h-4', s.iconText)} />
-                    </div>
-                    {isActive(s) && isClickable(s) && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
-                  </div>
-                  <div className="text-2xl font-bold text-slate-800 tabular-nums">{s.value ?? s.count}</div>
-                  <div className="text-xs text-slate-400 mt-0.5 font-medium">{s.label}</div>
-                </button>
+              {kpiStats.map((s, i) => (
+                <Kpi3DCard key={s.key} index={i} icon={s.icon} value={s.value} label={s.label} sub={s.sub}
+                  iconBg={s.iconBg} iconText={s.iconText} title={s.title}
+                  active={isClickable(s) && isActive(s)}
+                  onClick={isClickable(s) ? () => handleKpiClick(s) : undefined} />
               ))}
             </div>
           );
@@ -2351,7 +2426,7 @@ export default function WorkOrderPage() {
                 Showing <span className="font-semibold text-slate-600">{filtered.length}</span> of <span className="font-semibold">{allWOs.length}</span> work orders
               </span>
               <div className="flex items-center gap-4 text-[11px]">
-                <span className="text-slate-400">Filtered Value: <span className="font-bold font-mono text-slate-700">₹{inr(filtered.reduce((s, w) => s + parseFloat(w.total_value || 0), 0))}</span></span>
+                <span className="text-slate-400">Filtered Value: <span className="font-bold font-mono text-slate-700">₹{inr(filtered.filter(w => w.status !== 'terminated').reduce((s, w) => s + parseFloat(w.total_value || 0), 0))}</span></span>
                 <span className="text-slate-400">Total: <span className="font-bold font-mono text-indigo-700">₹{inr(totalValue)}</span></span>
               </div>
             </div>
