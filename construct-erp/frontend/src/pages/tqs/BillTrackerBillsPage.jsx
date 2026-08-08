@@ -3261,6 +3261,24 @@ export default function BillTrackerBillsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Same filters as above but WITHOUT status — used only to compute the
+  // status-tab counts/visibility. Without this, the tab bar's counts were
+  // being derived from `bills` (already server-filtered to the active tab's
+  // status), so every non-active tab read 0 and — because tabs with count 0
+  // are hidden — vanished from the bar entirely, and "All Bills" showed the
+  // active tab's count instead of the true total.
+  const { data: allStatusBills = [] } = useQuery({
+    queryKey: ['tqs-bills-all-status', { search, projectFilter, billTypeFilter, dateFrom, dateTo }],
+    queryFn: () => tqsBillsAPI.list({
+      search: search || undefined,
+      project_id: projectFilter || '',
+      bill_type: billTypeFilter || undefined,
+      from_date: dateFrom || undefined,
+      to_date: dateTo || undefined,
+    }).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: agingData = [] } = useQuery({
     queryKey: ['tqs-aging', projectFilter],
     queryFn: () => tqsBillsAPI.getAPAging({ project_id: projectFilter || '' })
@@ -3304,14 +3322,14 @@ export default function BillTrackerBillsPage() {
 
   // Status counts for Zoho-style tab bar
   const STATUS_TABS = [
-    { key: '',                    label: 'All Bills',   count: bills.length },
-    { key: 'pending',             label: 'Pending',     count: bills.filter(b => b.workflow_status === 'pending').length },
-    { key: 'stores',              label: 'Stores',      count: bills.filter(b => b.workflow_status === 'stores').length },
-    { key: 'document_controller', label: 'Doc Control', count: bills.filter(b => b.workflow_status === 'document_controller').length },
-    { key: 'qs',                  label: 'QS',          count: bills.filter(b => b.workflow_status === 'qs').length },
-    { key: 'accounts',            label: 'Accounts',    count: bills.filter(b => ['accounts','partial'].includes(b.workflow_status)).length },
-    { key: 'procurement',         label: 'Procurement', count: bills.filter(b => b.workflow_status === 'procurement').length },
-    { key: 'paid',                label: 'Paid',        count: bills.filter(b => b.workflow_status === 'paid').length },
+    { key: '',                    label: 'All Bills',   count: allStatusBills.length },
+    { key: 'pending',             label: 'Pending',     count: allStatusBills.filter(b => b.workflow_status === 'pending').length },
+    { key: 'stores',              label: 'Stores',      count: allStatusBills.filter(b => b.workflow_status === 'stores').length },
+    { key: 'document_controller', label: 'Doc Control', count: allStatusBills.filter(b => b.workflow_status === 'document_controller').length },
+    { key: 'qs',                  label: 'QS',          count: allStatusBills.filter(b => b.workflow_status === 'qs').length },
+    { key: 'accounts',            label: 'Accounts',    count: allStatusBills.filter(b => ['accounts','partial'].includes(b.workflow_status)).length },
+    { key: 'procurement',         label: 'Procurement', count: allStatusBills.filter(b => b.workflow_status === 'procurement').length },
+    { key: 'paid',                label: 'Paid',        count: allStatusBills.filter(b => b.workflow_status === 'paid').length },
   ].filter(t => t.key === '' || t.count > 0);
 
   const KPI = ({ label, value, sub, statusKey, color = 'blue', isAmount, kpiIcon: KpiIcon }) => {
@@ -3524,7 +3542,7 @@ export default function BillTrackerBillsPage() {
                 background: certFilter ? '#EF4444' : '#f1f5f9',
                 color: certFilter ? 'white' : '#64748b',
               }}>
-              {bills.filter(b => !isCertified(b)).length}
+              {allStatusBills.filter(b => !isCertified(b)).length}
             </span>
           </button>
         </div>
