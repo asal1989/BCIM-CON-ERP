@@ -2131,6 +2131,7 @@ export const hrAttendanceAPI = {
   },
   // skipProjectInject: same reason as timesheetReport above.
   monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params, skipProjectInject: true }),
+  overtimeEarlyExitReport: (params) => api.get('/hr-admin/attendance/overtime-earlyexit-report', { params, skipProjectInject: true }),
   yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
   runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
   testLateAlert:  ()       => api.post('/hr-admin/attendance/late-alerts/test', {}),

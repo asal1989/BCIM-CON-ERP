@@ -358,6 +358,7 @@ const navGroups = [
     // ── 19. Reports ──
     { to: '/hr-admin/reports',                    icon: FileBarChart,    label: 'HR Reports' },
     { to: '/hr-admin/reports/daily-attendance',   icon: ClipboardList,   label: 'Daily Attendance Report' },
+    { to: '/hr-admin/reports/overtime-earlyexit', icon: Clock,           label: 'Overtime & Early Exit' },
     { to: '/hr-admin/reports/monthly-status',     icon: BarChart2,       label: 'Monthly Status' },
     { to: '/hr-admin/reports/yearly-summary',     icon: CalendarDays,    label: 'Yearly Summary' },
     { to: '/hr-admin/reports/attendance-summary', icon: FileBarChart,    label: 'Attendance Summary Report' },
@@ -605,7 +606,7 @@ const NAV_SECTIONS = {
     { label: 'Asset Management',      paths: ['/hr-admin/emp-assets'] },
     { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
-    { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/import'] },
+    { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/overtime-earlyexit','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/import'] },
     { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/master-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },
   ],
   'Bill Tracker': [

@@ -397,6 +397,7 @@ const HRGeofencesPage             = lazy(() => import('./pages/hr-admin/Geofence
 const HRWorkCodesPage             = lazy(() => import('./pages/hr-admin/WorkCodesPage'));
 const HRRecalculateAttendancePage = lazy(() => import('./pages/hr-admin/reports/RecalculateAttendancePage'));
 const HRDailyAttendanceReportPage = lazy(() => import('./pages/hr-admin/reports/DailyAttendanceReportPage'));
+const HROvertimeEarlyExitReportPage = lazy(() => import('./pages/hr-admin/reports/OvertimeEarlyExitReportPage'));
 const HRMonthlyStatusPage         = lazy(() => import('./pages/hr-admin/reports/MonthlyStatusPage'));
 const HRYearlySummaryPage         = lazy(() => import('./pages/hr-admin/reports/YearlySummaryPage'));
 const HRAttendanceSummaryPage     = lazy(() => import('./pages/hr-admin/reports/AttendanceSummaryPage'));
@@ -1023,6 +1024,7 @@ export default function App() {
                 <Route path="hr-admin/work-codes"       element={<RequireModule module="HR & Admin"><HRWorkCodesPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/recalculate"      element={<RequireModule module="HR & Admin"><HRRecalculateAttendancePage /></RequireModule>} />
                 <Route path="hr-admin/reports/daily-attendance"    element={<RequireModule module="HR & Admin"><HRDailyAttendanceReportPage /></RequireModule>} />
+                <Route path="hr-admin/reports/overtime-earlyexit"  element={<RequireModule module="HR & Admin"><HROvertimeEarlyExitReportPage /></RequireModule>} />
                 <Route path="hr-admin/reports/monthly-status"      element={<RequireModule module="HR & Admin"><HRMonthlyStatusPage /></RequireModule>} />
                 <Route path="hr-admin/reports/yearly-summary"      element={<RequireModule module="HR & Admin"><HRYearlySummaryPage /></RequireModule>} />
                 <Route path="hr-admin/reports/attendance-summary"  element={<RequireModule module="HR & Admin"><HRAttendanceSummaryPage /></RequireModule>} />

@@ -1146,6 +1146,61 @@ router.delete('/manpower-report/configs/:id', async (req, res) => {
 // GET /monthly-report  ?year=2026&month=7&project_id=&department_id=
 // Returns one row per (employee, date) for the whole month
 // ═══════════════════════════════════════════════════════════
+
+// Overtime & Early Exit register — derives worked hours from in_time/out_time
+// (hr_attendance has no stored hours_worked column, unlike sc_attendance),
+// scoped to rows that actually exceed 8h or logged an early exit.
+router.get('/overtime-earlyexit-report', async (req, res) => {
+  try {
+    const { date_from, date_to, project_id, type = 'all' } = req.query;
+    const cid = req.user.company_id;
+    if (!date_from || !date_to) return res.status(400).json({ error: 'date_from and date_to required' });
+
+    const scopeProjectId = await getProjectScope(req);
+    const effProject = project_id || scopeProjectId;
+
+    const params = [cid, date_from, date_to, SYSTEM_ACCOUNT_EMAILS];
+    let projFilter = '';
+    if (effProject) { projFilter = ` AND ep.project_id=$${params.length + 1}`; params.push(effProject); }
+
+    const { rows } = await query(`
+      SELECT
+        u.employee_code                        AS emp_id,
+        u.name,
+        COALESCE(des.name, u.designation, '—') AS designation,
+        COALESCE(dep.name, u.department, '—')  AS department,
+        COALESCE(pr.name, 'Head Office')       AS project_name,
+        a.attendance_date::text                AS attendance_date,
+        TO_CHAR(a.in_time,  'HH12:MI AM')      AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')      AS out_time,
+        COALESCE(a.early_exit_minutes, 0)      AS early_exit_minutes,
+        ROUND(GREATEST(0, EXTRACT(EPOCH FROM (a.out_time - a.in_time))/3600 - 8)::numeric, 2) AS overtime_hours
+      FROM hr_attendance a
+      JOIN users u              ON u.id = a.user_id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+      LEFT JOIN projects pr          ON pr.id = ep.project_id
+      WHERE a.company_id = $1
+        AND a.attendance_date BETWEEN $2 AND $3
+        AND a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+        AND u.email != ALL($4::text[])
+        ${projFilter}
+        AND (
+          GREATEST(0, EXTRACT(EPOCH FROM (a.out_time - a.in_time))/3600 - 8) > 0
+          OR COALESCE(a.early_exit_minutes, 0) > 0
+        )
+      ORDER BY a.attendance_date DESC, u.name
+    `, params);
+
+    const overtime  = rows.filter(r => Number(r.overtime_hours) > 0);
+    const earlyExit = rows.filter(r => Number(r.early_exit_minutes) > 0);
+    const filtered = type === 'overtime' ? overtime : type === 'early_exit' ? earlyExit : rows;
+
+    res.json({ data: filtered, summary: { overtime_count: overtime.length, early_exit_count: earlyExit.length, total_overtime_hours: overtime.reduce((s,r)=>s+Number(r.overtime_hours),0) } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/monthly-report', async (req, res) => {
   try {
     const { year, month, project_id, department_id, category = 'all' } = req.query;
