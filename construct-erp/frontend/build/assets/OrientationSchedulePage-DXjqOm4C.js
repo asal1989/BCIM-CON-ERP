@@ -1,0 +1,1 @@
+import{j as e}from"./vendor-react-BAVvCkcf.js";import{O as t}from"./OnboardingPlaceholderPage-wwmG4ehU.js";import"./vendor-icons-AN63dXVW.js";function n(){return e.jsx(t,{title:"Orientation Schedule",description:"Schedule and track orientation sessions for new hires."})}export{n as default};
