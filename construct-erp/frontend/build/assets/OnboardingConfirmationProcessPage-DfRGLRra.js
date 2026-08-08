@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-C3P8e1DV.js";import{O as n}from"./OnboardingPlaceholderPage-CyzwdN6S.js";import"./vendor-icons-bwBLzX-i.js";function a(){return o.jsx(n,{title:"Confirmation Process",description:"Manage end-of-probation confirmation reviews and sign-off. See also HR Confirmation Report."})}export{a as default};
