@@ -1514,10 +1514,14 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
   const { t } = useLanguage();
   const location = useLocation();
 
-  // When pinned open and route changes, auto-open the active group
+  // Auto-open the group containing the active page on every route change —
+  // including while auto-hide (collapsed) is on. It used to skip this while
+  // collapsed, so navigating with the sidebar auto-hidden left expandedGroup
+  // stale; the next time the sidebar was hovered open it showed whatever
+  // group was open before, not the one for the page you're actually on.
   useEffect(() => {
-    if (activeGroup && !collapsed) setExpandedGroup(activeGroup);
-  }, [activeGroup, collapsed]);
+    if (activeGroup) setExpandedGroup(activeGroup);
+  }, [activeGroup]);
 
   // Auto-open the sub-group that contains the active page
   useEffect(() => {
@@ -1677,21 +1681,27 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                       {getNavSections(group).map(section => {
                         const isSub = section.label && section.items.length > 1;
                         if (!isSub) return section.items.map(item => renderLink(item, false));
+                        const key       = `${group.label}:${section.label}`;
+                        const subOpen   = expandedSection === key;
                         const subActive = section.items.some(i => matchesPath(i.to));
                         const SubIcon = section.items[0]?.icon || FolderSearch;
                         return (
-                          <div key={section.label}>
-                            <div style={{
-                              display: 'flex', alignItems: 'center', gap: 5,
-                              padding: '5px 8px 2px 20px',
-                              color: subActive ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)',
-                              fontSize: 10, fontWeight: 700,
-                              textTransform: 'uppercase', letterSpacing: '0.07em',
-                            }}>
+                          <div key={key}>
+                            <button
+                              onClick={() => setExpandedSection(subOpen ? null : key)}
+                              style={{
+                                width: '100%', display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '5px 8px 2px 20px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                                color: subActive ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)',
+                                fontSize: 10, fontWeight: 700,
+                                textTransform: 'uppercase', letterSpacing: '0.07em',
+                              }}
+                            >
                               <SubIcon size={10} style={{ flexShrink: 0 }} />
-                              {t(section.label)}
-                            </div>
-                            {section.items.map(item => renderLink(item, true))}
+                              <span style={{ flex: 1 }}>{t(section.label)}</span>
+                              <ChevronDown size={10} style={{ opacity: 0.75, transform: subOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', flexShrink: 0 }} />
+                            </button>
+                            {subOpen && section.items.map(item => renderLink(item, true))}
                           </div>
                         );
                       })}
