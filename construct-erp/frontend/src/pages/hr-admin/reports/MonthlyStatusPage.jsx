@@ -474,10 +474,22 @@ export default function MonthlyStatusPage() {
           }
           .mar-table thead { display:table-header-group !important; }
           .mar-table tr { page-break-inside:avoid !important; }
+          /* Font: each th/td carries its own inline fontFamily:'Inter, Segoe UI'
+             (screen styling), so overriding it here needs !important on the
+             cells themselves — a rule on the parent .mar-table wouldn't win,
+             since inline styles block inheritance regardless of specificity.
+             Inter (a thin grotesque sans) is what the Purchase Order print
+             template avoids: that template uses Times New Roman at solid
+             black and reads cleanly on office printers even at small sizes,
+             because a serif's thicker, higher-contrast strokes hold up far
+             better than a thin sans at 6.5pt. Match it here for the same
+             reason — this was still reported illegible with Inter even after
+             the color/weight fixes above. */
           .mar-table th, .mar-table td {
             position:static !important; min-width:0 !important;
             padding:1px 2px !important; font-size:6.5pt !important;
             border:0.5pt solid #4B5563 !important; overflow:hidden !important;
+            font-family:'Times New Roman', Times, serif !important;
           }
           /* 81mm of fixed columns leaves ~10.4mm per day across A3 landscape. */
           /* Emp IDs are 7 digits — 9mm clipped the last one. */
