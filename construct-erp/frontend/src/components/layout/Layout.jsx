@@ -369,23 +369,19 @@ const navGroups = [
     { to: '/hr-admin/payroll',           icon: CreditCard,      label: 'Payroll' },
     { to: '/hr-admin/payroll-reports',   icon: FileText,        label: 'Payroll Reports' },
     { to: '/hr-admin/salary-structures', icon: Banknote,        label: 'Salary Structures' },
-    { to: '/hr-admin/salary-structures', icon: Coins,           label: 'Earnings & Deductions' },
-    { to: '/hr-admin/salary-structures', icon: TrendingUp,      label: 'Incentives' },
     { to: '/hr-admin/employee-salaries', icon: IndianRupee,     label: 'Employee Salaries' },
     { to: '/hr-admin/lop-days',          icon: MinusCircle,     label: 'LOP Days' },
     { to: '/hr-admin/stop-salary',       icon: CircleSlash,     label: 'Stop Salary' },
     { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
     // ── 11. Claims & Reimbursements ──
     { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Expense Claims' },
-    { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Reimbursements' },
     { to: '/hr-admin/travel',            icon: MapPin,          label: 'Travel Requests' },
     // ── 12. Loans & Advances ──
     { to: '/hr-admin/loans',             icon: Wallet,          label: 'Loans & Advances' },
     // ── 13. Performance Management ──
     { to: '/hr-admin/appraisals',        icon: Star,            label: 'Appraisals' },
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
-    { to: '/hr-admin/advanced?tab=performance', icon: Target,   label: 'KPI Setup' },
-    { to: '/hr-admin/advanced?tab=performance', icon: Target,   label: 'Goal Setting' },
+    { to: '/hr-admin/advanced?tab=performance', icon: Target,   label: 'KPI & Goal Setting' },
     // ── 14. Training & Development ──
     { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
     { to: '/hr-admin/training/certifications', icon: Award,     label: 'Certifications' },
@@ -409,7 +405,6 @@ const navGroups = [
     { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
     // ── 19. Reports ──
     { to: '/hr-admin/reports',                    icon: FileBarChart,    label: 'HR Reports' },
-    { to: '/hr-admin/reports/daily-attendance',   icon: ClipboardList,   label: 'Daily Attendance Report' },
     { to: '/hr-admin/reports/overtime-earlyexit', icon: Clock,           label: 'Overtime & Early Exit' },
     { to: '/hr-admin/reports/monthly-status',     icon: BarChart2,       label: 'Monthly Status' },
     { to: '/hr-admin/reports/yearly-summary',     icon: CalendarDays,    label: 'Yearly Summary' },
@@ -429,7 +424,6 @@ const navGroups = [
     { to: '/hr-admin/reports?view=adv:exits',     icon: LogOut,          label: 'Exit Reports' },
     { to: '/hr-admin/import',                     icon: Upload,          label: 'Import Data' },
     // ── 20. Settings ──
-    { to: '/hr-admin/company-settings',  icon: Settings,        label: 'Company Settings' },
     { to: '/hr-admin/master-settings',   icon: Cog,             label: 'Master Settings' },
     { to: '/hr-admin/sms-settings',      icon: MessageSquare,   label: 'SMS Settings' },
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
@@ -648,23 +642,48 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'Dashboard',             paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist'] },
     { label: 'Employee Management',   paths: ['/hr-admin/employees','/hr-admin/directory','/hr-admin/segments','/hr-admin/emp-filters','/hr-admin/emp-categories','/hr-admin/employee-transfer'] },
-    { label: 'Organization Structure',paths: ['/hr-admin/company-settings','/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
-    { label: 'Recruitment',           paths: ['/hr-admin/recruitment'] },
-    { label: 'Onboarding',            paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
-    { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/live','/hr-admin/attendance/missing-punch','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
-    { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leave-entries'] },
+    { label: 'Organization Structure',paths: ['/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/departments?panel=designations','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
+    { label: 'Recruitment',           paths: ['/hr-admin/recruitment','/hr-admin/recruitment?tab=Candidates'] },
+    { label: 'Onboarding',            paths: [
+      '/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist',
+      '/hr-admin/onboarding/document-verification',
+      '/hr-admin/onboarding/document-verification/pending','/hr-admin/onboarding/document-verification/employees',
+      '/hr-admin/onboarding/document-verification/upload','/hr-admin/onboarding/document-verification/verify',
+      '/hr-admin/onboarding/document-verification/rejected','/hr-admin/onboarding/document-verification/missing',
+      '/hr-admin/onboarding/offer-appointment',
+      '/hr-admin/onboarding/offer-appointment/requests','/hr-admin/onboarding/offer-appointment/approval',
+      '/hr-admin/onboarding/offer-appointment/letter','/hr-admin/onboarding/offer-appointment/acceptance',
+      '/hr-admin/onboarding/offer-appointment/appointments','/hr-admin/onboarding/offer-appointment/appointment-approval',
+      '/hr-admin/onboarding/offer-appointment/templates','/hr-admin/onboarding/offer-appointment/signatures',
+      '/hr-admin/onboarding/offer-appointment/email','/hr-admin/onboarding/offer-appointment/history',
+      '/hr-admin/onboarding/offer-appointment/reports','/hr-admin/onboarding/offer-appointment/settings',
+      '/hr-admin/onboarding/asset-allocation',
+      '/hr-admin/onboarding/id-card',
+      '/hr-admin/onboarding/id-card/generate','/hr-admin/onboarding/id-card/employees',
+      '/hr-admin/onboarding/id-card/templates','/hr-admin/onboarding/id-card/preview',
+      '/hr-admin/onboarding/id-card/bulk','/hr-admin/onboarding/id-card/print-queue',
+      '/hr-admin/onboarding/id-card/reprint','/hr-admin/onboarding/id-card/lost-damaged',
+      '/hr-admin/onboarding/id-card/qr-codes','/hr-admin/onboarding/id-card/history',
+      '/hr-admin/onboarding/id-card/reports','/hr-admin/onboarding/id-card/settings',
+      '/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions',
+      '/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms',
+      '/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback',
+      '/hr-admin/onboarding/reports','/hr-admin/onboarding/settings',
+    ] },
+    { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/live','/hr-admin/attendance/missing-punch','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/reports/daily-attendance','/hr-admin/attendance/dashboard?focus=late','/hr-admin/reports/overtime-earlyexit?type=early_exit','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
+    { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leaves','/hr-admin/leave-entries'] },
     { label: 'Shift Management',      paths: ['/hr-admin/shifts','/hr-admin/shift-calendar','/hr-admin/shift-roster','/hr-admin/emp-shifts','/hr-admin/shift-schedule'] },
     { label: 'Holiday Calendar',      paths: ['/hr-admin/holidays'] },
     { label: 'Payroll',               paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/lop-days','/hr-admin/stop-salary','/hr/payroll'] },
     { label: 'Claims & Reimbursements', paths: ['/hr-admin/expenses','/hr-admin/travel'] },
     { label: 'Loans & Advances',      paths: ['/hr-admin/loans'] },
-    { label: 'Performance Management', paths: ['/hr-admin/appraisals','/hr-admin/performance'] },
-    { label: 'Training & Development', paths: ['/hr-admin/training'] },
-    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/reports/confirmation','/hr-admin/policies','/hr-admin/letters'] },
-    { label: 'Asset Management',      paths: ['/hr-admin/emp-assets'] },
+    { label: 'Performance Management', paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/advanced?tab=performance'] },
+    { label: 'Training & Development', paths: ['/hr-admin/training','/hr-admin/training/certifications','/hr-admin/training/assessment'] },
+    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/compliance?tab=it','/hr-admin/compliance?tab=challan','/hr-admin/compliance?tab=bonus','/hr-admin/reports/confirmation','/hr-admin/policies','/hr-admin/letters'] },
+    { label: 'Asset Management',      paths: ['/hr-admin/emp-assets','/hr-admin/emp-assets?category=uniform'] },
     { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
-    { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/overtime-earlyexit','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/import'] },
+    { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/overtime-earlyexit','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/reports?view=empm:master','/hr-admin/reports?view=adv:recruitment','/hr-admin/reports?view=adv:training','/hr-admin/reports?view=adv:goals','/hr-admin/reports?view=compliance','/hr-admin/reports?view=adv:exits','/hr-admin/import'] },
     { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/master-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },
   ],
   'Bill Tracker': [
@@ -727,13 +746,28 @@ const NAV_SECTIONS = {
 function getNavSections(group) {
   const config = NAV_SECTIONS[group.label];
   if (!config) return [{ label: null, items: group.items }];
-  const used = new Set();
+  // Track claimed items by ARRAY INDEX, not by `to` string. Two distinct nav
+  // items can legitimately share a `to` (e.g. two labels for the same page's
+  // different tabs/entry points) — deduping by string used to make every
+  // section resolve to the SAME first-matching item and silently drop any
+  // other item with that same route from the menu entirely, with no warning.
+  // Claiming by index means each config path binds to one still-unclaimed
+  // item, in order, so duplicates spread across their sections instead of
+  // collapsing onto one and erasing the rest.
+  const usedIdx = new Set();
+  const claimUnused = (p) => {
+    const idx = group.items.findIndex((i, idx) =>
+      !usedIdx.has(idx) && (i.to === p || i.to.split('?')[0] === p)
+    );
+    if (idx === -1) return null;
+    usedIdx.add(idx);
+    return group.items[idx];
+  };
   const sections = config.map(s => ({
     label: s.label,
-    items: s.paths.map(p => group.items.find(i => i.to === p || i.to.split('?')[0] === p)).filter(Boolean),
+    items: s.paths.map(claimUnused).filter(Boolean),
   })).filter(s => s.items.length > 0);
-  sections.forEach(s => s.items.forEach(i => used.add(i.to)));
-  const remaining = group.items.filter(i => !used.has(i.to));
+  const remaining = group.items.filter((i, idx) => !usedIdx.has(idx));
   if (remaining.length) sections.push({ label: null, items: remaining });
   return sections;
 }
@@ -775,7 +809,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
     const Icon = item.icon;
     return (
       <NavLink
-        key={item.to}
+        key={`${item.to}|${item.label}`}
         to={item.to}
         onClick={onClose}
         style={{
@@ -1448,7 +1482,7 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPage
                     const Icon = item.icon;
                     const active = matchesPath(item.to);
                     return (
-                      <NavLink key={item.to} to={item.to} onClick={onClose}
+                      <NavLink key={`${item.to}|${item.label}`} to={item.to} onClick={onClose}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: nested ? '7px 16px 7px 40px' : '7px 16px 7px 28px',
@@ -1624,7 +1658,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                 const active = matchesPath(item.to);
                 return (
                   <NavLink
-                    key={item.to}
+                    key={`${item.to}|${item.label}`}
                     to={item.to}
                     onClick={handleNavClick}
                     style={{
