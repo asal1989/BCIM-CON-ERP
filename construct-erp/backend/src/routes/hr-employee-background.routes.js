@@ -112,6 +112,13 @@ runSchemaInit('hr-employee-background-v1', async () => {
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_role_history_user ON employee_role_history(user_id, effective_date DESC)`);
+});
+
+// Separate migration key — 'hr-employee-background-v1' already ran in
+// production before this table was added, and runSchemaInit tasks execute
+// exactly once ever, so appending to that block would never actually
+// create this table on the live database.
+runSchemaInit('hr-employee-transfers-v1', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS hr_employee_transfers (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
