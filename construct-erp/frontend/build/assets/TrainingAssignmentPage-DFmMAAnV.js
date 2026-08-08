@@ -1,1 +1,0 @@
-import{j as i}from"./vendor-react-BAVvCkcf.js";import{O as n}from"./OnboardingPlaceholderPage-BebTyrKI.js";import"./vendor-icons-CXK5zR4k.js";function s(){return i.jsx(n,{title:"Training Assignment",description:"Assign induction and role-specific training to new hires."})}export{s as default};

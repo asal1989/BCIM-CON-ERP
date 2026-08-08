@@ -11,7 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Package, Search, ArrowLeft, ChevronDown, Laptop, Smartphone, IdCard,
+  Package, Search, ArrowLeft, ChevronDown, Laptop, Smartphone, Contact as IdCard,
   PackagePlus, ArrowRight, CheckCircle2, Circle,
 } from 'lucide-react';
 import { hrOnboardingAPI, hrEmpAssetsAPI, hrMastersAPI } from '../../../api/client';
