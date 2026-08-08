@@ -910,6 +910,51 @@ router.patch('/:id/revert', authorize('super_admin','admin'), async (req, res) =
   }
 });
 
+// PATCH /ra-bills/:id/bill-number — correct the bill number/date without
+// touching amounts or re-running the approval workflow. The main PUT :id
+// only allows edits while status is draft/rejected (it replaces the whole
+// bill including recomputed amounts), so a verified/certified bill has no
+// other way to fix a numbering/date typo. Certification auto-posts a GL
+// journal entry keyed by bill_number (see /approve above) — if one exists,
+// keep its reference column in sync so it's still findable by the new
+// number. Blocked once paid: a settled bill's reference shouldn't move.
+router.patch('/:id/bill-number', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const { bill_number, bill_date } = req.body;
+    if (!bill_number && !bill_date) return res.status(400).json({ error: 'bill_number or bill_date is required' });
+
+    const existing = await query(
+      `SELECT rb.* FROM ra_bills rb JOIN projects p ON rb.project_id = p.id
+       WHERE rb.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const bill = existing.rows[0];
+    if (bill.status === 'paid') return res.status(400).json({ error: 'Cannot renumber a bill that has already been paid' });
+
+    const oldRef = bill.bill_number || bill.id;
+    const result = await query(
+      `UPDATE ra_bills SET bill_number=COALESCE($1,bill_number), bill_date=COALESCE($2,bill_date), updated_at=NOW()
+       WHERE id=$3 RETURNING *`,
+      [bill_number || null, bill_date || null, req.params.id]
+    );
+    const updated = result.rows[0];
+    const newRef = updated.bill_number || updated.id;
+
+    if (bill_number && newRef !== oldRef) {
+      await query(
+        `UPDATE journal_entries SET reference=$1 WHERE company_id=$2 AND source='auto_ra_bill' AND reference=$3`,
+        [newRef, req.user.company_id, oldRef]
+      ).catch(() => {});
+    }
+
+    await logAudit(req, { action: 'update', tableName: 'ra_bills', recordId: req.params.id, oldValues: { bill_number: bill.bill_number, bill_date: bill.bill_date }, newValues: { bill_number: updated.bill_number, bill_date: updated.bill_date } });
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /ra-bills/:id/pay — Finance marks certified bill as paid
 router.patch('/:id/pay', authorize('super_admin','admin','accountant'), async (req, res) => {
   try {
