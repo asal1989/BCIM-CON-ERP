@@ -326,7 +326,19 @@ const DocVerificationRejectedPage  = lazy(() => import('./pages/hr-admin/onboard
 const DocVerificationMissingPage   = lazy(() => import('./pages/hr-admin/onboarding/document-verification/MissingDocumentsPage'));
 const OfferAppointmentPage         = lazy(() => import('./pages/hr-admin/onboarding/OfferAppointmentPage'));
 const OnboardingAssetAllocationPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingAssetAllocationPage'));
-const IDCardGenerationPage         = lazy(() => import('./pages/hr-admin/onboarding/IDCardGenerationPage'));
+const IdCardDashboardPage          = lazy(() => import('./pages/hr-admin/onboarding/id-card/DashboardPage'));
+const IdCardGeneratePage           = lazy(() => import('./pages/hr-admin/onboarding/id-card/GenerateIdCardPage'));
+const IdCardEmployeeSelectionPage  = lazy(() => import('./pages/hr-admin/onboarding/id-card/EmployeeSelectionPage'));
+const IdCardTemplatesPage          = lazy(() => import('./pages/hr-admin/onboarding/id-card/CardTemplatesPage'));
+const IdCardPreviewPage            = lazy(() => import('./pages/hr-admin/onboarding/id-card/CardPreviewPage'));
+const IdCardBulkGenerationPage     = lazy(() => import('./pages/hr-admin/onboarding/id-card/BulkGenerationPage'));
+const IdCardPrintQueuePage         = lazy(() => import('./pages/hr-admin/onboarding/id-card/PrintQueuePage'));
+const IdCardReprintPage            = lazy(() => import('./pages/hr-admin/onboarding/id-card/ReprintIdCardPage'));
+const IdCardLostDamagedPage        = lazy(() => import('./pages/hr-admin/onboarding/id-card/LostDamagedCardPage'));
+const IdCardQRManagementPage       = lazy(() => import('./pages/hr-admin/onboarding/id-card/QRCodeManagementPage'));
+const IdCardHistoryPage            = lazy(() => import('./pages/hr-admin/onboarding/id-card/CardHistoryPage'));
+const IdCardReportsPage            = lazy(() => import('./pages/hr-admin/onboarding/id-card/ReportsPage'));
+const IdCardSettingsPage           = lazy(() => import('./pages/hr-admin/onboarding/id-card/SettingsPage'));
 const EmailAccountCreationPage     = lazy(() => import('./pages/hr-admin/onboarding/EmailAccountCreationPage'));
 const AccessPermissionsPage        = lazy(() => import('./pages/hr-admin/onboarding/AccessPermissionsPage'));
 const TrainingAssignmentPage       = lazy(() => import('./pages/hr-admin/onboarding/TrainingAssignmentPage'));
@@ -966,7 +978,19 @@ export default function App() {
                 <Route path="hr-admin/onboarding/document-verification/missing" element={<RequireModule module="HR & Admin"><DocVerificationMissingPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferAppointmentPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/asset-allocation" element={<RequireModule module="HR & Admin"><OnboardingAssetAllocationPage /></RequireModule>} />
-                <Route path="hr-admin/onboarding/id-card" element={<RequireModule module="HR & Admin"><IDCardGenerationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card" element={<RequireModule module="HR & Admin"><IdCardDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/generate" element={<RequireModule module="HR & Admin"><IdCardGeneratePage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/employees" element={<RequireModule module="HR & Admin"><IdCardEmployeeSelectionPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/templates" element={<RequireModule module="HR & Admin"><IdCardTemplatesPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/preview" element={<RequireModule module="HR & Admin"><IdCardPreviewPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/bulk" element={<RequireModule module="HR & Admin"><IdCardBulkGenerationPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/print-queue" element={<RequireModule module="HR & Admin"><IdCardPrintQueuePage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/reprint" element={<RequireModule module="HR & Admin"><IdCardReprintPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/lost-damaged" element={<RequireModule module="HR & Admin"><IdCardLostDamagedPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/qr-codes" element={<RequireModule module="HR & Admin"><IdCardQRManagementPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/history" element={<RequireModule module="HR & Admin"><IdCardHistoryPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/reports" element={<RequireModule module="HR & Admin"><IdCardReportsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/id-card/settings" element={<RequireModule module="HR & Admin"><IdCardSettingsPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/email-account" element={<RequireModule module="HR & Admin"><EmailAccountCreationPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/access-permissions" element={<RequireModule module="HR & Admin"><AccessPermissionsPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/training" element={<RequireModule module="HR & Admin"><TrainingAssignmentPage /></RequireModule>} />

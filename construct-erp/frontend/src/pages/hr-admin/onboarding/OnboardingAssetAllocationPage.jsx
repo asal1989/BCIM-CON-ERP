@@ -11,7 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Package, Search, ArrowLeft, ChevronDown, Laptop, Smartphone, Contact as IdCard,
+  Package, Search, ArrowLeft, ChevronDown, Laptop, Smartphone, Contact,
   PackagePlus, ArrowRight, CheckCircle2, Circle,
 } from 'lucide-react';
 import { hrOnboardingAPI, hrEmpAssetsAPI, hrMastersAPI } from '../../../api/client';
@@ -177,7 +177,7 @@ export default function OnboardingAssetAllocationPage() {
         <KpiCard label="Laptop Assigned" value={it.laptop_assigned} icon={Laptop} color={B.success} bg="#10B98118" delay={0.02} />
         <KpiCard label="Laptop Pending" value={it.laptop_pending} icon={Laptop} color={B.warning} bg="#F59E0B18" delay={0.04} />
         <KpiCard label="Mobile Assigned" value={it.mobile_assigned} icon={Smartphone} color={B.blue} bg={`${B.blue}18`} delay={0.06} />
-        <KpiCard label="Access Card Assigned" value={it.access_card_assigned} icon={IdCard} color={B.navy} bg={`${B.navy}18`} delay={0.08} />
+        <KpiCard label="Access Card Assigned" value={it.access_card_assigned} icon={Contact} color={B.navy} bg={`${B.navy}18`} delay={0.08} />
       </div>
 
       <motion.div {...fade(0.1)} className="bg-white rounded-2xl p-3 mb-4 border border-gray-100 flex flex-wrap items-center gap-3" style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>

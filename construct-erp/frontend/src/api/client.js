@@ -610,6 +610,33 @@ export const hrEmpAssetsAPI = {
   byEmp:    (empId) => api.get(`/hr-admin/emp-assets/by-employee/${empId}`),
 };
 
+export const hrIdCardAPI = {
+  summary:        ()        => api.get('/hr-admin/id-cards/summary'),
+  templates:      ()        => api.get('/hr-admin/id-cards/templates'),
+  createTemplate: (d)       => api.post('/hr-admin/id-cards/templates', d),
+  updateTemplate: (id, d)   => api.put(`/hr-admin/id-cards/templates/${id}`, d),
+  deleteTemplate: (id)      => api.delete(`/hr-admin/id-cards/templates/${id}`),
+  employees:      (p)       => api.get('/hr-admin/id-cards/employees', { params: p }),
+  generate:       (d)       => api.post('/hr-admin/id-cards/cards/generate', d),
+  bulkGenerate:   (d)       => api.post('/hr-admin/id-cards/cards/bulk', d),
+  cards:          (p)       => api.get('/hr-admin/id-cards/cards', { params: p }),
+  card:           (id)      => api.get(`/hr-admin/id-cards/cards/${id}`),
+  reprint:        (id)      => api.post(`/hr-admin/id-cards/cards/${id}/reprint`),
+  printQueue:     (p)       => api.get('/hr-admin/id-cards/print-queue', { params: p }),
+  enqueuePrint:   (d)       => api.post('/hr-admin/id-cards/print-queue', d),
+  updateQueue:    (id, d)   => api.patch(`/hr-admin/id-cards/print-queue/${id}`, d),
+  reissueList:    (p)       => api.get('/hr-admin/id-cards/reissue', { params: p }),
+  requestReissue: (d)       => api.post('/hr-admin/id-cards/reissue', d),
+  approveReissue: (id)      => api.patch(`/hr-admin/id-cards/reissue/${id}/approve`),
+  rejectReissue:  (id, d)   => api.patch(`/hr-admin/id-cards/reissue/${id}/reject`, d),
+  qrList:         (p)       => api.get('/hr-admin/id-cards/qr', { params: p }),
+  regenerateQr:   (empId)   => api.post(`/hr-admin/id-cards/qr/${empId}/regenerate`),
+  history:        (p)       => api.get('/hr-admin/id-cards/history', { params: p }),
+  report:         (key)     => api.get(`/hr-admin/id-cards/reports/${key}`),
+  getSettings:    ()        => api.get('/hr-admin/id-cards/settings'),
+  updateSettings: (d)       => api.put('/hr-admin/id-cards/settings', d),
+};
+
 export const hrTravelAPI = {
   list:     (p)     => api.get('/hr-admin/travel', { params: p }),
   create:   (d)     => api.post('/hr-admin/travel', d),
