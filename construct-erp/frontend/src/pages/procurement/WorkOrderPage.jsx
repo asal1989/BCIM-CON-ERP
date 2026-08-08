@@ -1944,7 +1944,10 @@ export default function WorkOrderPage() {
   const today  = dayjs();
 
   /* ── KPI metrics ── */
-  const totalValue       = allWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
+  // Terminated WOs are no longer a live commitment — excluded from every
+  // aggregate total (KPI card, table footer) so "Contract Value"/"Total"
+  // reflects only what's actually still committed.
+  const totalValue       = allWOs.filter(w => w.status !== 'terminated').reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const activeWOs        = allWOs.filter(w => ['active', 'approved'].includes(w.status));
   const activeValue      = activeWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const pendingApproval  = allWOs.filter(w => ['draft', 'pending', 'submitted'].includes(w.status));
@@ -2423,7 +2426,7 @@ export default function WorkOrderPage() {
                 Showing <span className="font-semibold text-slate-600">{filtered.length}</span> of <span className="font-semibold">{allWOs.length}</span> work orders
               </span>
               <div className="flex items-center gap-4 text-[11px]">
-                <span className="text-slate-400">Filtered Value: <span className="font-bold font-mono text-slate-700">₹{inr(filtered.reduce((s, w) => s + parseFloat(w.total_value || 0), 0))}</span></span>
+                <span className="text-slate-400">Filtered Value: <span className="font-bold font-mono text-slate-700">₹{inr(filtered.filter(w => w.status !== 'terminated').reduce((s, w) => s + parseFloat(w.total_value || 0), 0))}</span></span>
                 <span className="text-slate-400">Total: <span className="font-bold font-mono text-indigo-700">₹{inr(totalValue)}</span></span>
               </div>
             </div>
