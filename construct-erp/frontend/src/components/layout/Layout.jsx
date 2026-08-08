@@ -18,6 +18,7 @@ import {
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
   RefreshCw, Shuffle, Globe, Database, CloudSun,
   UserPlus, GraduationCap, Timer, FileCheck2, Contact, Award,
+  LayoutTemplate, Eye, Layers3, ListChecks, RotateCcw, FileWarning, QrCode,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -292,6 +293,18 @@ const navGroups = [
     { to: '/hr-admin/onboarding/offer-appointment',      icon: FileSignature,   label: 'Offer & Appointment' },
     { to: '/hr-admin/onboarding/asset-allocation',       icon: Package,         label: 'IT Asset Allocation' },
     { to: '/hr-admin/onboarding/id-card',                icon: Contact,         label: 'ID Card Generation' },
+    { to: '/hr-admin/onboarding/id-card/generate',       icon: UserPlus,        label: 'Generate ID Card' },
+    { to: '/hr-admin/onboarding/id-card/employees',      icon: Users,           label: 'ID Card — Employee Selection' },
+    { to: '/hr-admin/onboarding/id-card/templates',      icon: LayoutTemplate,  label: 'Card Templates' },
+    { to: '/hr-admin/onboarding/id-card/preview',        icon: Eye,             label: 'Card Preview' },
+    { to: '/hr-admin/onboarding/id-card/bulk',           icon: Layers3,         label: 'Bulk ID Generation' },
+    { to: '/hr-admin/onboarding/id-card/print-queue',    icon: ListChecks,      label: 'Print Queue' },
+    { to: '/hr-admin/onboarding/id-card/reprint',        icon: RotateCcw,       label: 'Reprint ID Card' },
+    { to: '/hr-admin/onboarding/id-card/lost-damaged',   icon: FileWarning,     label: 'Lost / Damaged Card' },
+    { to: '/hr-admin/onboarding/id-card/qr-codes',       icon: QrCode,          label: 'QR Code Management' },
+    { to: '/hr-admin/onboarding/id-card/history',        icon: History,         label: 'Card History' },
+    { to: '/hr-admin/onboarding/id-card/reports',        icon: FileBarChart,    label: 'ID Card Reports' },
+    { to: '/hr-admin/onboarding/id-card/settings',       icon: Settings,        label: 'ID Card Settings' },
     { to: '/hr-admin/onboarding/email-account',          icon: Mail,            label: 'Email & Account Creation' },
     { to: '/hr-admin/onboarding/access-permissions',     icon: Key,             label: 'Access Permissions' },
     { to: '/hr-admin/onboarding/training',               icon: GraduationCap,   label: 'Training Assignment' },
