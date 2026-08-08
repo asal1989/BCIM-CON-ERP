@@ -53,6 +53,17 @@ router.post('/agent-push', async (req, res) => {
 
     const results = { synced: 0, skipped: 0, not_found: [], errors: [] };
 
+    // Build every row's values in memory first (pure/in-memory work — no DB
+    // calls), then insert each table in ONE multi-row statement instead of
+    // one round-trip per record. The agent pushes every ~30s, but during a
+    // shift-start rush (dozens of punches in a few minutes) the old
+    // one-row-at-a-time loop could take several seconds per push, which
+    // serialized against the agent's next tick and made "near-real-time"
+    // sync visibly lag. Batching collapses that to a handful of round-trips
+    // regardless of batch size.
+    const hrRows = new Map();  // key: `${userId}|${date}` — last one wins, same as sequential upserts did
+    const scRows = new Map();  // key: `${workerId}|${date}`
+
     for (const rec of records) {
       const code   = String(rec.emp_code || '').trim().toLowerCase();
       const userId = empMap[code];
@@ -66,47 +77,51 @@ router.post('/agent-push', async (req, res) => {
       const hasOut  = !!outTime && outTime !== inTime;
       const status  = resolveStatus(hasIn, hasOut);
 
-      try {
-        if (userId) {
-          const lateMin = lateMinutesFor(inTime, cutoffMap[userId] ?? DEFAULT_CUTOFF_MINS);
-          await query(
-            `INSERT INTO hr_attendance
-               (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, source)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,'essl_agent')
-             ON CONFLICT (user_id, attendance_date) DO UPDATE
-               SET status=$4,
-                   in_time=COALESCE($5, hr_attendance.in_time),
-                   out_time=COALESCE($6, hr_attendance.out_time),
-                   late_minutes=$7, source='essl_agent'
-             WHERE hr_attendance.leave_request_id IS NULL
-               AND hr_attendance.source NOT IN ('regularization','manual')`,
-            [userId, company_id, rec.date, status, inTime, outTime, lateMin]
-          );
-        } else {
-          // SC worker — write to sc_attendance
-          let hoursWorked = 8;
-          if (inTime && outTime && outTime !== inTime) {
-            const [ih, im] = inTime.split(':').map(Number);
-            const [oh, om] = outTime.split(':').map(Number);
-            const diff = (oh * 60 + om) - (ih * 60 + im);
-            if (diff > 0) hoursWorked = Math.min(parseFloat((diff / 60).toFixed(2)), 12);
-          }
-          // Split into regular (<=8h) + overtime so the NMR/bill price this
-          // day against the right WO line items.
-          const h = splitDayHours(hoursWorked);
-          await query(
-            `INSERT INTO sc_attendance
-               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, overtime_hours, in_time, out_time, remarks)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$11,$9,$10,'essl_agent')
-             ON CONFLICT (worker_id, attendance_date) DO UPDATE
-               SET status=$7, hours_worked=$8, overtime_hours=$11, in_time=$9, out_time=$10, remarks='essl_agent'`,
-            [company_id, scWorker.project_id, scWorker.sc_id, scWorker.wo_id,
-             scWorker.id, rec.date, status, h.regular, inTime || null, (hasOut ? outTime : null),
-             h.overtime]
-          );
+      if (userId) {
+        const lateMin = lateMinutesFor(inTime, cutoffMap[userId] ?? DEFAULT_CUTOFF_MINS);
+        hrRows.set(`${userId}|${rec.date}`, [userId, company_id, rec.date, status, inTime, outTime, lateMin]);
+      } else {
+        let hoursWorked = 8;
+        if (inTime && outTime && outTime !== inTime) {
+          const [ih, im] = inTime.split(':').map(Number);
+          const [oh, om] = outTime.split(':').map(Number);
+          const diff = (oh * 60 + om) - (ih * 60 + im);
+          if (diff > 0) hoursWorked = Math.min(parseFloat((diff / 60).toFixed(2)), 12);
         }
-        results.synced++;
-      } catch (e2) { results.errors.push({ emp: rec.emp_code, date: rec.date, error: e2.message }); }
+        // Split into regular (<=8h) + overtime so the NMR/bill price this
+        // day against the right WO line items.
+        const h = splitDayHours(hoursWorked);
+        scRows.set(`${scWorker.id}|${rec.date}`, [
+          company_id, scWorker.project_id, scWorker.sc_id, scWorker.wo_id, scWorker.id,
+          rec.date, status, h.regular, h.overtime, inTime || null, (hasOut ? outTime : null),
+        ]);
+      }
+    }
+
+    if (hrRows.size) {
+      try {
+        await bulkUpsertHrAttendance([...hrRows.values()]);
+        results.synced += hrRows.size;
+      } catch (e2) {
+        // Fall back to the slower one-row-at-a-time path so a single bad row
+        // (or a rare cross-row conflict) can't drop an entire good batch.
+        for (const row of hrRows.values()) {
+          try { await bulkUpsertHrAttendance([row]); results.synced++; }
+          catch (e3) { results.errors.push({ emp: row[0], date: row[2], error: e3.message }); }
+        }
+      }
+    }
+
+    if (scRows.size) {
+      try {
+        await bulkUpsertScAttendance([...scRows.values()]);
+        results.synced += scRows.size;
+      } catch (e2) {
+        for (const row of scRows.values()) {
+          try { await bulkUpsertScAttendance([row]); results.synced++; }
+          catch (e3) { results.errors.push({ worker: row[4], date: row[5], error: e3.message }); }
+        }
+      }
     }
 
     // ── Save raw swipes to essl_device_logs ───────────────────────────────
@@ -116,17 +131,19 @@ router.post('/agent-push', async (req, res) => {
     // TIMESTAMPTZ column — otherwise Postgres/pg silently interprets it as
     // UTC and every swipe is stored ~5.5 hours later than it actually happened.
     if (raw_swipes.length) {
+      const swipeRows = new Map(); // dedupe: agent re-sends the last ~30s of the previous window every tick
       for (const s of raw_swipes) {
         const swipeTimeIST = /[Z+-]\d{2}:?\d{2}$|Z$/.test(String(s.swipe_time).trim())
           ? s.swipe_time
           : `${String(s.swipe_time).trim()}+05:30`;
-        await query(
-          `INSERT INTO essl_device_logs (company_id, emp_code, swipe_time, direction, source)
-           VALUES ($1,$2,$3,$4,'agent')
-           ON CONFLICT (company_id, emp_code, swipe_time)
-           DO UPDATE SET direction=$4, source='agent'`,
-          [company_id, String(s.emp_code).trim(), swipeTimeIST, s.direction || null]
-        ).catch(() => {});
+        const empCode = String(s.emp_code).trim();
+        swipeRows.set(`${empCode}|${swipeTimeIST}`, [company_id, empCode, swipeTimeIST, s.direction || null]);
+      }
+      try {
+        await bulkUpsertDeviceLogs([...swipeRows.values()]);
+      } catch (_) {
+        // Best-effort, same as before — raw log is diagnostic, never blocks the real sync.
+        for (const row of swipeRows.values()) await bulkUpsertDeviceLogs([row]).catch(() => {});
       }
     }
 
@@ -320,6 +337,71 @@ function buildMssqlConfig(cfg) {
 
 // ─── Status resolver ──────────────────────────────────────────────────────────
 // Single punch (in only OR out only) = present.
+// ── Bulk upsert helpers for POST /agent-push ─────────────────────────────────
+// Each takes an array of already-computed row-value arrays (same column order
+// as the old per-row INSERT) and does the whole batch in one round-trip via a
+// multi-row VALUES list, instead of one query per row.
+function buildValuesList(rows, colsPerRow) {
+  const placeholders = [];
+  const params = [];
+  let p = 1;
+  for (const row of rows) {
+    const ph = [];
+    for (let i = 0; i < colsPerRow; i++) ph.push(`$${p++}`);
+    placeholders.push(`(${ph.join(',')})`);
+    params.push(...row);
+  }
+  return { placeholdersSql: placeholders.join(','), params };
+}
+
+async function bulkUpsertHrAttendance(rows) {
+  if (!rows.length) return;
+  const { placeholdersSql, params } = buildValuesList(rows, 7);
+  await query(
+    `INSERT INTO hr_attendance (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, source)
+     SELECT v.user_id::uuid, v.company_id::uuid, v.attendance_date::date, v.status::text,
+            v.in_time::time, v.out_time::time, v.late_minutes::int, 'essl_agent'
+     FROM (VALUES ${placeholdersSql}) AS v(user_id, company_id, attendance_date, status, in_time, out_time, late_minutes)
+     ON CONFLICT (user_id, attendance_date) DO UPDATE
+       SET status=EXCLUDED.status,
+           in_time=COALESCE(EXCLUDED.in_time, hr_attendance.in_time),
+           out_time=COALESCE(EXCLUDED.out_time, hr_attendance.out_time),
+           late_minutes=EXCLUDED.late_minutes, source='essl_agent'
+     WHERE hr_attendance.leave_request_id IS NULL
+       AND hr_attendance.source NOT IN ('regularization','manual')`,
+    params
+  );
+}
+
+async function bulkUpsertScAttendance(rows) {
+  if (!rows.length) return;
+  const { placeholdersSql, params } = buildValuesList(rows, 11);
+  await query(
+    `INSERT INTO sc_attendance (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, overtime_hours, in_time, out_time, remarks)
+     SELECT v.company_id::uuid, v.project_id::uuid, v.sc_id::uuid, v.wo_id::uuid, v.worker_id::uuid,
+            v.attendance_date::date, v.status::text, v.hours_worked::numeric, v.overtime_hours::numeric,
+            v.in_time::time, v.out_time::time, 'essl_agent'
+     FROM (VALUES ${placeholdersSql}) AS v(company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, overtime_hours, in_time, out_time)
+     ON CONFLICT (worker_id, attendance_date) DO UPDATE
+       SET status=EXCLUDED.status, hours_worked=EXCLUDED.hours_worked, overtime_hours=EXCLUDED.overtime_hours,
+           in_time=EXCLUDED.in_time, out_time=EXCLUDED.out_time, remarks='essl_agent'`,
+    params
+  );
+}
+
+async function bulkUpsertDeviceLogs(rows) {
+  if (!rows.length) return;
+  const { placeholdersSql, params } = buildValuesList(rows, 4);
+  await query(
+    `INSERT INTO essl_device_logs (company_id, emp_code, swipe_time, direction, source)
+     SELECT v.company_id::uuid, v.emp_code::text, v.swipe_time::timestamptz, v.direction::text, 'agent'
+     FROM (VALUES ${placeholdersSql}) AS v(company_id, emp_code, swipe_time, direction)
+     ON CONFLICT (company_id, emp_code, swipe_time)
+     DO UPDATE SET direction=EXCLUDED.direction, source='agent'`,
+    params
+  );
+}
+
 // SP is flagged in the frontend by checking present + null out_time.
 // No punches at all = absent.
 function resolveStatus(hasIn, hasOut) {
