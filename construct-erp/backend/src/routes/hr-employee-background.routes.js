@@ -112,6 +112,7 @@ runSchemaInit('hr-employee-background-v1', async () => {
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_role_history_user ON employee_role_history(user_id, effective_date DESC)`);
+  await query(`ALTER TABLE employee_role_history ADD COLUMN IF NOT EXISTS change_type TEXT DEFAULT 'other'`);
 });
 
 // Separate migration key — 'hr-employee-background-v1' already ran in
@@ -260,14 +261,14 @@ router.get('/:id/role-history', async (req, res) => {
 router.post('/:id/role-history', async (req, res) => {
   try {
     await getScopedEmployee(req, req.params.id);
-    const { from_designation, to_designation, from_department, to_department, effective_date, reason } = req.body;
+    const { from_designation, to_designation, from_department, to_department, effective_date, reason, change_type } = req.body;
     if (!effective_date) return res.status(400).json({ error: 'Effective date is required' });
     const { rows } = await query(`
       INSERT INTO employee_role_history
-        (user_id, company_id, from_designation, to_designation, from_department, to_department, effective_date, reason, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+        (user_id, company_id, from_designation, to_designation, from_department, to_department, effective_date, reason, created_by, change_type)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
     `, [req.params.id, req.user.company_id, from_designation || null, to_designation || null,
-        from_department || null, to_department || null, effective_date, reason || null, req.user.id]);
+        from_department || null, to_department || null, effective_date, reason || null, req.user.id, change_type || 'other']);
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
@@ -308,19 +309,26 @@ router.get('/:id/transfers', async (req, res) => {
 
 router.get('/transfers/pending', async (req, res) => {
   try {
+    const { status } = req.query;
+    const params = [req.user.company_id];
+    let statusFilter = `AND t.status = 'pending'`;
+    if (status && status !== 'all') { statusFilter = `AND t.status = $2`; params.push(status); }
+    else if (status === 'all') { statusFilter = ''; }
     const { rows } = await query(`
       SELECT t.*, u.name AS employee_name, u.employee_code,
              fp.name AS from_project_name, tp.name AS to_project_name,
-             fd.name AS from_department_name, td.name AS to_department_name
+             fd.name AS from_department_name, td.name AS to_department_name,
+             ab.name AS approved_by_name
       FROM hr_employee_transfers t
       JOIN users u                 ON u.id = t.user_id
       LEFT JOIN projects fp        ON fp.id = t.from_project_id
       LEFT JOIN projects tp        ON tp.id = t.to_project_id
       LEFT JOIN hr_departments fd  ON fd.id = t.from_department_id
       LEFT JOIN hr_departments td  ON td.id = t.to_department_id
-      WHERE t.company_id = $1 AND t.status = 'pending'
+      LEFT JOIN users ab           ON ab.id = t.approved_by
+      WHERE t.company_id = $1 ${statusFilter}
       ORDER BY t.created_at DESC
-    `, [req.user.company_id]);
+    `, params);
     res.json({ data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

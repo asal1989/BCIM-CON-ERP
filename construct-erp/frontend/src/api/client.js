@@ -2099,7 +2099,7 @@ export const hrEmployeeBackgroundAPI = {
   },
   transfers: {
     list:        (empId)      => api.get(`/hr-admin/employees/${empId}/transfers`),
-    pending:     ()           => api.get('/hr-admin/employees/transfers/pending'),
+    pending:     (params)     => api.get('/hr-admin/employees/transfers/pending', { params }),
     request:     (empId, d)   => api.post(`/hr-admin/employees/${empId}/transfer`, d),
     approve:     (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/approve`),
     reject:      (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/reject`),

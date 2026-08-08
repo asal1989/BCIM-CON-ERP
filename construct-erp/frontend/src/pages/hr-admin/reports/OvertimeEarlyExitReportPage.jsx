@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Download, Clock, LogOut } from 'lucide-react';
 
@@ -7,10 +8,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
 
 export default function OvertimeEarlyExitReportPage() {
+  const [searchParams] = useSearchParams();
   const [dateFrom, setDateFrom] = useState(monthStart());
   const [dateTo, setDateTo]     = useState(today());
   const [project, setProject]   = useState('');
-  const [tab, setTab]           = useState('overtime');
+  const [tab, setTab]           = useState(searchParams.get('type') === 'early_exit' ? 'early_exit' : 'overtime');
 
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []) });
 

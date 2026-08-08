@@ -526,6 +526,17 @@ function RoleHistorySection({ empId }) {
       </div>
       {showForm && (
         <div className="grid grid-cols-2 gap-3 mb-4 p-4 bg-gray-50 rounded-xl">
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Change Type *</label>
+            <select value={form.change_type || 'other'} onChange={e => set('change_type', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400 bg-white">
+              <option value="promotion">Promotion</option>
+              <option value="lateral">Lateral Move</option>
+              <option value="demotion">Demotion</option>
+              <option value="department_change">Department Change</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
           {[
             { key: 'from_designation', label: 'From Designation' },
             { key: 'to_designation', label: 'To Designation' },
@@ -555,20 +566,32 @@ function RoleHistorySection({ empId }) {
         <p className="text-xs text-gray-400">No role changes recorded</p>
       ) : (
         <div className="divide-y divide-gray-100">
-          {rows.map(r => (
-            <div key={r.id} className="flex items-center justify-between py-2.5">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">
-                  {r.from_designation || r.to_designation ? `${r.from_designation || '—'} → ${r.to_designation || '—'}` : ''}
-                  {r.from_department || r.to_department ? ` ${r.from_designation || r.to_designation ? '· ' : ''}${r.from_department || '—'} → ${r.to_department || '—'}` : ''}
-                </p>
-                <p className="text-xs text-gray-400">{fmtDate(r.effective_date)}{r.reason ? ` · ${r.reason}` : ''}{r.created_by_name ? ` · by ${r.created_by_name}` : ''}</p>
+          {rows.map(r => {
+            const ctCfg = {
+              promotion:         { label: 'Promotion',         bg: 'bg-emerald-50', text: 'text-emerald-700' },
+              lateral:           { label: 'Lateral Move',      bg: 'bg-blue-50',    text: 'text-blue-700'    },
+              demotion:          { label: 'Demotion',          bg: 'bg-red-50',     text: 'text-red-700'     },
+              department_change: { label: 'Department Change', bg: 'bg-violet-50',  text: 'text-violet-700'  },
+              other:             { label: 'Other',             bg: 'bg-gray-100',   text: 'text-gray-600'    },
+            }[r.change_type || 'other'];
+            return (
+              <div key={r.id} className="flex items-center justify-between py-2.5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${ctCfg.bg} ${ctCfg.text}`}>{ctCfg.label}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 mt-1">
+                    {r.from_designation || r.to_designation ? `${r.from_designation || '—'} → ${r.to_designation || '—'}` : ''}
+                    {r.from_department || r.to_department ? ` ${r.from_designation || r.to_designation ? '· ' : ''}${r.from_department || '—'} → ${r.to_department || '—'}` : ''}
+                  </p>
+                  <p className="text-xs text-gray-400">{fmtDate(r.effective_date)}{r.reason ? ` · ${r.reason}` : ''}{r.created_by_name ? ` · by ${r.created_by_name}` : ''}</p>
+                </div>
+                <button onClick={() => deleteMut.mutate(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <button onClick={() => deleteMut.mutate(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
