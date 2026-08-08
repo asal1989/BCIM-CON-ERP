@@ -1,5 +1,6 @@
 // src/pages/hr-admin/HRAdvancedPage.jsx
 import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, Briefcase, CalendarCheck, CheckCircle2, Clock3, FileCheck2, FileText,
@@ -731,7 +732,8 @@ function AnalyticsTab() {
 }
 
 export default function HRAdvancedPage() {
-  const [active, setActive] = useState('recruitment');
+  const [searchParams] = useSearchParams();
+  const [active, setActive] = useState(searchParams.get('tab') || 'recruitment');
   const employees = useQuery({ queryKey: ['hr-advanced-employees'], queryFn: () => hrEmployeesAPI.list({ employment_status: 'active' }).then(unwrap) });
   const departments = useQuery({ queryKey: ['hr-advanced-departments'], queryFn: () => hrMastersAPI.listDepts().then(unwrap) });
   const designations = useQuery({ queryKey: ['hr-advanced-designations'], queryFn: () => hrMastersAPI.listDesigs().then(unwrap) });

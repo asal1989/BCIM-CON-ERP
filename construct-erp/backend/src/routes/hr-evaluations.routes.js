@@ -86,6 +86,10 @@ runSchemaInit('hr-performance-evaluations-approval-chain', async () => {
   await query(`UPDATE hr_performance_evaluations SET status = 'manager_approved' WHERE status = 'manager_reviewed'`);
 });
 
+runSchemaInit('hr-performance-evaluations-promotion-flag', async () => {
+  await query(`ALTER TABLE hr_performance_evaluations ADD COLUMN IF NOT EXISTS promotion_recommended BOOLEAN DEFAULT FALSE`);
+});
+
 const ratingLabel = (score) => {
   if (score >= 90) return 'Outstanding';
   if (score >= 80) return 'Very Good';
@@ -154,7 +158,7 @@ router.post('/', async (req, res) => {
       kra_scores, self_total, manager_total,
       strengths, areas_of_improvement, goals_next_period,
       increment_recommended, review_type, project_site,
-      training_required, comments_remarks,
+      training_required, comments_remarks, promotion_recommended,
     } = req.body;
     const rating = ratingLabel(parseFloat(manager_total || self_total || 0));
     const { rows } = await query(
@@ -162,8 +166,8 @@ router.post('/', async (req, res) => {
          (company_id, employee_id, evaluator_id, eval_period, eval_date,
           kra_scores, self_total, manager_total, overall_rating,
           strengths, areas_of_improvement, goals_next_period, increment_recommended,
-          review_type, project_site, training_required, comments_remarks)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+          review_type, project_site, training_required, comments_remarks, promotion_recommended)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         req.user.company_id, employee_id, evaluator_id || req.user.id,
         eval_period || null, eval_date || null,
@@ -173,6 +177,7 @@ router.post('/', async (req, res) => {
         goals_next_period || null, increment_recommended || 0,
         review_type || 'monthly', project_site || null,
         training_required || null, comments_remarks || null,
+        promotion_recommended || false,
       ]
     );
     res.status(201).json({ data: rows[0] });
@@ -185,7 +190,7 @@ router.put('/:id', async (req, res) => {
       eval_date, kra_scores, self_total, manager_total,
       strengths, areas_of_improvement, goals_next_period,
       increment_recommended, status, review_type, project_site,
-      training_required, comments_remarks,
+      training_required, comments_remarks, promotion_recommended,
     } = req.body;
     const rating = ratingLabel(parseFloat(manager_total || self_total || 0));
     const { rows } = await query(
@@ -194,8 +199,8 @@ router.put('/:id', async (req, res) => {
          overall_rating=$5, strengths=$6, areas_of_improvement=$7,
          goals_next_period=$8, increment_recommended=$9, status=$10,
          review_type=$11, project_site=$12, training_required=$13,
-         comments_remarks=$14, updated_at=NOW()
-       WHERE id=$15 AND company_id=$16 RETURNING *`,
+         comments_remarks=$14, promotion_recommended=$15, updated_at=NOW()
+       WHERE id=$16 AND company_id=$17 RETURNING *`,
       [
         eval_date || null, JSON.stringify(kra_scores || []),
         self_total || null, manager_total || null, rating,
@@ -204,6 +209,7 @@ router.put('/:id', async (req, res) => {
         status || 'draft',
         review_type || 'monthly', project_site || null,
         training_required || null, comments_remarks || null,
+        promotion_recommended || false,
         req.params.id, req.user.company_id,
       ]
     );

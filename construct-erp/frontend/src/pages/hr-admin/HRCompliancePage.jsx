@@ -1,5 +1,6 @@
 // HR Compliance Reports — PF, ESI, PT, Muster Roll, Wage Register, Employment Register, Income Tax
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -28,7 +29,7 @@ const TABS = [
   { key: 'wage',       label: 'Wage Register',         icon: IndianRupee,    color: 'amber'  },
   { key: 'muster',     label: 'Muster Roll',           icon: Calendar,       color: 'rose'   },
   { key: 'employment', label: 'Employment Register',   icon: Users,          color: 'teal'   },
-  { key: 'it',         label: 'Income Tax',            icon: FileText,       color: 'orange' },
+  { key: 'it',         label: 'Income Tax / TDS',       icon: FileText,       color: 'orange' },
   { key: 'licenses',   label: 'Labour Licences',       icon: BadgeCheck,     color: 'indigo' },
   { key: 'docexpiry',  label: 'Doc Expiry',            icon: AlertTriangle,  color: 'red'    },
   { key: 'calendar',   label: 'Compliance Calendar',   icon: CalendarDays,   color: 'sky'    },
@@ -2569,7 +2570,8 @@ function NavItem({ active, onClick, icon: Icon, label, badge }) {
 }
 
 export default function HRCompliancePage({ embedded = false, initialTab }) {
-  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(initialTab || searchParams.get('tab') || 'overview');
 
   const { data: deptsRes } = useQuery({
     queryKey: ['compliance-depts'],

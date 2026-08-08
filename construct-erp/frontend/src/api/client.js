@@ -599,6 +599,8 @@ export const hrTrainingAPI = {
   updateParticipant:(id,pid,d) => api.patch(`/hr-admin/training/${id}/participants/${pid}`, d),
   removeParticipant:(id,pid)   => api.delete(`/hr-admin/training/${id}/participants/${pid}`),
   empHistory:  (empId)    => api.get(`/hr-admin/training/employee/${empId}/history`),
+  certifications: ()      => api.get('/hr-admin/training/certifications'),
+  assessments:    ()      => api.get('/hr-admin/training/assessments'),
 };
 
 export const hrEmpAssetsAPI = {
@@ -2099,7 +2101,7 @@ export const hrEmployeeBackgroundAPI = {
   },
   transfers: {
     list:        (empId)      => api.get(`/hr-admin/employees/${empId}/transfers`),
-    pending:     ()           => api.get('/hr-admin/employees/transfers/pending'),
+    pending:     (params)     => api.get('/hr-admin/employees/transfers/pending', { params }),
     request:     (empId, d)   => api.post(`/hr-admin/employees/${empId}/transfer`, d),
     approve:     (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/approve`),
     reject:      (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/reject`),
