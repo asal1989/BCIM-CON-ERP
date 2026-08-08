@@ -7,9 +7,9 @@ import {
   ArrowLeft, User, Calendar, CreditCard, TrendingUp, FileText, Briefcase,
   Phone, Mail, MapPin, Shield, Building2, Edit2, Upload, Trash2, Download, Plus, Clock,
   FileSignature, Printer, ClipboardCheck, CheckCircle2, Circle, Ban, X, Send,
-  Users, GraduationCap, Zap, Award, Heart,
+  Users, GraduationCap, Zap, Award, Heart, ArrowRightLeft,
 } from 'lucide-react';
-import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI, mailAPI, hrEmployeeBackgroundAPI } from '../../api/client';
+import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI, mailAPI, hrEmployeeBackgroundAPI, projectAPI, hrMastersAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 const B = { navy:'#0A1F5C', blue:'#2563EB', yellow:'#F4C430', success:'#10B981' };
@@ -373,6 +373,119 @@ function TimelineTab({ emp }) {
         )}
       </div>
       <RoleHistorySection empId={emp.id} />
+      <TransferSection empId={emp.id} />
+    </div>
+  );
+}
+
+// Project/department reassignment — separate from Role History (which
+// tracks designation/department text changes) because a transfer here
+// actually writes employee_profiles.project_id/department_id and goes
+// through an approve step, rather than being a free-text log entry.
+function TransferSection({ empId }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({});
+
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []) });
+  const { data: depts } = useQuery({ queryKey: ['hr-departments'], queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []) });
+  const { data, isLoading } = useQuery({
+    queryKey: ['emp-transfers', empId],
+    queryFn: () => hrEmployeeBackgroundAPI.transfers.list(empId).then(r => r.data?.data || []),
+  });
+  const requestMut = useMutation({
+    mutationFn: (d) => hrEmployeeBackgroundAPI.transfers.request(empId, d),
+    onSuccess: () => { toast.success('Transfer requested'); setForm({}); setShowForm(false); qc.invalidateQueries({ queryKey: ['emp-transfers', empId] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
+  });
+  const approveMut = useMutation({
+    mutationFn: (id) => hrEmployeeBackgroundAPI.transfers.approve(id),
+    onSuccess: () => { toast.success('Transfer approved & applied'); qc.invalidateQueries({ queryKey: ['emp-transfers', empId] }); qc.invalidateQueries({ queryKey: ['employee', empId] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
+  });
+  const rejectMut = useMutation({
+    mutationFn: (id) => hrEmployeeBackgroundAPI.transfers.reject(id),
+    onSuccess: () => { toast.success('Rejected'); qc.invalidateQueries({ queryKey: ['emp-transfers', empId] }); },
+  });
+
+  const rows = data || [];
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const STATUS_C = { pending: 'text-amber-600 bg-amber-50', approved: 'text-emerald-600 bg-emerald-50', rejected: 'text-red-600 bg-red-50' };
+
+  return (
+    <div className="mt-6 pt-5 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-black text-gray-500 uppercase tracking-wide flex items-center gap-1.5"><ArrowRightLeft className="w-3.5 h-3.5" /> Employee Transfer</h3>
+        <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700">
+          <Plus className="w-3.5 h-3.5" /> Request Transfer
+        </button>
+      </div>
+      {showForm && (
+        <div className="grid grid-cols-2 gap-3 mb-4 p-4 bg-gray-50 rounded-xl">
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To Project</label>
+            <select value={form.to_project_id || ''} onChange={e => set('to_project_id', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400">
+              <option value="">Keep current</option>
+              {(projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To Department</label>
+            <select value={form.to_department_id || ''} onChange={e => set('to_department_id', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400">
+              <option value="">Keep current</option>
+              {(depts || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Effective Date *</label>
+            <input type="date" value={form.effective_date || ''} onChange={e => set('effective_date', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Reason</label>
+            <input value={form.reason || ''} onChange={e => set('reason', e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400" />
+          </div>
+          <div className="col-span-2 flex justify-end gap-2">
+            <button onClick={() => { setShowForm(false); setForm({}); }} className="px-3 py-1.5 text-xs text-gray-500 rounded-lg hover:bg-gray-100">Cancel</button>
+            <button disabled={!form.effective_date || (!form.to_project_id && !form.to_department_id) || requestMut.isPending}
+              onClick={() => requestMut.mutate(form)}
+              className="px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-40" style={{ background: B.blue }}>
+              {requestMut.isPending ? 'Saving…' : 'Submit Request'}
+            </button>
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-gray-400">No transfer requests</p>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {rows.map(r => (
+            <div key={r.id} className="flex items-center justify-between py-2.5">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {r.from_project_name || r.to_project_name ? `${r.from_project_name || '—'} → ${r.to_project_name || '—'}` : ''}
+                  {r.from_department_name || r.to_department_name ? ` ${r.from_project_name || r.to_project_name ? '· ' : ''}${r.from_department_name || '—'} → ${r.to_department_name || '—'}` : ''}
+                </p>
+                <p className="text-xs text-gray-400">{fmtDate(r.effective_date)}{r.reason ? ` · ${r.reason}` : ''}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${STATUS_C[r.status]}`}>{r.status}</span>
+                {r.status === 'pending' && (
+                  <>
+                    <button onClick={() => approveMut.mutate(r.id)} className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Approve</button>
+                    <button onClick={() => rejectMut.mutate(r.id)} className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100">Reject</button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

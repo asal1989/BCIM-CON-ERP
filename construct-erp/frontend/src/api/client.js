@@ -2046,6 +2046,13 @@ export const hrEmployeeBackgroundAPI = {
     create: (empId, d)  => api.post(`/hr-admin/employees/${empId}/role-history`, d),
     remove: (empId, id) => api.delete(`/hr-admin/employees/${empId}/role-history/${id}`),
   },
+  transfers: {
+    list:        (empId)      => api.get(`/hr-admin/employees/${empId}/transfers`),
+    pending:     ()           => api.get('/hr-admin/employees/transfers/pending'),
+    request:     (empId, d)   => api.post(`/hr-admin/employees/${empId}/transfer`, d),
+    approve:     (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/approve`),
+    reject:      (transferId) => api.patch(`/hr-admin/employees/transfers/${transferId}/reject`),
+  },
 };
 
 export const hrOnboardingAPI = {

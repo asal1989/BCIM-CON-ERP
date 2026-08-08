@@ -112,6 +112,25 @@ runSchemaInit('hr-employee-background-v1', async () => {
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_role_history_user ON employee_role_history(user_id, effective_date DESC)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_employee_transfers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      company_id UUID REFERENCES companies(id),
+      from_project_id UUID REFERENCES projects(id),
+      to_project_id UUID REFERENCES projects(id),
+      from_department_id UUID REFERENCES hr_departments(id),
+      to_department_id UUID REFERENCES hr_departments(id),
+      effective_date DATE NOT NULL,
+      reason TEXT,
+      status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+      requested_by UUID REFERENCES users(id),
+      approved_by UUID REFERENCES users(id),
+      approved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_emp_transfers_user ON hr_employee_transfers(user_id, created_at DESC)`);
 });
 
 async function getScopedEmployee(req, userId) {
@@ -256,6 +275,96 @@ router.delete('/:id/role-history/:recordId', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Record not found' });
     res.json({ success: true });
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── Employee Transfer (project / department reassignment) ──────────────
+router.get('/:id/transfers', async (req, res) => {
+  try {
+    await getScopedEmployee(req, req.params.id);
+    const { rows } = await query(`
+      SELECT t.*, fp.name AS from_project_name, tp.name AS to_project_name,
+             fd.name AS from_department_name, td.name AS to_department_name,
+             rb.name AS requested_by_name, ab.name AS approved_by_name
+      FROM hr_employee_transfers t
+      LEFT JOIN projects fp        ON fp.id = t.from_project_id
+      LEFT JOIN projects tp        ON tp.id = t.to_project_id
+      LEFT JOIN hr_departments fd  ON fd.id = t.from_department_id
+      LEFT JOIN hr_departments td  ON td.id = t.to_department_id
+      LEFT JOIN users rb           ON rb.id = t.requested_by
+      LEFT JOIN users ab           ON ab.id = t.approved_by
+      WHERE t.user_id = $1
+      ORDER BY t.created_at DESC
+    `, [req.params.id]);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+router.get('/transfers/pending', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT t.*, u.name AS employee_name, u.employee_code,
+             fp.name AS from_project_name, tp.name AS to_project_name,
+             fd.name AS from_department_name, td.name AS to_department_name
+      FROM hr_employee_transfers t
+      JOIN users u                 ON u.id = t.user_id
+      LEFT JOIN projects fp        ON fp.id = t.from_project_id
+      LEFT JOIN projects tp        ON tp.id = t.to_project_id
+      LEFT JOIN hr_departments fd  ON fd.id = t.from_department_id
+      LEFT JOIN hr_departments td  ON td.id = t.to_department_id
+      WHERE t.company_id = $1 AND t.status = 'pending'
+      ORDER BY t.created_at DESC
+    `, [req.user.company_id]);
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:id/transfer', async (req, res) => {
+  try {
+    await getScopedEmployee(req, req.params.id);
+    const { to_project_id, to_department_id, effective_date, reason } = req.body;
+    if (!effective_date) return res.status(400).json({ error: 'Effective date is required' });
+    if (!to_project_id && !to_department_id) return res.status(400).json({ error: 'A destination project or department is required' });
+
+    const cur = await query(`SELECT project_id, department_id FROM employee_profiles WHERE user_id=$1`, [req.params.id]);
+    const { project_id: fromProject, department_id: fromDept } = cur.rows[0] || {};
+
+    const { rows } = await query(`
+      INSERT INTO hr_employee_transfers
+        (user_id, company_id, from_project_id, to_project_id, from_department_id, to_department_id, effective_date, reason, requested_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    `, [req.params.id, req.user.company_id, fromProject || null, to_project_id || fromProject || null,
+        fromDept || null, to_department_id || fromDept || null, effective_date, reason || null, req.user.id]);
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+router.patch('/transfers/:transferId/approve', async (req, res) => {
+  try {
+    const { rows } = await query(`SELECT * FROM hr_employee_transfers WHERE id=$1 AND company_id=$2`, [req.params.transferId, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Transfer request not found' });
+    const t = rows[0];
+    if (t.status !== 'pending') return res.status(400).json({ error: 'Only pending requests can be approved' });
+
+    await query(`
+      UPDATE employee_profiles SET project_id=$1, department_id=$2 WHERE user_id=$3
+    `, [t.to_project_id, t.to_department_id, t.user_id]);
+
+    const updated = await query(`
+      UPDATE hr_employee_transfers SET status='approved', approved_by=$1, approved_at=NOW() WHERE id=$2 RETURNING *
+    `, [req.user.id, req.params.transferId]);
+    res.json({ data: updated.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.patch('/transfers/:transferId/reject', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      UPDATE hr_employee_transfers SET status='rejected', approved_by=$1, approved_at=NOW()
+      WHERE id=$2 AND company_id=$3 AND status='pending' RETURNING *
+    `, [req.user.id, req.params.transferId, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Pending transfer request not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
