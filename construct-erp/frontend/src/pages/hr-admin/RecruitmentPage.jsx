@@ -273,9 +273,16 @@ function JobOpeningsTab({ jobs, onEdit, onViewCandidates }) {
 /* ═══════════════════════════ Candidates + detail drawer ═══════════════════════════ */
 function ApplicantForm({ jobId, jobs = [], onClose, onSaved }) {
   const [f, setF] = useState({ job_id: jobId || '', name: '', email: '', phone: '', current_company: '', current_designation: '', experience_years: 0, current_ctc: '', expected_ctc: '', notice_period_days: 0, source: 'portal', applied_on: dayjs().format('YYYY-MM-DD'), qualification: '', notes: '' });
+  const [resumeFile, setResumeFile] = useState(null);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const mut = useMutation({
-    mutationFn: (d) => hrRecruitmentAPI.addApplicant(d),
+    mutationFn: (d) => {
+      if (!resumeFile) return hrRecruitmentAPI.addApplicant(d);
+      const fd = new FormData();
+      Object.entries(d).forEach(([k, v]) => fd.append(k, v ?? ''));
+      fd.append('resume', resumeFile);
+      return hrRecruitmentAPI.addApplicant(fd);
+    },
     onSuccess: () => { toast.success('Candidate added'); onSaved(); onClose(); },
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
@@ -311,6 +318,9 @@ function ApplicantForm({ jobId, jobs = [], onClose, onSaved }) {
             </select>
           </Field>
           <Field label="Notes" wide><input value={f.notes || ''} onChange={e => set('notes', e.target.value)} className={INP} /></Field>
+          <Field label="Resume (PDF/DOC)" wide>
+            <input type="file" accept=".pdf,.doc,.docx" onChange={e => setResumeFile(e.target.files?.[0] || null)} className="w-full text-xs" />
+          </Field>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t">
           <button onClick={onClose} className="h-9 px-4 rounded-xl border text-xs">Cancel</button>
@@ -452,6 +462,34 @@ function OfferForm({ applicantId, applicant, onClose, onSaved }) {
   );
 }
 
+function ScreeningSection({ app, onSave, saving }) {
+  const [notes, setNotes] = useState(app.screening_notes || '');
+  const [score, setScore] = useState(app.screening_score ?? '');
+  const dirty = notes !== (app.screening_notes || '') || String(score) !== String(app.screening_score ?? '');
+
+  return (
+    <div className="mt-5 pt-4 border-t border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Resume Screening</p>
+      <div className="flex items-center gap-1 mb-2">
+        {[1, 2, 3, 4, 5].map(n => (
+          <button key={n} onClick={() => setScore(n)} type="button">
+            <Star size={16} className={n <= Number(score) ? 'text-amber-500' : 'text-slate-200'} fill={n <= Number(score) ? 'currentColor' : 'none'} />
+          </button>
+        ))}
+        {score !== '' && <button onClick={() => setScore('')} className="text-[10px] text-slate-400 ml-1">clear</button>}
+      </div>
+      <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Screening notes — fit for role, gaps, red flags…" className={TA} />
+      {app.screened_at && <p className="text-[10px] text-slate-400 mt-1">Last screened {dayjs(app.screened_at).format('DD-MM-YYYY HH:mm')}</p>}
+      <div className="flex justify-end mt-2">
+        <button disabled={!dirty || saving} onClick={() => onSave({ screening_notes: notes, screening_score: score === '' ? null : Number(score) })}
+          className="h-7 px-3 rounded-lg bg-blue-600 text-white text-[11px] font-semibold disabled:opacity-50">
+          {saving ? 'Saving…' : 'Save Screening'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CandidateDrawer({ applicantId, onClose, onChanged }) {
   const qc = useQueryClient();
   const [subTab, setSubTab] = useState('overview');
@@ -473,6 +511,11 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
   const statusMut = useMutation({
     mutationFn: (status) => hrRecruitmentAPI.updateStatus(applicantId, { status }),
     onSuccess: refreshAll, onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  const screeningMut = useMutation({
+    mutationFn: (d) => hrRecruitmentAPI.updateScreening(applicantId, d),
+    onSuccess: () => { toast.success('Screening saved'); refreshAll(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
   const startApprovalsMut = useMutation({
     mutationFn: () => hrRecruitmentAPI.startApprovals(applicantId),
@@ -544,13 +587,22 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
 
         <div className="p-5">
           {subTab === 'overview' && (
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              {[['Email', app.email], ['Phone', app.phone], ['Experience', `${app.experience_years || 0} yrs`], ['Qualification', app.qualification],
-                ['Current CTC', app.current_ctc], ['Expected CTC', app.expected_ctc], ['Notice Period', `${app.notice_period_days || 0} days`], ['Source', app.source],
-                ['Applied On', app.applied_on ? dayjs(app.applied_on).format('DD-MM-YYYY') : '—']].map(([label, val]) => (
-                <div key={label}><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-slate-800">{val || '—'}</p></div>
-              ))}
-              {app.notes && <div className="col-span-2"><p className="text-[10px] font-bold text-slate-400 uppercase">Notes</p><p className="text-slate-700">{app.notes}</p></div>}
+            <div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                {[['Email', app.email], ['Phone', app.phone], ['Experience', `${app.experience_years || 0} yrs`], ['Qualification', app.qualification],
+                  ['Current CTC', app.current_ctc], ['Expected CTC', app.expected_ctc], ['Notice Period', `${app.notice_period_days || 0} days`], ['Source', app.source],
+                  ['Applied On', app.applied_on ? dayjs(app.applied_on).format('DD-MM-YYYY') : '—']].map(([label, val]) => (
+                  <div key={label}><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-slate-800">{val || '—'}</p></div>
+                ))}
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Resume</p>
+                  {app.resume_url ? (
+                    <a href={app.resume_url} target="_blank" rel="noreferrer" className="text-blue-600 font-semibold flex items-center gap-1"><FileText size={13} /> View Resume</a>
+                  ) : <p className="text-slate-400">Not uploaded</p>}
+                </div>
+                {app.notes && <div className="col-span-2"><p className="text-[10px] font-bold text-slate-400 uppercase">Notes</p><p className="text-slate-700">{app.notes}</p></div>}
+              </div>
+              <ScreeningSection app={app} onSave={(d) => screeningMut.mutate(d)} saving={screeningMut.isPending} />
             </div>
           )}
 

@@ -314,7 +314,7 @@ export default function MonthlyStatusPage() {
 
       {/* Biometric-style In/Out grid */}
       <div id="report-print-root">
-        <ReportPrintHeader reportTitle="Monthly Attendance Report" subtitle={`${MONTHS[month-1]} ${year}${company ? ' · ' + company : ''}`} />
+        <ReportPrintHeader reportTitle="Monthly Attendance Report" subtitle={`${MONTHS[month-1]} ${year}${company ? ' · ' + company : ''}`} showTimestamp />
       <div className="mar-table-wrap" style={{ overflow:'auto', background:'#fff', borderRadius:12, border:'1px solid #E2E8F0', maxHeight:'68vh', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         {isLoading ? (
           <div className="no-print" style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>
@@ -477,7 +477,7 @@ export default function MonthlyStatusPage() {
           .mar-table th, .mar-table td {
             position:static !important; min-width:0 !important;
             padding:1px 2px !important; font-size:6.5pt !important;
-            border:0.5pt solid #9CA3AF !important; overflow:hidden !important;
+            border:0.5pt solid #4B5563 !important; overflow:hidden !important;
           }
           /* 81mm of fixed columns leaves ~10.4mm per day across A3 landscape. */
           /* Emp IDs are 7 digits — 9mm clipped the last one. */
@@ -491,14 +491,17 @@ export default function MonthlyStatusPage() {
              Out, purple Company, grey placeholders) to carry meaning
              visually — on a black & white/low-toner office printer those
              all render as faint grey and become unreadable. Force solid
-             black text everywhere in print instead — NOT bold: bold at
-             this small a print font size, combined with the tinted cell
-             backgrounds, turned the whole sheet into an illegible dark
-             smudge. Plain black is legible; the P/A/L/HD letters and cell
-             shading already carry the status without needing weight too. */
+             black text everywhere in print instead. Medium weight (500),
+             not full bold: bold at this small a print font size, combined
+             with the tinted cell backgrounds, previously turned the whole
+             sheet into an illegible dark smudge — but plain "normal" (400)
+             weight printed too faint to read on office printers, so this
+             is the middle ground: dark and legible without smudging. */
           .mar-table th, .mar-table td, .mar-io-in, .mar-io-out, .mar-status {
-            color:#000 !important; font-weight:normal !important;
+            color:#000 !important; font-weight:500 !important;
+            -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
           }
+          .mar-table th { font-weight:700 !important; }
 
           /* Stack the punches so a day needs one column, not two. */
           .mar-io { display:block !important; }
@@ -506,12 +509,12 @@ export default function MonthlyStatusPage() {
             display:block !important; padding:0 1px !important;
             font-size:6.5pt !important; line-height:1.25 !important;
           }
-          .mar-io-out { border-left:none !important; border-top:0.5pt solid #D1D5DB !important; }
+          .mar-io-out { border-left:none !important; border-top:0.5pt solid #6B7280 !important; }
           /* Present days had no status letter at all (only A/L/HD did) —
              stack a "P" above In/Out so every cell states its status. */
           .mar-status {
             display:block !important; font-size:6pt !important; line-height:1.1 !important;
-            padding:0 1px !important; border-bottom:0.5pt solid #D1D5DB !important;
+            font-weight:700 !important; padding:0 1px !important; border-bottom:0.5pt solid #6B7280 !important;
           }
         }
       `}</style>

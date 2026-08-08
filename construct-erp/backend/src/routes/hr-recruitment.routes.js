@@ -188,6 +188,10 @@ const upload = multer({
   )`);
 
   // ── Phase 2: Offer Letter, Talent Pool, Settings masters ────────────────
+  await safe(`ALTER TABLE hr_applicants ADD COLUMN IF NOT EXISTS screening_notes TEXT`);
+  await safe(`ALTER TABLE hr_applicants ADD COLUMN IF NOT EXISTS screening_score INT`);
+  await safe(`ALTER TABLE hr_applicants ADD COLUMN IF NOT EXISTS screened_by UUID REFERENCES users(id)`);
+  await safe(`ALTER TABLE hr_applicants ADD COLUMN IF NOT EXISTS screened_at TIMESTAMPTZ`);
   await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS letter_html TEXT`);
   await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS letter_sent_at TIMESTAMPTZ`);
   await safe(`ALTER TABLE hr_offers ADD COLUMN IF NOT EXISTS reporting_manager TEXT`);
@@ -366,6 +370,21 @@ router.patch('/applicants/:id/status', authorize(...HR_ROLES), async (req, res) 
      WHERE id=$4 AND company_id=$5 RETURNING *`,
     [status, rejection_reason||null, notes, req.params.id, req.user.company_id]
   );
+  res.json({ data: rows[0] });
+});
+
+// ── Resume Screening ─────────────────────────────────────────────────────
+router.patch('/applicants/:id/screening', authorize(...HR_ROLES), async (req, res) => {
+  const { screening_notes, screening_score } = req.body;
+  if (screening_score != null && (screening_score < 0 || screening_score > 5)) {
+    return res.status(400).json({ error: 'screening_score must be between 0 and 5' });
+  }
+  const { rows } = await query(
+    `UPDATE hr_applicants SET screening_notes=$1, screening_score=$2, screened_by=$3, screened_at=NOW(), updated_at=NOW()
+     WHERE id=$4 AND company_id=$5 RETURNING *`,
+    [screening_notes || null, screening_score ?? null, req.user.id, req.params.id, req.user.company_id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Candidate not found' });
   res.json({ data: rows[0] });
 });
 

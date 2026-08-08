@@ -74,7 +74,7 @@ export const REPORT_PRINT_CSS_A3_LANDSCAPE = REPORT_PRINT_CSS.replace(
   '@page { size: A3 landscape; margin: 10mm 8mm; }'
 );
 
-export function ReportPrintHeader({ companyName = 'BCIM ENGINEERING PRIVATE LIMITED', reportTitle, subtitle }) {
+export function ReportPrintHeader({ companyName = 'BCIM ENGINEERING PRIVATE LIMITED', reportTitle, subtitle, showTimestamp = false }) {
   return (
     <div className="print-only" style={{ borderBottom: '3px solid #1B3A6B', paddingBottom: 10, marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -89,7 +89,11 @@ export function ReportPrintHeader({ companyName = 'BCIM ENGINEERING PRIVATE LIMI
           </div>
           {subtitle && <div style={{ fontSize: 9, color: '#444' }}>{subtitle}</div>}
         </div>
-        <div style={{ width: 52, flexShrink: 0 }} />
+        {showTimestamp ? (
+          <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 8, color: '#000', fontWeight: 600 }}>
+            Printed on:<br />{new Date().toLocaleString('en-IN')}
+          </div>
+        ) : <div style={{ width: 52, flexShrink: 0 }} />}
       </div>
     </div>
   );
@@ -115,7 +119,7 @@ export function ReportPrintSignature({ companyName = 'BCIM ENGINEERING PRIVATE L
           </div>
         ))}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 10, fontSize: 7.5, color: '#888' }}>
+      <div style={{ textAlign: 'center', marginTop: 10, fontSize: 8, color: '#333', fontWeight: 500 }}>
         This is a system-generated report — {companyName} &nbsp;|&nbsp; Printed on: {new Date().toLocaleString('en-IN')}
       </div>
     </div>
