@@ -4,6 +4,7 @@
 // parsing, Outlook integration, background/medical verification modules,
 // and Talent Pool are intentionally out of scope for this phase.
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, X, Pencil, Users, Briefcase, ClipboardList, UserCheck, Send,
@@ -977,7 +978,8 @@ function RecruitmentSettingsTab() {
 /* ═══════════════════════════ Page shell ═══════════════════════════ */
 export default function RecruitmentPage() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState('Requisitions');
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('tab') || 'Requisitions');
   const [showJobForm, setShowJobForm] = useState(false);
   const [editJob, setEditJob] = useState(null);
   const [showAppForm, setShowAppForm] = useState(false);

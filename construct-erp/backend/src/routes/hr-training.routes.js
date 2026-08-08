@@ -64,6 +64,41 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
   res.json({ data: rows });
 });
 
+// Cross-program certifications register — every participant record where a
+// certificate has been issued, across all training programs. Must stay
+// above the '/:id' route below or Express would match it as a program id.
+router.get('/certifications', authorize(...HR_ALL), async (req, res) => {
+  const { rows } = await query(
+    `SELECT t.id, e.name AS employee_name, e.employee_code, p.title AS program_title,
+            p.type AS program_type, p.start_date, p.end_date,
+            t.certificate_issued, t.certificate_url, t.score
+     FROM hr_training_participants t
+     JOIN hr_training_programs p ON p.id = t.program_id
+     JOIN users e ON e.id = t.employee_id
+     WHERE t.company_id = $1 AND t.certificate_issued = TRUE
+     ORDER BY p.end_date DESC NULLS LAST`,
+    [req.user.company_id]
+  );
+  res.json({ data: rows });
+});
+
+// Cross-program assessment register — every participant record with a score,
+// regardless of certificate status.
+router.get('/assessments', authorize(...HR_ALL), async (req, res) => {
+  const { rows } = await query(
+    `SELECT t.id, e.name AS employee_name, e.employee_code, p.title AS program_title,
+            p.type AS program_type, p.start_date, p.end_date,
+            t.attended, t.score, t.feedback
+     FROM hr_training_participants t
+     JOIN hr_training_programs p ON p.id = t.program_id
+     JOIN users e ON e.id = t.employee_id
+     WHERE t.company_id = $1 AND t.score IS NOT NULL
+     ORDER BY p.end_date DESC NULLS LAST`,
+    [req.user.company_id]
+  );
+  res.json({ data: rows });
+});
+
 router.get('/:id', authorize(...HR_ALL), async (req, res) => {
   const { rows } = await query(
     `SELECT t.* FROM hr_training_programs t WHERE t.id=$1 AND t.company_id=$2`,

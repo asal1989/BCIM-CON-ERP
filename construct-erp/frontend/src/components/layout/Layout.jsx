@@ -288,6 +288,7 @@ const navGroups = [
     { to: '/hr/workers',                 icon: HardHat,         label: 'Site Workers' },
     // ── 4. Recruitment ──
     { to: '/hr-admin/recruitment',       icon: Briefcase,       label: 'Recruitment' },
+    { to: '/hr-admin/recruitment?tab=Candidates', icon: UserCheck, label: 'Candidate Status' },
     // ── 5. Onboarding ──
     { to: '/hr-admin/onboarding',                        icon: LayoutDashboard, label: 'Onboarding Dashboard' },
     { to: '/hr-admin/employees/new',                     icon: UserPlus,        label: 'New Employee' },
@@ -382,6 +383,8 @@ const navGroups = [
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
     // ── 14. Training & Development ──
     { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
+    { to: '/hr-admin/training/certifications', icon: Award,     label: 'Certifications' },
+    { to: '/hr-admin/training/assessment',     icon: ClipboardCheck, label: 'Assessment' },
     // ── 15. Compliance ──
     { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
     { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },

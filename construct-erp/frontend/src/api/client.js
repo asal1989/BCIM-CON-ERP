@@ -599,6 +599,8 @@ export const hrTrainingAPI = {
   updateParticipant:(id,pid,d) => api.patch(`/hr-admin/training/${id}/participants/${pid}`, d),
   removeParticipant:(id,pid)   => api.delete(`/hr-admin/training/${id}/participants/${pid}`),
   empHistory:  (empId)    => api.get(`/hr-admin/training/employee/${empId}/history`),
+  certifications: ()      => api.get('/hr-admin/training/certifications'),
+  assessments:    ()      => api.get('/hr-admin/training/assessments'),
 };
 
 export const hrEmpAssetsAPI = {

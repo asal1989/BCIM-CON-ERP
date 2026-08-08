@@ -396,6 +396,8 @@ const HRLOPDaysPage           = lazy(() => import('./pages/hr-admin/LOPDaysPage'
 const HRStopSalaryPage        = lazy(() => import('./pages/hr-admin/StopSalaryPage'));
 const HRLetterGenerationPage  = lazy(() => import('./pages/hr-admin/LetterGenerationPage'));
 const HRTrainingPage          = lazy(() => import('./pages/hr-admin/TrainingPage'));
+const HRTrainingCertificationsPage = lazy(() => import('./pages/hr-admin/TrainingCertificationsPage'));
+const HRTrainingAssessmentPage     = lazy(() => import('./pages/hr-admin/TrainingAssessmentPage'));
 const HREmployeeAssetsPage    = lazy(() => import('./pages/hr-admin/EmployeeAssetsPage'));
 const HRTravelRequestPage     = lazy(() => import('./pages/hr-admin/TravelRequestPage'));
 const HRRecruitmentPage       = lazy(() => import('./pages/hr-admin/RecruitmentPage'));
@@ -1069,6 +1071,8 @@ export default function App() {
                 <Route path="hr-admin/stop-salary"  element={<RequireModule module="HR & Admin"><HRStopSalaryPage /></RequireModule>} />
                 <Route path="hr-admin/letters"      element={<RequireModule module="HR & Admin"><HRLetterGenerationPage /></RequireModule>} />
                 <Route path="hr-admin/training"     element={<RequireModule module="HR & Admin"><HRTrainingPage /></RequireModule>} />
+                <Route path="hr-admin/training/certifications" element={<RequireModule module="HR & Admin"><HRTrainingCertificationsPage /></RequireModule>} />
+                <Route path="hr-admin/training/assessment"     element={<RequireModule module="HR & Admin"><HRTrainingAssessmentPage /></RequireModule>} />
                 <Route path="hr-admin/emp-assets"   element={<RequireModule module="HR & Admin"><HREmployeeAssetsPage /></RequireModule>} />
                 <Route path="hr-admin/travel"       element={<RequireModule module="HR & Admin"><HRTravelRequestPage /></RequireModule>} />
                 <Route path="hr-admin/recruitment"     element={<RequireModule module="HR & Admin"><HRRecruitmentPage /></RequireModule>} />
