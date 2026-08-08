@@ -2,12 +2,74 @@
 // Sync attendance from ESSL Biometric → Microsoft SQL Server → hr_attendance
 const express = require('express');
 const sql     = require('mssql');
+const crypto  = require('crypto');
 const { query, pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { splitDayHours } = require('../utils/attendanceHours');
 
 const router = express.Router();
+
+// ── Constant-time API key check for the 3 unauthenticated agent endpoints ────
+// These are called by the local agent with no JWT session, gated only by a
+// static push_api_key — fetch the stored key by company_id alone (not
+// company_id+key together, which lets Postgres's own comparison short-circuit
+// on the first mismatched byte) and compare with crypto.timingSafeEqual so a
+// wrong guess can't be distinguished by response timing.
+async function verifyApiKey(companyId, providedKey) {
+  if (!companyId || !providedKey) return false;
+  const { rows } = await query(`SELECT push_api_key FROM hr_essl_config WHERE company_id=$1`, [companyId]);
+  const stored = rows[0]?.push_api_key;
+  if (!stored) return false;
+  const a = Buffer.from(String(stored));
+  const b = Buffer.from(String(providedKey));
+  if (a.length !== b.length) return false; // timingSafeEqual throws on length mismatch
+  return crypto.timingSafeEqual(a, b);
+}
+
+// ── Short-lived cache for the roster/shift lookups /agent-push needs ────────
+// The agent pushes roughly every 30s whenever there's new data, and every
+// push re-queried the full active-employee list, active-SC-worker list, and
+// shift-cutoff map from scratch — none of which changes minute-to-minute.
+// A short TTL cuts that to near-zero steady-state DB load without making
+// roster/shift changes take more than a couple minutes to take effect.
+const ROSTER_CACHE_TTL_MS = 2 * 60 * 1000;
+const rosterCache = new Map(); // companyId -> { empMap, scMap, cutoffMap, expiresAt }
+
+async function getRosterMaps(companyId) {
+  const cached = rosterCache.get(companyId);
+  if (cached && cached.expiresAt > Date.now()) return cached;
+
+  const erpEmps = await query(
+    `SELECT u.id, u.employee_code FROM users u
+     JOIN employee_profiles ep ON ep.user_id = u.id
+     WHERE u.company_id=$1 AND u.is_active=true`,
+    [companyId]
+  );
+  const empMap = {};
+  erpEmps.rows.forEach(r => { empMap[String(r.employee_code).trim().toLowerCase()] = r.id; });
+
+  // Also load SC workers so their swipes go to sc_attendance.
+  // worker_code (WKR-0001) is an internal ERP id and never matches ESSL's own
+  // numeric employee codes — match on essl_emp_code first, worker_code as fallback.
+  const scWorkers = await query(
+    `SELECT id, worker_code, essl_emp_code, sc_id, project_id, wo_id FROM sc_workers
+     WHERE company_id=$1 AND status='active'`,
+    [companyId]
+  );
+  const scMap = {};
+  scWorkers.rows.forEach(r => {
+    if (r.essl_emp_code) scMap[String(r.essl_emp_code).trim().toLowerCase()] = r;
+    if (r.worker_code)    scMap[String(r.worker_code).trim().toLowerCase()] ??= r;
+  });
+
+  // Per-employee late cutoff from their assigned shift (site / head office etc.)
+  const cutoffMap = await buildShiftCutoffMap(companyId);
+
+  const entry = { empMap, scMap, cutoffMap, expiresAt: Date.now() + ROSTER_CACHE_TTL_MS };
+  rosterCache.set(companyId, entry);
+  return entry;
+}
 
 /* ═══════════════════════════════════════════════════════════
    POST /hr-admin/essl/agent-push  (NO auth middleware — uses API key)
@@ -19,37 +81,9 @@ router.post('/agent-push', async (req, res) => {
   if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
 
   try {
-    const cfgRow = await query(
-      `SELECT * FROM hr_essl_config WHERE company_id=$1 AND push_api_key=$2`,
-      [company_id, api_key]
-    );
-    if (!cfgRow.rows.length) return res.status(401).json({ error: 'Invalid API key' });
+    if (!(await verifyApiKey(company_id, api_key))) return res.status(401).json({ error: 'Invalid API key' });
 
-    const erpEmps = await query(
-      `SELECT u.id, u.employee_code FROM users u
-       JOIN employee_profiles ep ON ep.user_id = u.id
-       WHERE u.company_id=$1 AND u.is_active=true`,
-      [company_id]
-    );
-    const empMap = {};
-    erpEmps.rows.forEach(r => { empMap[String(r.employee_code).trim().toLowerCase()] = r.id; });
-
-    // Also load SC workers so their swipes go to sc_attendance.
-    // worker_code (WKR-0001) is an internal ERP id and never matches ESSL's own
-    // numeric employee codes — match on essl_emp_code first, worker_code as fallback.
-    const scWorkers = await query(
-      `SELECT id, worker_code, essl_emp_code, sc_id, project_id, wo_id FROM sc_workers
-       WHERE company_id=$1 AND status='active'`,
-      [company_id]
-    );
-    const scMap = {};
-    scWorkers.rows.forEach(r => {
-      if (r.essl_emp_code) scMap[String(r.essl_emp_code).trim().toLowerCase()] = r;
-      if (r.worker_code)    scMap[String(r.worker_code).trim().toLowerCase()] ??= r;
-    });
-
-    // Per-employee late cutoff from their assigned shift (site / head office etc.)
-    const cutoffMap = await buildShiftCutoffMap(company_id);
+    const { empMap, scMap, cutoffMap } = await getRosterMaps(company_id);
 
     const results = { synced: 0, skipped: 0, not_found: [], errors: [] };
 
@@ -164,11 +198,7 @@ router.post('/heartbeat', async (req, res) => {
   const { api_key, company_id, tables_found, raw_swipe_count, device_log_columns, direction_source, device_status_candidates, direction_sample } = req.body;
   if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
   try {
-    const cfgRow = await query(
-      `SELECT id FROM hr_essl_config WHERE company_id=$1 AND push_api_key=$2`,
-      [company_id, api_key]
-    );
-    if (!cfgRow.rows.length) return res.status(401).json({ error: 'Invalid API key' });
+    if (!(await verifyApiKey(company_id, api_key))) return res.status(401).json({ error: 'Invalid API key' });
 
     await query(
       `UPDATE hr_essl_config SET last_heartbeat=NOW(), last_heartbeat_meta=$2 WHERE company_id=$1`,
@@ -196,11 +226,7 @@ router.post('/device-status', async (req, res) => {
   const { api_key, company_id, devices = [] } = req.body;
   if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
   try {
-    const cfgRow = await query(
-      `SELECT id FROM hr_essl_config WHERE company_id=$1 AND push_api_key=$2`,
-      [company_id, api_key]
-    );
-    if (!cfgRow.rows.length) return res.status(401).json({ error: 'Invalid API key' });
+    if (!(await verifyApiKey(company_id, api_key))) return res.status(401).json({ error: 'Invalid API key' });
 
     for (const d of devices) {
       // last_ping is a naive IST wall-clock string from the agent — tag with
@@ -476,10 +502,19 @@ async function existingTables(conn, tables) {
 }
 
 // ─── Build UNION ALL swipe query across monthly tables ───────────────────────
-// erpCodes: array of employee code strings to filter (only registered employees)
-function buildSwipeSQL(tables, erpCodes) {
-  const codeList   = erpCodes.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
-  const codeFilter = codeList ? `AND e.EmployeeCode IN (${codeList})` : '';
+// erpCodes: array of employee code strings to filter (only registered employees).
+// Takes the mssql `request` object and binds each code as a named parameter
+// (@code0, @code1, ...) instead of string-concatenating quote-escaped values
+// into the SQL text — employee_code is admin-entered ERP data (not raw
+// external/device input) so this was low-risk, but parameterizing is the
+// correct pattern regardless and costs nothing here.
+function buildSwipeSQL(request, tables, erpCodes) {
+  const codeParams = erpCodes.map((c, i) => {
+    const name = `code${i}`;
+    request.input(name, sql.NVarChar, c);
+    return `@${name}`;
+  });
+  const codeFilter = codeParams.length ? `AND e.EmployeeCode IN (${codeParams.join(',')})` : '';
 
   return tables.map(t => `
     SELECT e.EmployeeCode AS emp_code,
@@ -627,8 +662,9 @@ router.get('/preview', async (req, res) => {
     }
 
     // Pass erpCodes into SQL — filters inside DB, no TOP wasted on unregistered workers
-    const unionSQL = buildSwipeSQL(tables, erpCodesArr);
-    const r = await conn.request()
+    const previewRequest = conn.request();
+    const unionSQL = buildSwipeSQL(previewRequest, tables, erpCodesArr);
+    const r = await previewRequest
       .input('from', sql.VarChar, from + ' 00:00:00')
       .input('to',   sql.VarChar, to   + ' 23:59:59')
       .query(`${unionSQL} ORDER BY emp_code, swipe_time ASC`);
@@ -648,7 +684,9 @@ router.get('/preview', async (req, res) => {
      1. Pull all CHECKINOUT rows for date range
      2. Group by (emp_code, date)
      3. First swipe = in_time, Last swipe = out_time
-     4. Determine status: both → present, one → half_day
+     4. Determine status via resolveStatus(): any punch at all (even just
+        one, e.g. a missed out-punch) → present. No punches → absent.
+        half_day is never produced by this classification — see resolveStatus().
      5. Upsert into hr_attendance (source='essl')
 ══════════════════════════════════════════════════════════════ */
 router.post('/sync', async (req, res) => {
@@ -693,8 +731,9 @@ router.post('/sync', async (req, res) => {
     }
 
     // Filter inside SQL — only registered ERP employees
-    const unionSQL = buildSwipeSQL(tables, erpCodesArr);
-    const r = await conn.request()
+    const syncRequest = conn.request();
+    const unionSQL = buildSwipeSQL(syncRequest, tables, erpCodesArr);
+    const r = await syncRequest
       .input('from', sql.VarChar, from + ' 00:00:00')
       .input('to',   sql.VarChar, to   + ' 23:59:59')
       .query(`${unionSQL} ORDER BY emp_code, swipe_time`);
@@ -902,34 +941,39 @@ router.get('/agent-key', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* ── Ensure unique constraints exist for ON CONFLICT upserts ─────────────── */
+/* ── Ensure unique constraints exist for ON CONFLICT upserts ───────────────
+   These are LOAD-BEARING: every ON CONFLICT (worker_id, attendance_date) /
+   (user_id, attendance_date) upsert in this file depends on one of them
+   existing. A swallowed failure here (e.g. pre-existing duplicate rows
+   blocking index creation) would surface later as a confusing, unrelated-
+   looking "no unique or exclusion constraint matching ON CONFLICT" error on
+   every subsequent sync — so failures are logged loudly instead of silently
+   dropped. hr_attendance already has its own UNIQUE(user_id, attendance_date)
+   table constraint (see hr-attendance.routes.js); this index is redundant
+   with it but harmless to keep — sc_attendance has no such constraint, so
+   its index here is the one actually making ON CONFLICT work. */
 (async () => {
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS hr_attendance_user_date_uidx
-      ON hr_attendance(user_id, attendance_date)
-  `).catch(() => {});
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS sc_attendance_worker_date_uidx
-      ON sc_attendance(worker_id, attendance_date)
-  `).catch(() => {});
+  try {
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS hr_attendance_user_date_uidx ON hr_attendance(user_id, attendance_date)`);
+  } catch (e) { console.error('[essl] FAILED to create hr_attendance_user_date_uidx — hr_attendance upserts may break:', e.message); }
+  try {
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS sc_attendance_worker_date_uidx ON sc_attendance(worker_id, attendance_date)`);
+  } catch (e) { console.error('[essl] FAILED to create sc_attendance_worker_date_uidx — sc_attendance upserts may break:', e.message); }
 })();
 
-/* ── device logs table — raw individual swipes from ESSL ────────────────── */
+/* ── device logs table — raw individual swipes from ESSL ──────────────────
+   Table itself is created once by initTable() above (runSchemaInit('hr-essl'),
+   run exactly once ever) — do NOT redeclare CREATE TABLE here too. A second
+   competing "CREATE TABLE IF NOT EXISTS essl_device_logs" with a different
+   company_id constraint used to live in this block; since IF NOT EXISTS
+   makes whichever definition runs first win silently, that FK never actually
+   applied and the duplicate just added confusion. Only the extra index this
+   block adds (by swipe_time alone, for time-range queries with no emp_code
+   filter) is genuinely new versus initTable()'s idx_essl_logs_emp. */
 (async () => {
-  await query(`
-    CREATE TABLE IF NOT EXISTS essl_device_logs (
-      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      company_id   UUID REFERENCES companies(id),
-      emp_code     TEXT NOT NULL,
-      swipe_time   TIMESTAMPTZ NOT NULL,
-      direction    TEXT,
-      source       TEXT DEFAULT 'agent',
-      created_at   TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (company_id, emp_code, swipe_time)
-    )
-  `).catch(() => {});
-  await query(`CREATE INDEX IF NOT EXISTS essl_device_logs_company_time_idx ON essl_device_logs(company_id, swipe_time DESC)`).catch(() => {});
-  await query(`CREATE INDEX IF NOT EXISTS essl_device_logs_emp_idx ON essl_device_logs(company_id, emp_code, swipe_time DESC)`).catch(() => {});
+  try {
+    await query(`CREATE INDEX IF NOT EXISTS essl_device_logs_company_time_idx ON essl_device_logs(company_id, swipe_time DESC)`);
+  } catch (e) { console.error('[essl] FAILED to create essl_device_logs_company_time_idx:', e.message); }
 })();
 
 /* ── sync log table ──────────────────────────────────────────────────────── */
@@ -1017,41 +1061,94 @@ router.get('/health', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* POST /hr-admin/essl/trigger-sync */
+/* POST /hr-admin/essl/trigger-sync
+   Used by "Sync and Recalculate" (RecalculateAttendancePage) — pulls ESSL
+   swipes for the date range straight into hr_attendance, same algorithm as
+   POST /sync (monthly DeviceLogs_M_YYYY tables, in_time/out_time columns,
+   shift-aware late-minutes). Previously had its own bespoke, broken
+   implementation (wrote to nonexistent check_in/check_out columns and
+   queried a nonexistent "DeviceLogs" table) — now reuses the same
+   buildSwipeSQL/resolveStatus/lateMinutesFor path as /sync so it can't drift
+   out of sync with the schema again. */
 router.post('/trigger-sync', async (req, res) => {
   const today = new Date().toISOString().slice(0,10);
   const from  = req.body.from || today;
   const to    = req.body.to   || today;
+  const companyId = req.user.company_id;
   try {
-    const cfgRow = await query(`SELECT * FROM hr_essl_config WHERE company_id=$1`, [req.user.company_id]);
+    const cfgRow = await query(`SELECT * FROM hr_essl_config WHERE company_id=$1`, [companyId]);
     if (!cfgRow.rows.length) return res.status(400).json({ error: 'ESSL not configured' });
-    const cfg  = cfgRow.rows[0];
-    const conn = await sql.connect(buildMssqlConfig(cfg));
-    const r = await conn.request().input('from',sql.Date,new Date(from)).input('to',sql.Date,new Date(to))
-      .query(`SELECT l.EmployeeCode,l.LogDate,l.Direction FROM DeviceLogs l WHERE CAST(l.LogDate AS DATE) BETWEEN @from AND @to ORDER BY l.EmployeeCode,l.LogDate`);
-    const logs = r.recordset;
-    await conn.close().catch(()=>{});
-    const byKey = {};
-    for (const row of logs) {
-      const key = `${String(row.EmployeeCode||'').trim()}|${new Date(row.LogDate).toISOString().slice(0,10)}`;
-      if (!byKey[key]) byKey[key] = { empCode: String(row.EmployeeCode||'').trim(), date: new Date(row.LogDate).toISOString().slice(0,10), times: [] };
-      byKey[key].times.push(new Date(row.LogDate));
+    const cfg = cfgRow.rows[0];
+
+    const erpEmps = await query(
+      `SELECT u.id, u.employee_code FROM users u
+       JOIN employee_profiles ep ON ep.user_id = u.id
+       WHERE u.company_id=$1 AND u.is_active=true`,
+      [companyId]
+    );
+    const empMap = {};
+    const erpCodesArr = [];
+    erpEmps.rows.forEach(r => {
+      const code = String(r.employee_code).trim();
+      empMap[code.toLowerCase()] = r.id;
+      erpCodesArr.push(code);
+    });
+    const cutoffMap = await buildShiftCutoffMap(companyId);
+
+    const conn   = await sql.connect(buildMssqlConfig(cfg));
+    const tables = await existingTables(conn, monthlyTables(from, to));
+    if (!tables.length) {
+      await conn.close().catch(() => {});
+      await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status) VALUES ($1,$2,$3,0,'manual','success')`, [companyId, from, to]);
+      return res.json({ success: true, synced: 0, from, to, message: 'No DeviceLogs tables found for this date range' });
     }
+
+    const triggerRequest = conn.request();
+    const unionSQL = buildSwipeSQL(triggerRequest, tables, erpCodesArr);
+    const r = await triggerRequest
+      .input('from', sql.VarChar, from + ' 00:00:00')
+      .input('to',   sql.VarChar, to   + ' 23:59:59')
+      .query(`${unionSQL} ORDER BY emp_code, swipe_time`);
+    const rawRows = r.recordset;
+    await conn.close().catch(() => {});
+
+    const grouped = {};
+    for (const row of rawRows) {
+      const code = String(row.emp_code || '').trim().toLowerCase();
+      if (!code) continue;
+      const swipeDate = new Date(row.swipe_time);
+      const dateStr   = swipeDate.toISOString().split('T')[0];
+      const timeStr   = swipeDate.toTimeString().split(' ')[0];
+      const key = `${code}|${dateStr}`;
+      if (!grouped[key]) grouped[key] = { emp_code: code, date: dateStr, swipes: [] };
+      grouped[key].swipes.push({ time: timeStr, type: String(row.direction || '').trim().toLowerCase() });
+    }
+
     let count = 0;
-    for (const { empCode, date, times } of Object.values(byKey)) {
-      const emp = await query(`SELECT id FROM users WHERE company_id=$1 AND employee_code=$2 AND is_active=true LIMIT 1`, [req.user.company_id, empCode]);
-      if (!emp.rows.length) continue;
-      times.sort((a,b)=>a-b);
-      const checkIn  = times[0].toTimeString().slice(0,5);
-      const checkOut = times.length>1 ? times[times.length-1].toTimeString().slice(0,5) : null;
-      await query(`INSERT INTO hr_attendance (user_id,company_id,attendance_date,check_in,check_out,status,source) VALUES ($1,$2,$3,$4,$5,'present','essl') ON CONFLICT (user_id,attendance_date) DO UPDATE SET check_in=EXCLUDED.check_in,check_out=EXCLUDED.check_out,status='present',source='essl'`, [emp.rows[0].id, req.user.company_id, date, checkIn, checkOut]);
+    const hrRows = new Map();
+    for (const g of Object.values(grouped)) {
+      const userId = empMap[g.emp_code];
+      if (!userId) continue;
+      g.swipes.sort((a, b) => a.time.localeCompare(b.time));
+      const inSwipes  = g.swipes.filter(s => s.type === 'in');
+      const outSwipes = g.swipes.filter(s => s.type === 'out');
+      const inTime  = inSwipes.length  ? inSwipes[0].time : g.swipes[0]?.time || null;
+      const outTime = outSwipes.length ? outSwipes[outSwipes.length - 1].time
+                                       : (g.swipes.length > 1 ? g.swipes[g.swipes.length - 1].time : null);
+      const hasIn  = !!inTime;
+      const hasOut = !!outTime && outTime !== inTime;
+      const status = resolveStatus(hasIn, hasOut);
+      const lateMin = lateMinutesFor(inTime, cutoffMap[userId] ?? DEFAULT_CUTOFF_MINS);
+      hrRows.set(`${userId}|${g.date}`, [userId, companyId, g.date, status, inTime, outTime, lateMin]);
       count++;
     }
-    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status) VALUES ($1,$2,$3,$4,'manual','success')`, [req.user.company_id, from, to, count]);
-    await query(`UPDATE hr_essl_config SET last_sync=NOW() WHERE company_id=$1`, [req.user.company_id]);
+    await bulkUpsertHrAttendance([...hrRows.values()]);
+
+    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status) VALUES ($1,$2,$3,$4,'manual','success')`, [companyId, from, to, count]);
+    await query(`UPDATE hr_essl_config SET last_sync=NOW() WHERE company_id=$1`, [companyId]);
     res.json({ success: true, synced: count, from, to });
   } catch (e) {
-    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status,error_msg) VALUES ($1,$2,$3,0,'manual','error',$4)`, [req.user.company_id, from, to, e.message]).catch(()=>{});
+    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status,error_msg) VALUES ($1,$2,$3,0,'manual','error',$4)`, [companyId, from, to, e.message]).catch(()=>{});
     res.status(500).json({ error: e.message });
   }
 });
@@ -1140,8 +1237,9 @@ router.get('/preview-sc', async (req, res) => {
       return res.json({ data: { schema: 'etimetracklite', total: 0, mapped: 0, workers: scWorkers.rows.length, preview: [] } });
     }
 
-    const unionSQL = buildSwipeSQL(tables, workerCodes);
-    const r = await conn.request()
+    const previewScRequest = conn.request();
+    const unionSQL = buildSwipeSQL(previewScRequest, tables, workerCodes);
+    const r = await previewScRequest
       .input('from', sql.VarChar, from + ' 00:00:00')
       .input('to',   sql.VarChar, toDate + ' 23:59:59')
       .query(`${unionSQL} ORDER BY emp_code, swipe_time`);
@@ -1247,8 +1345,9 @@ router.post('/sync-sc', async (req, res) => {
       });
     }
 
-    const unionSQL = buildSwipeSQL(tables, workerCodes);
-    const r = await conn.request()
+    const syncScRequest = conn.request();
+    const unionSQL = buildSwipeSQL(syncScRequest, tables, workerCodes);
+    const r = await syncScRequest
       .input('from', sql.VarChar, from + ' 00:00:00')
       .input('to',   sql.VarChar, toDate + ' 23:59:59')
       .query(`${unionSQL} ORDER BY emp_code, swipe_time`);

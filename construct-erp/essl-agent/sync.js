@@ -508,9 +508,13 @@ async function runSync({ fromDT, toDT, label }) {
 async function main() {
   if (loopMode) {
     const windowMin = minutesArg >= 0 ? parseInt(args[minutesArg + 1]) || DEFAULT_WINDOW_MIN : DEFAULT_WINDOW_MIN;
-    const intervalMin = cfg.loop_interval_minutes || 1;
+    // Must match LOOP_INTERVAL_MS's fallback (0.5 min) exactly — this used to
+    // default to 1 here while the actual tick timer defaulted to 0.5 above,
+    // so the startup log claimed a slower interval than the agent really ran at.
+    const intervalMin = cfg.loop_interval_minutes || 0.5;
+    const intervalLabel = intervalMin < 1 ? `${Math.round(intervalMin * 60)} sec` : `${intervalMin} min`;
     console.log(`[ESSL Agent] Loop mode started`);
-    console.log(`[ESSL Agent]   Interval : every ${intervalMin} min`);
+    console.log(`[ESSL Agent]   Interval : every ${intervalLabel}`);
     console.log(`[ESSL Agent]   Window   : last ${windowMin} min`);
     console.log(`[ESSL Agent]   ERP      : ${cfg.erp.push_url}`);
     console.log(`[ESSL Agent]   ESSL     : ${cfg.essl.host}\\${cfg.essl.instance || 'default'}`);
