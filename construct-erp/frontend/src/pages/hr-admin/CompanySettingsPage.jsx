@@ -1,28 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, Edit2, Save, X, Globe, Phone, Mail, MapPin } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { hrMastersAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C', blue:'#2563EB' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
 const inp = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all';
 const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5';
 
-const INIT = {
-  name:'BCIM Construction Pvt Ltd', short_name:'BCIM', reg_no:'U45100MH2010PTC123456',
-  gstin:'27AABCB1234A1Z5', pan:'AABCB1234A', email:'hr@bcim.in', phone:'+91 22 1234 5678',
-  address:'Plot No. 12, MIDC Industrial Area', city:'Mumbai', state:'Maharashtra', pincode:'400093',
-  country:'India', website:'https://bcim.in', logo_url:'',
-};
-
 export default function CompanySettingsPage() {
-  const [form, setForm] = useState(INIT);
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(INIT);
+  const [draft, setDraft] = useState(null);
 
-  const save = () => { setForm(draft); setEditing(false); };
-  const cancel = () => { setDraft(form); setEditing(false); };
-  const f = editing ? draft : form;
-  const set = (k,v) => setDraft(p => ({...p,[k]:v}));
+  const { data: company, isLoading } = useQuery({
+    queryKey: ['company-settings'],
+    queryFn: () => hrMastersAPI.getCompanySettings().then(r => r.data?.data),
+  });
+
+  useEffect(() => { if (company && !editing) setDraft(company); }, [company, editing]);
+
+  const saveMut = useMutation({
+    mutationFn: (d) => hrMastersAPI.updateCompanySettings(d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['company-settings'] }); toast.success('Company settings saved'); setEditing(false); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to save'),
+  });
+
+  const startEdit = () => { setDraft(company); setEditing(true); };
+  const cancel = () => { setDraft(company); setEditing(false); };
+  const save = () => saveMut.mutate(draft);
+  const f = editing ? (draft || company || {}) : (company || {});
+  const set = (k,v) => setDraft(p => ({...(p||company), [k]:v}));
+
+  if (isLoading || !company) {
+    return <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center text-gray-400 text-sm">Loading…</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -40,7 +54,7 @@ export default function CompanySettingsPage() {
             </div>
           </div>
           {!editing
-            ? <button onClick={() => setEditing(true)}
+            ? <button onClick={startEdit}
                 className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-bold rounded-xl transition">
                 <Edit2 className="w-4 h-4"/> Edit
               </button>
@@ -48,7 +62,7 @@ export default function CompanySettingsPage() {
                 <button onClick={cancel} className="flex items-center gap-1 px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-bold rounded-xl transition">
                   <X className="w-4 h-4"/> Cancel
                 </button>
-                <button onClick={save} className="flex items-center gap-1 px-3 py-2 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-black rounded-xl transition">
+                <button disabled={saveMut.isPending} onClick={save} className="flex items-center gap-1 px-3 py-2 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-black rounded-xl transition disabled:opacity-50">
                   <Save className="w-4 h-4"/> Save
                 </button>
               </div>
@@ -64,7 +78,7 @@ export default function CompanySettingsPage() {
                 <div key={k} className={k==='name'?'col-span-2':''}>
                   <label className={lbl}>{l}</label>
                   {editing
-                    ? <input className={inp} value={draft[k]} onChange={e=>set(k,e.target.value)}/>
+                    ? <input className={inp} value={f[k]||''} onChange={e=>set(k,e.target.value)}/>
                     : <div className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm text-gray-800 font-medium">{f[k]||'—'}</div>
                   }
                 </div>
@@ -80,7 +94,7 @@ export default function CompanySettingsPage() {
                 <div key={k}>
                   <label className={lbl}><span className="inline-flex items-center gap-1"><Icon className="w-3 h-3"/>{l}</span></label>
                   {editing
-                    ? <input className={inp} value={draft[k]} onChange={e=>set(k,e.target.value)}/>
+                    ? <input className={inp} value={f[k]||''} onChange={e=>set(k,e.target.value)}/>
                     : <div className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm text-gray-800 font-medium">{f[k]||'—'}</div>
                   }
                 </div>
@@ -92,11 +106,11 @@ export default function CompanySettingsPage() {
           <motion.div {...fade(0.15)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="text-xs font-black uppercase tracking-widest text-blue-600 mb-4"><span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3"/>Registered Address</span></h2>
             <div className="grid grid-cols-2 gap-4">
-              {[['Address','address',true],['City','city',false],['State','state',false],['Pincode','pincode',false],['Country','country',false]].map(([l,k,full])=>(
+              {[['Address','address',true],['City','city',false],['State','state',false],['Pincode','pincode',false]].map(([l,k,full])=>(
                 <div key={k} className={full?'col-span-2':''}>
                   <label className={lbl}>{l}</label>
                   {editing
-                    ? <input className={inp} value={draft[k]} onChange={e=>set(k,e.target.value)}/>
+                    ? <input className={inp} value={f[k]||''} onChange={e=>set(k,e.target.value)}/>
                     : <div className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm text-gray-800 font-medium">{f[k]||'—'}</div>
                   }
                 </div>

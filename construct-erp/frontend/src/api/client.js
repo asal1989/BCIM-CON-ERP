@@ -556,6 +556,24 @@ export const hrShiftsAPI = {
   compOff:      (p)        => api.get('/hr-admin/comp-off', { params: p }),
   addCompOff:   (d)        => api.post('/hr-admin/comp-off', d),
   approveCompOff:(id)      => api.patch(`/hr-admin/comp-off/${id}/approve`),
+  currentShifts:(p)        => api.get('/hr-admin/employee-shifts/current', { params: p }),
+  rosterGroups:       ()      => api.get('/hr-admin/roster-groups'),
+  createRosterGroup:  (d)     => api.post('/hr-admin/roster-groups', d),
+  updateRosterGroup:  (id, d) => api.put(`/hr-admin/roster-groups/${id}`, d),
+  deleteRosterGroup:  (id)    => api.delete(`/hr-admin/roster-groups/${id}`),
+  shiftSchedules:      ()      => api.get('/hr-admin/shift-schedules'),
+  createShiftSchedule: (d)     => api.post('/hr-admin/shift-schedules', d),
+  updateShiftSchedule: (id, d) => api.put(`/hr-admin/shift-schedules/${id}`, d),
+  deleteShiftSchedule: (id)    => api.delete(`/hr-admin/shift-schedules/${id}`),
+  outdoorEntries:      (p)     => api.get('/hr-admin/outdoor-entries', { params: p }),
+  createOutdoorEntry:  (d)     => api.post('/hr-admin/outdoor-entries', d),
+  approveOutdoorEntry: (id)    => api.patch(`/hr-admin/outdoor-entries/${id}/approve`),
+  rejectOutdoorEntry:  (id)    => api.patch(`/hr-admin/outdoor-entries/${id}/reject`),
+  geofences:       ()      => api.get('/hr-admin/geofences'),
+  createGeofence:  (d)     => api.post('/hr-admin/geofences', d),
+  updateGeofence:  (id, d) => api.put(`/hr-admin/geofences/${id}`, d),
+  toggleGeofence:  (id)    => api.patch(`/hr-admin/geofences/${id}/toggle`),
+  deleteGeofence:  (id)    => api.delete(`/hr-admin/geofences/${id}`),
 };
 
 export const hrFnfAPI = {
@@ -2062,6 +2080,19 @@ export const hrMastersAPI = {
   // Reporting Structure
   listReportingStructure:   ()      => api.get('/hr-admin/masters/reporting-structure'),
   updateReportingManager:   (userId, d) => api.put(`/hr-admin/masters/reporting-structure/${userId}`, d),
+  // Work Codes
+  listWorkCodes:   ()      => api.get('/hr-admin/masters/work-codes'),
+  createWorkCode:  (data)  => api.post('/hr-admin/masters/work-codes', data),
+  updateWorkCode:  (id, d) => api.put(`/hr-admin/masters/work-codes/${id}`, d),
+  deleteWorkCode:  (id)    => api.delete(`/hr-admin/masters/work-codes/${id}`),
+  // Employee Categories
+  listEmployeeCategories:  ()      => api.get('/hr-admin/masters/employee-categories'),
+  createEmployeeCategory:  (data)  => api.post('/hr-admin/masters/employee-categories', data),
+  updateEmployeeCategory:  (id, d) => api.put(`/hr-admin/masters/employee-categories/${id}`, d),
+  deleteEmployeeCategory:  (id)    => api.delete(`/hr-admin/masters/employee-categories/${id}`),
+  // Company Settings
+  getCompanySettings:  ()   => api.get('/hr-admin/masters/company-settings'),
+  updateCompanySettings: (d) => api.put('/hr-admin/masters/company-settings', d),
 };
 
 export const hrEmployeesAPI = {

@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarCheck, Plus, Search, Edit2, Trash2, X, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { hrShiftsAPI, hrMastersAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
 const inp = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all';
 const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5';
 
-const INIT = [
-  { id:1, schedule:'Q1 2026 – Site A', dept:'Site Operations', shift:'Morning (06:00–14:00)', from:'2026-01-01', to:'2026-03-31', employees:18, status:'Active'   },
-  { id:2, schedule:'Q1 2026 – Admin',  dept:'Administration',  shift:'General (09:00–18:00)', from:'2026-01-01', to:'2026-03-31', employees:12, status:'Active'   },
-  { id:3, schedule:'Q2 2026 – Site A', dept:'Site Operations', shift:'Morning (06:00–14:00)', from:'2026-04-01', to:'2026-06-30', employees:20, status:'Upcoming' },
-  { id:4, schedule:'Q2 2026 – Site B', dept:'Site B Team',     shift:'Evening (14:00–22:00)', from:'2026-04-01', to:'2026-06-30', employees:14, status:'Upcoming' },
-];
-
-const BLANK = { schedule:'', dept:'', shift:'General (09:00–18:00)', from:'', to:'', employees:'', status:'Active' };
-const SHIFTS = ['General (09:00–18:00)','Morning (06:00–14:00)','Evening (14:00–22:00)','Night (22:00–06:00)'];
+const BLANK = { schedule_name:'', shift_id:'', department_id:'', from_date:'', to_date:'' };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -36,30 +30,36 @@ function Modal({ title, onClose, children }) {
 const STATUS_COLOR = { Active:'bg-green-50 text-green-700', Upcoming:'bg-amber-50 text-amber-700', Expired:'bg-gray-100 text-gray-500' };
 
 export default function ShiftSchedulePage() {
-  const [schedules, setSchedules] = useState(INIT);
+  const qc = useQueryClient();
   const [search, setSearch]       = useState('');
   const [modal, setModal]         = useState(null);
   const [form, setForm]           = useState(BLANK);
 
-  const filtered = schedules.filter(s=>s.schedule.toLowerCase().includes(search.toLowerCase())||s.dept.toLowerCase().includes(search.toLowerCase()));
+  const { data: schedules, isLoading } = useQuery({
+    queryKey: ['shift-schedules'],
+    queryFn: () => hrShiftsAPI.shiftSchedules().then(r => r.data?.data || []),
+  });
+  const { data: shifts } = useQuery({ queryKey: ['hr-shifts'], queryFn: () => hrShiftsAPI.shifts().then(r => r.data?.data || []) });
+  const { data: depts }  = useQuery({ queryKey: ['hr-departments'], queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []) });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['shift-schedules'] });
+  const createMut = useMutation({ mutationFn: (d) => hrShiftsAPI.createShiftSchedule(d), onSuccess: () => { invalidate(); toast.success('Schedule created'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to create schedule') });
+  const updateMut = useMutation({ mutationFn: ({id,d}) => hrShiftsAPI.updateShiftSchedule(id,d), onSuccess: () => { invalidate(); toast.success('Schedule updated'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to update schedule') });
+  const deleteMut = useMutation({ mutationFn: (id) => hrShiftsAPI.deleteShiftSchedule(id), onSuccess: () => { invalidate(); toast.success('Deleted'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to delete') });
+
+  const list = schedules || [];
+  const filtered = list.filter(s=>s.schedule_name.toLowerCase().includes(search.toLowerCase())||(s.department_name||'').toLowerCase().includes(search.toLowerCase()));
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const openAdd  = () => { setForm(BLANK); setModal('add'); };
-  const openEdit = (s) => { setForm({...s}); setModal(s); };
+  const openEdit = (s) => { setForm({ schedule_name:s.schedule_name, shift_id:s.shift_id||'', department_id:s.department_id||'', from_date:s.from_date?.slice(0,10), to_date:s.to_date?.slice(0,10) }); setModal(s); };
   const close    = () => setModal(null);
 
   const save = () => {
-    if(!form.schedule||!form.dept||!form.from||!form.to){ toast.error('All fields required'); return; }
-    if(modal==='add'){
-      setSchedules(p=>[...p,{...form,id:Date.now(),employees:parseInt(form.employees)||0}]);
-      toast.success('Schedule created');
-    } else {
-      setSchedules(p=>p.map(s=>s.id===modal.id?{...form,id:modal.id,employees:parseInt(form.employees)||0}:s));
-      toast.success('Schedule updated');
-    }
+    if(!form.schedule_name||!form.shift_id||!form.from_date||!form.to_date){ toast.error('All fields required'); return; }
+    if(modal==='add') createMut.mutate(form);
+    else updateMut.mutate({ id: modal.id, d: form });
     close();
   };
-
-  const del = (id) => { setSchedules(p=>p.filter(s=>s.id!==id)); toast.success('Deleted'); };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -94,23 +94,25 @@ export default function ShiftSchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s,i)=>(
+              {isLoading && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">Loading…</td></tr>}
+              {!isLoading && filtered.map((s,i)=>(
                 <tr key={s.id} className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors ${i%2?'bg-gray-50/30':''}`}>
-                  <td className="px-4 py-3 font-semibold text-gray-800">{s.schedule}</td>
-                  <td className="px-4 py-3 text-gray-600">{s.dept}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{s.shift}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{s.from}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{s.to}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">{s.schedule_name}</td>
+                  <td className="px-4 py-3 text-gray-600">{s.department_name || 'All Departments'}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{s.shift_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{s.from_date?.slice(0,10)}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{s.to_date?.slice(0,10)}</td>
                   <td className="px-4 py-3"><span className="bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-full">{s.employees}</span></td>
                   <td className="px-4 py-3"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_COLOR[s.status]||'bg-gray-100 text-gray-500'}`}>{s.status}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
                       <button onClick={()=>openEdit(s)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"><Edit2 className="w-3.5 h-3.5"/></button>
-                      <button onClick={()=>del(s.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={()=>deleteMut.mutate(s.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {!isLoading && !filtered.length && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">No schedules found</td></tr>}
             </tbody>
           </table>
         </motion.div>
@@ -119,24 +121,22 @@ export default function ShiftSchedulePage() {
       {modal && (
         <Modal title={modal==='add'?'New Schedule':'Edit Schedule'} onClose={close}>
           <div className="space-y-4">
-            <div><label className={lbl}>Schedule Name</label><input className={inp} value={form.schedule} onChange={e=>set('schedule',e.target.value)}/></div>
-            <div><label className={lbl}>Department</label><input className={inp} value={form.dept} onChange={e=>set('dept',e.target.value)}/></div>
+            <div><label className={lbl}>Schedule Name</label><input className={inp} value={form.schedule_name} onChange={e=>set('schedule_name',e.target.value)}/></div>
+            <div><label className={lbl}>Department</label>
+              <select className={inp} value={form.department_id} onChange={e=>set('department_id',e.target.value)}>
+                <option value="">All Departments</option>
+                {(depts||[]).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
             <div><label className={lbl}>Shift</label>
-              <select className={inp} value={form.shift} onChange={e=>set('shift',e.target.value)}>
-                {SHIFTS.map(s=><option key={s}>{s}</option>)}
+              <select className={inp} value={form.shift_id} onChange={e=>set('shift_id',e.target.value)}>
+                <option value="">Select…</option>
+                {(shifts||[]).map(s=><option key={s.id} value={s.id}>{s.name} ({s.start_time?.slice(0,5)}–{s.end_time?.slice(0,5)})</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>From</label><input type="date" className={inp} value={form.from} onChange={e=>set('from',e.target.value)}/></div>
-              <div><label className={lbl}>To</label><input type="date" className={inp} value={form.to} onChange={e=>set('to',e.target.value)}/></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>No. of Employees</label><input type="number" className={inp} value={form.employees} onChange={e=>set('employees',e.target.value)}/></div>
-              <div><label className={lbl}>Status</label>
-                <select className={inp} value={form.status} onChange={e=>set('status',e.target.value)}>
-                  <option>Active</option><option>Upcoming</option><option>Expired</option>
-                </select>
-              </div>
+              <div><label className={lbl}>From</label><input type="date" className={inp} value={form.from_date} onChange={e=>set('from_date',e.target.value)}/></div>
+              <div><label className={lbl}>To</label><input type="date" className={inp} value={form.to_date} onChange={e=>set('to_date',e.target.value)}/></div>
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={close} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition text-sm">Cancel</button>

@@ -204,10 +204,11 @@ router.get('/requests', async (req, res) => {
     let sql = `
       SELECT lr.*, u.name as employee_name, u.employee_code,
              lt.name as leave_type_name, lt.code as leave_code,
-             ab.name as actioned_by_name
+             ab.name as actioned_by_name, dep.name as department_name
       FROM hr_leave_requests lr
       JOIN users u ON u.id = lr.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
       JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
       LEFT JOIN users ab ON ab.id = lr.actioned_by
       WHERE lr.company_id = $1`;

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapPin, Plus, Search, Check, X as XIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { hrShiftsAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
@@ -10,14 +12,7 @@ const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1
 
 const STATUS_COLOR = { Pending:'bg-amber-50 text-amber-700', Approved:'bg-green-50 text-green-700', Rejected:'bg-red-50 text-red-600' };
 
-const INIT = [
-  { id:1, emp_code:'EMP002', name:'Priya Nair',    dept:'HR',             date:'2026-07-14', purpose:'Client visit – ABC Builders',  location:'Andheri, Mumbai', out:'09:30', in:'17:00', status:'Pending'  },
-  { id:2, emp_code:'EMP001', name:'Rahul Sharma',  dept:'Administration', date:'2026-07-13', purpose:'Government office – PF filing', location:'BKC, Mumbai',     out:'10:00', in:'15:30', status:'Approved' },
-  { id:3, emp_code:'EMP007', name:'Vikram Singh',  dept:'Administration', date:'2026-07-12', purpose:'Bank – DD collection',          location:'Fort, Mumbai',    out:'11:00', in:'13:00', status:'Approved' },
-  { id:4, emp_code:'EMP004', name:'Deepa Menon',   dept:'Accounts',       date:'2026-07-11', purpose:'Auditor meeting',               location:'Nariman Point',   out:'14:00', in:'18:00', status:'Rejected' },
-];
-
-const BLANK = { emp_code:'', name:'', dept:'', date:'', purpose:'', location:'', out:'', in:'', status:'Pending' };
+const BLANK = { employee_id:'', entry_date:'', purpose:'', location:'', out_time:'', in_time:'' };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -35,11 +30,31 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function OutdoorEntriesPage() {
-  const [entries, setEntries] = useState(INIT);
+  const qc = useQueryClient();
   const [search,  setSearch]  = useState('');
   const [filter,  setFilter]  = useState('All');
   const [modal,   setModal]   = useState(false);
   const [form,    setForm]    = useState(BLANK);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['outdoor-entries'],
+    queryFn: () => hrShiftsAPI.outdoorEntries().then(r => r.data?.data || []),
+  });
+  const { data: employees } = useQuery({
+    queryKey: ['employee-shifts-current'],
+    queryFn: () => hrShiftsAPI.currentShifts().then(r => r.data?.data || []),
+  });
+
+  const entries = (data||[]).map(e => ({
+    id: e.id, emp_code: e.employee_code || '—', name: e.employee_name, dept: e.department_name || '—',
+    date: e.entry_date?.slice(0,10), purpose: e.purpose, location: e.location || '—',
+    out: e.out_time?.slice(0,5) || '—', in: e.in_time?.slice(0,5) || '—', status: e.status,
+  }));
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['outdoor-entries'] });
+  const createMut  = useMutation({ mutationFn: (d) => hrShiftsAPI.createOutdoorEntry(d), onSuccess: () => { invalidate(); toast.success('Entry added'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to add entry') });
+  const approveMut = useMutation({ mutationFn: (id) => hrShiftsAPI.approveOutdoorEntry(id), onSuccess: () => { invalidate(); toast.success('Approved'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed') });
+  const rejectMut  = useMutation({ mutationFn: (id) => hrShiftsAPI.rejectOutdoorEntry(id), onSuccess: () => { invalidate(); toast.error('Rejected'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed') });
 
   const filtered = entries.filter(e=>
     (filter==='All'||e.status===filter) &&
@@ -47,14 +62,12 @@ export default function OutdoorEntriesPage() {
   );
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
-  const approve = (id) => { setEntries(p=>p.map(e=>e.id===id?{...e,status:'Approved'}:e)); toast.success('Approved'); };
-  const reject  = (id) => { setEntries(p=>p.map(e=>e.id===id?{...e,status:'Rejected'}:e)); toast.error('Rejected'); };
 
   const save = () => {
-    if(!form.name||!form.date||!form.purpose){ toast.error('Fill required fields'); return; }
-    setEntries(p=>[{...form,id:Date.now(),...(form.status||{status:'Pending'})},  ...p]);
-    toast.success('Entry added');
+    if(!form.employee_id||!form.entry_date||!form.purpose){ toast.error('Fill required fields'); return; }
+    createMut.mutate(form);
     setModal(false);
+    setForm(BLANK);
   };
 
   const counts = { All:entries.length, Pending:entries.filter(e=>e.status==='Pending').length, Approved:entries.filter(e=>e.status==='Approved').length };
@@ -68,7 +81,7 @@ export default function OutdoorEntriesPage() {
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><MapPin className="w-5 h-5 text-white"/></div>
             <div>
               <h1 className="text-lg font-black text-white">Employee OutDoor Entries</h1>
-              <p className="text-xs text-blue-200">{counts.Pending} pending · {counts.Approved} approved today</p>
+              <p className="text-xs text-blue-200">{counts.Pending} pending · {counts.Approved} approved</p>
             </div>
           </div>
           <button onClick={()=>{setForm(BLANK);setModal(true);}}
@@ -101,7 +114,8 @@ export default function OutdoorEntriesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e,i)=>(
+              {isLoading && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">Loading…</td></tr>}
+              {!isLoading && filtered.map((e,i)=>(
                 <tr key={e.id} className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors ${i%2?'bg-gray-50/30':''}`}>
                   <td className="px-4 py-3">
                     <div className="font-semibold text-gray-800 text-xs">{e.name}</div>
@@ -116,14 +130,14 @@ export default function OutdoorEntriesPage() {
                   <td className="px-4 py-3">
                     {e.status==='Pending' && (
                       <div className="flex gap-1.5">
-                        <button onClick={()=>approve(e.id)} className="p-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition"><Check className="w-3.5 h-3.5"/></button>
-                        <button onClick={()=>reject(e.id)}  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition"><XIcon className="w-3.5 h-3.5"/></button>
+                        <button onClick={()=>approveMut.mutate(e.id)} className="p-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition"><Check className="w-3.5 h-3.5"/></button>
+                        <button onClick={()=>rejectMut.mutate(e.id)}  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition"><XIcon className="w-3.5 h-3.5"/></button>
                       </div>
                     )}
                   </td>
                 </tr>
               ))}
-              {!filtered.length && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">No entries found</td></tr>}
+              {!isLoading && !filtered.length && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">No entries found</td></tr>}
             </tbody>
           </table>
         </motion.div>
@@ -132,19 +146,18 @@ export default function OutdoorEntriesPage() {
       {modal && (
         <Modal title="New OutDoor Entry" onClose={()=>setModal(false)}>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>Emp Code</label><input className={inp} value={form.emp_code} onChange={e=>set('emp_code',e.target.value)}/></div>
-              <div><label className={lbl}>Employee Name</label><input className={inp} value={form.name} onChange={e=>set('name',e.target.value)}/></div>
+            <div><label className={lbl}>Employee</label>
+              <select className={inp} value={form.employee_id} onChange={e=>set('employee_id',e.target.value)}>
+                <option value="">Select employee…</option>
+                {(employees||[]).map(emp=><option key={emp.id} value={emp.id}>{emp.name} ({emp.emp_code})</option>)}
+              </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>Department</label><input className={inp} value={form.dept} onChange={e=>set('dept',e.target.value)}/></div>
-              <div><label className={lbl}>Date</label><input type="date" className={inp} value={form.date} onChange={e=>set('date',e.target.value)}/></div>
-            </div>
+            <div><label className={lbl}>Date</label><input type="date" className={inp} value={form.entry_date} onChange={e=>set('entry_date',e.target.value)}/></div>
             <div><label className={lbl}>Purpose</label><input className={inp} value={form.purpose} onChange={e=>set('purpose',e.target.value)}/></div>
             <div><label className={lbl}>Location</label><input className={inp} value={form.location} onChange={e=>set('location',e.target.value)}/></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>Out Time</label><input type="time" className={inp} value={form.out} onChange={e=>set('out',e.target.value)}/></div>
-              <div><label className={lbl}>In Time</label><input type="time" className={inp} value={form.in} onChange={e=>set('in',e.target.value)}/></div>
+              <div><label className={lbl}>Out Time</label><input type="time" className={inp} value={form.out_time} onChange={e=>set('out_time',e.target.value)}/></div>
+              <div><label className={lbl}>In Time</label><input type="time" className={inp} value={form.in_time} onChange={e=>set('in_time',e.target.value)}/></div>
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={()=>setModal(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition text-sm">Cancel</button>

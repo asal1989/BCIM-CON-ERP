@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Code2, Plus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { hrMastersAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
@@ -9,22 +11,6 @@ const inp = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl tex
 const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5';
 
 const CATEGORIES = ['Attendance','Leave','Payroll','Site','Overtime','Holiday'];
-
-const INIT = [
-  { id:1, code:'P',   description:'Present',                category:'Attendance', color:'#10b981', paid:true,  count_leave:false },
-  { id:2, code:'A',   description:'Absent',                 category:'Attendance', color:'#ef4444', paid:false, count_leave:false },
-  { id:3, code:'CL',  description:'Casual Leave',           category:'Leave',      color:'#3b82f6', paid:true,  count_leave:true  },
-  { id:4, code:'SL',  description:'Sick Leave',             category:'Leave',      color:'#f97316', paid:true,  count_leave:true  },
-  { id:5, code:'EL',  description:'Earned Leave',           category:'Leave',      color:'#8b5cf6', paid:true,  count_leave:true  },
-  { id:6, code:'LOP', description:'Loss of Pay',            category:'Leave',      color:'#6b7280', paid:false, count_leave:false },
-  { id:7, code:'HD',  description:'Half Day',               category:'Attendance', color:'#f59e0b', paid:true,  count_leave:false },
-  { id:8, code:'WO',  description:'Week Off',               category:'Attendance', color:'#14b8a6', paid:true,  count_leave:false },
-  { id:9, code:'PH',  description:'Public Holiday',         category:'Holiday',    color:'#ec4899', paid:true,  count_leave:false },
-  { id:10,code:'OT',  description:'Overtime',               category:'Overtime',   color:'#0ea5e9', paid:true,  count_leave:false },
-  { id:11,code:'CO',  description:'Comp Off',               category:'Leave',      color:'#06b6d4', paid:true,  count_leave:true  },
-  { id:12,code:'OD',  description:'OutDoor / Field Duty',  category:'Site',       color:'#84cc16', paid:true,  count_leave:false },
-];
-
 const BLANK = { code:'', description:'', category:'Attendance', color:'#3b82f6', paid:true, count_leave:false };
 
 function Modal({ title, onClose, children }) {
@@ -52,11 +38,22 @@ function Check({ label, checked, onChange }) {
 }
 
 export default function WorkCodesPage() {
-  const [codes,  setCodes]  = useState(INIT);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [modal,  setModal]  = useState(null);
   const [form,   setForm]   = useState(BLANK);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['work-codes'],
+    queryFn: () => hrMastersAPI.listWorkCodes().then(r => r.data?.data || []),
+  });
+  const codes = data || [];
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['work-codes'] });
+  const createMut = useMutation({ mutationFn: (d) => hrMastersAPI.createWorkCode(d), onSuccess: () => { invalidate(); toast.success('Work code created'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to create') });
+  const updateMut = useMutation({ mutationFn: ({id,d}) => hrMastersAPI.updateWorkCode(id,d), onSuccess: () => { invalidate(); toast.success('Work code updated'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to update') });
+  const deleteMut = useMutation({ mutationFn: (id) => hrMastersAPI.deleteWorkCode(id), onSuccess: () => { invalidate(); toast.success('Deleted'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to delete') });
 
   const cats = ['All', ...CATEGORIES];
   const filtered = codes.filter(c=>
@@ -66,22 +63,15 @@ export default function WorkCodesPage() {
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const openAdd  = () => { setForm(BLANK); setModal('add'); };
-  const openEdit = (c) => { setForm({...c}); setModal(c); };
+  const openEdit = (c) => { setForm({ code:c.code, description:c.description, category:c.category, color:c.color, paid:c.paid, count_leave:c.count_leave }); setModal(c); };
   const close    = () => setModal(null);
 
   const save = () => {
     if(!form.code||!form.description){ toast.error('Code and description required'); return; }
-    if(modal==='add'){
-      setCodes(p=>[...p,{...form,id:Date.now()}]);
-      toast.success('Work code created');
-    } else {
-      setCodes(p=>p.map(c=>c.id===modal.id?{...form,id:modal.id}:c));
-      toast.success('Work code updated');
-    }
+    if(modal==='add') createMut.mutate(form);
+    else updateMut.mutate({ id: modal.id, d: form });
     close();
   };
-
-  const del = (id) => { setCodes(p=>p.filter(c=>c.id!==id)); toast.success('Deleted'); };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -100,7 +90,6 @@ export default function WorkCodesPage() {
           </button>
         </div>
 
-        {/* Filter */}
         <div className="flex gap-2 mb-4 flex-wrap">
           {cats.map(c=>(
             <button key={c} onClick={()=>setCatFilter(c)}
@@ -125,7 +114,8 @@ export default function WorkCodesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c,i)=>(
+              {isLoading && <tr><td colSpan={6} className="text-center py-12 text-gray-400 text-sm">Loading…</td></tr>}
+              {!isLoading && filtered.map((c,i)=>(
                 <tr key={c.id} className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors ${i%2?'bg-gray-50/30':''}`}>
                   <td className="px-4 py-3">
                     <span className="font-black text-sm px-3 py-1 rounded-lg text-white" style={{background:c.color}}>{c.code}</span>
@@ -137,11 +127,12 @@ export default function WorkCodesPage() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
                       <button onClick={()=>openEdit(c)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"><Edit2 className="w-3.5 h-3.5"/></button>
-                      <button onClick={()=>del(c.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={()=>deleteMut.mutate(c.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {!isLoading && !filtered.length && <tr><td colSpan={6} className="text-center py-12 text-gray-400 text-sm">No work codes found</td></tr>}
             </tbody>
           </table>
         </motion.div>

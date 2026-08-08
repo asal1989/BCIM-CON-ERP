@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tag, Plus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { hrMastersAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
 const inp = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all';
 const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5';
 
-const INIT = [
-  { id:1, code:'STAFF',    name:'Staff',              description:'Office & administrative staff',   employees:28, pf:true,  esi:true,  pt:true  },
-  { id:2, code:'WORKER',   name:'Worker',             description:'Site & skilled labour',           employees:95, pf:true,  esi:true,  pt:false },
-  { id:3, code:'MGMT',     name:'Management',         description:'Managers & senior management',   employees:12, pf:true,  esi:false, pt:true  },
-  { id:4, code:'CONTRACT', name:'Contract Labour',    description:'Third-party contract workers',   employees:40, pf:false, esi:true,  pt:false },
-  { id:5, code:'TRAINEE',  name:'Trainee / Intern',  description:'Trainees and interns',             employees: 8, pf:true,  esi:true,  pt:false },
-];
-
-const BLANK = { code:'', name:'', description:'', employees:0, pf:true, esi:true, pt:false };
+const BLANK = { code:'', name:'', description:'', pf:true, esi:true, pt:false };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -43,30 +37,34 @@ function Check({ label, checked, onChange }) {
 }
 
 export default function EmployeeCategoriesPage() {
-  const [cats, setCats]   = useState(INIT);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(null);
   const [form, setForm]   = useState(BLANK);
 
+  const { data, isLoading } = useQuery({
+    queryKey: ['employee-categories'],
+    queryFn: () => hrMastersAPI.listEmployeeCategories().then(r => r.data?.data || []),
+  });
+  const cats = data || [];
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['employee-categories'] });
+  const createMut = useMutation({ mutationFn: (d) => hrMastersAPI.createEmployeeCategory(d), onSuccess: () => { invalidate(); toast.success('Category created'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to create') });
+  const updateMut = useMutation({ mutationFn: ({id,d}) => hrMastersAPI.updateEmployeeCategory(id,d), onSuccess: () => { invalidate(); toast.success('Category updated'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to update') });
+  const deleteMut = useMutation({ mutationFn: (id) => hrMastersAPI.deleteEmployeeCategory(id), onSuccess: () => { invalidate(); toast.success('Deleted'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to delete') });
+
   const filtered = cats.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.code.toLowerCase().includes(search.toLowerCase()));
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const openAdd  = () => { setForm(BLANK); setModal('add'); };
-  const openEdit = (c) => { setForm({...c}); setModal(c); };
+  const openEdit = (c) => { setForm({ code:c.code, name:c.name, description:c.description||'', pf:c.pf, esi:c.esi, pt:c.pt }); setModal(c); };
   const close    = () => setModal(null);
 
   const save = () => {
     if(!form.code||!form.name){ toast.error('Code and Name required'); return; }
-    if(modal==='add') {
-      setCats(p=>[...p,{...form,id:Date.now(),employees:0}]);
-      toast.success('Category created');
-    } else {
-      setCats(p=>p.map(c=>c.id===modal.id?{...form,id:modal.id}:c));
-      toast.success('Category updated');
-    }
+    if(modal==='add') createMut.mutate(form);
+    else updateMut.mutate({ id: modal.id, d: form });
     close();
   };
-
-  const del = (id) => { setCats(p=>p.filter(c=>c.id!==id)); toast.success('Deleted'); };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -77,7 +75,7 @@ export default function EmployeeCategoriesPage() {
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><Tag className="w-5 h-5 text-white"/></div>
             <div>
               <h1 className="text-lg font-black text-white">Employee Categories</h1>
-              <p className="text-xs text-blue-200">{cats.length} categories · {cats.reduce((s,c)=>s+c.employees,0)} employees</p>
+              <p className="text-xs text-blue-200">{cats.length} categories · {cats.reduce((s,c)=>s+Number(c.employees||0),0)} employees</p>
             </div>
           </div>
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-black rounded-xl transition">
@@ -101,11 +99,12 @@ export default function EmployeeCategoriesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c,i)=>(
+              {isLoading && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">Loading…</td></tr>}
+              {!isLoading && filtered.map((c,i)=>(
                 <tr key={c.id} className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors ${i%2?'bg-gray-50/30':''}`}>
                   <td className="px-4 py-3"><span className="font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg text-xs">{c.code}</span></td>
                   <td className="px-4 py-3 font-semibold text-gray-800">{c.name}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.description}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{c.description || '—'}</td>
                   <td className="px-4 py-3"><span className="bg-gray-100 text-gray-700 text-xs font-bold px-2.5 py-1 rounded-full">{c.employees}</span></td>
                   {['pf','esi','pt'].map(k=>(
                     <td key={k} className="px-4 py-3">
@@ -115,11 +114,12 @@ export default function EmployeeCategoriesPage() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5">
                       <button onClick={()=>openEdit(c)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"><Edit2 className="w-3.5 h-3.5"/></button>
-                      <button onClick={()=>del(c.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={()=>deleteMut.mutate(c.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {!isLoading && !filtered.length && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">No categories found</td></tr>}
             </tbody>
           </table>
         </motion.div>

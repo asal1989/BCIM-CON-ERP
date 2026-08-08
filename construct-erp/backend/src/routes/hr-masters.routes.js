@@ -117,6 +117,44 @@ const initOrgStructureTables = async () => {
 };
 runSchemaInit('hr-org-structure-masters-v1', initOrgStructureTables);
 
+const initWorkforceMasters = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_work_codes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id),
+      code TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'Attendance',
+      color TEXT DEFAULT '#3b82f6',
+      paid BOOLEAN DEFAULT TRUE,
+      count_leave BOOLEAN DEFAULT FALSE,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(company_id, code)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_employee_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id),
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      pf BOOLEAN DEFAULT TRUE,
+      esi BOOLEAN DEFAULT TRUE,
+      pt BOOLEAN DEFAULT FALSE,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(company_id, code)
+    )
+  `);
+  await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES hr_employee_categories(id)`);
+  await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS short_name VARCHAR(50)`);
+  await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS reg_no VARCHAR(50)`);
+  await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS website VARCHAR(150)`);
+};
+runSchemaInit('hr-workforce-masters-v1', initWorkforceMasters);
+
 // ═══════════════════════════════════════════════════════════
 // DEPARTMENTS
 // ═══════════════════════════════════════════════════════════
@@ -542,6 +580,133 @@ router.put('/reporting-structure/:userId', async (req, res) => {
        WHERE user_id=$2 AND company_id=$3 RETURNING *`,
       [reporting_manager_id || null, req.params.userId, req.user.company_id]
     );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// WORK CODES
+// ═══════════════════════════════════════════════════════════
+router.get('/work-codes', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM hr_work_codes WHERE company_id=$1 AND is_active=TRUE ORDER BY category, code`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/work-codes', async (req, res) => {
+  try {
+    const { code, description, category, color, paid, count_leave } = req.body;
+    if (!code || !description) return res.status(400).json({ error: 'code and description are required' });
+    const { rows } = await query(
+      `INSERT INTO hr_work_codes (company_id, code, description, category, color, paid, count_leave)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.company_id, code.toUpperCase(), description, category||'Attendance', color||'#3b82f6', paid ?? true, count_leave||false]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/work-codes/:id', async (req, res) => {
+  try {
+    const { code, description, category, color, paid, count_leave, is_active } = req.body;
+    const { rows } = await query(
+      `UPDATE hr_work_codes SET code=$1, description=$2, category=$3, color=$4, paid=$5, count_leave=$6, is_active=$7
+       WHERE id=$8 AND company_id=$9 RETURNING *`,
+      [code?.toUpperCase(), description, category, color, paid ?? true, count_leave||false, is_active ?? true, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/work-codes/:id', async (req, res) => {
+  try {
+    await query(`UPDATE hr_work_codes SET is_active=FALSE WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// EMPLOYEE CATEGORIES — headcount is computed live from
+// employee_profiles.category_id, never stored, so it can't drift stale.
+// ═══════════════════════════════════════════════════════════
+router.get('/employee-categories', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT ec.*, COALESCE(cnt.employees, 0) AS employees
+       FROM hr_employee_categories ec
+       LEFT JOIN (
+         SELECT ep.category_id, COUNT(*) AS employees
+         FROM employee_profiles ep JOIN users u ON u.id=ep.user_id
+         WHERE u.company_id=$1 AND u.is_active=TRUE
+         GROUP BY ep.category_id
+       ) cnt ON cnt.category_id=ec.id
+       WHERE ec.company_id=$1 AND ec.is_active=TRUE ORDER BY ec.name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/employee-categories', async (req, res) => {
+  try {
+    const { code, name, description, pf, esi, pt } = req.body;
+    if (!code || !name) return res.status(400).json({ error: 'code and name are required' });
+    const { rows } = await query(
+      `INSERT INTO hr_employee_categories (company_id, code, name, description, pf, esi, pt)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.company_id, code.toUpperCase(), name, description||null, pf ?? true, esi ?? true, pt||false]
+    );
+    res.status(201).json({ data: { ...rows[0], employees: 0 } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/employee-categories/:id', async (req, res) => {
+  try {
+    const { code, name, description, pf, esi, pt, is_active } = req.body;
+    const { rows } = await query(
+      `UPDATE hr_employee_categories SET code=$1, name=$2, description=$3, pf=$4, esi=$5, pt=$6, is_active=$7
+       WHERE id=$8 AND company_id=$9 RETURNING *`,
+      [code?.toUpperCase(), name, description||null, pf ?? true, esi ?? true, pt||false, is_active ?? true, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/employee-categories/:id', async (req, res) => {
+  try {
+    await query(`UPDATE hr_employee_categories SET is_active=FALSE WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// COMPANY SETTINGS — single row, the caller's own company
+// ═══════════════════════════════════════════════════════════
+router.get('/company-settings', async (req, res) => {
+  try {
+    const { rows } = await query(`SELECT * FROM companies WHERE id=$1`, [req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Company not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/company-settings', async (req, res) => {
+  try {
+    const { name, short_name, reg_no, gstin, pan, email, phone, address, city, state, pincode, country, website } = req.body;
+    const { rows } = await query(
+      `UPDATE companies SET name=COALESCE($1,name), short_name=$2, reg_no=$3, gstin=$4, pan=$5,
+         email=$6, phone=$7, address=$8, city=$9, state=$10, pincode=$11, website=$13, updated_at=NOW()
+       WHERE id=$12 RETURNING *`,
+      [name, short_name||null, reg_no||null, gstin||null, pan||null, email||null, phone||null,
+       address||null, city||null, state||null, pincode||null, req.user.company_id, website||null]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Company not found' });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -1,21 +1,16 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Plus, Edit2, Trash2, X, Save, Search, ToggleLeft, ToggleRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { hrShiftsAPI } from '../../api/client';
 
 const B = { navy:'#0A1F5C' };
 const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d} });
 const inp = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all';
 const lbl = 'text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5';
 
-const INIT = [
-  { id:1, name:'Head Office',    address:'Plot 12, MIDC, Mumbai',        lat:'19.0760', lng:'72.8777', radius:100, active:true,  employees:42 },
-  { id:2, name:'Site A – Thane',  address:'Ghodbunder Rd, Thane',         lat:'19.2183', lng:'72.9781', radius:200, active:true,  employees:28 },
-  { id:3, name:'Site B – Pune',   address:'Hinjewadi Phase 2, Pune',      lat:'18.5913', lng:'73.7389', radius:150, active:true,  employees:20 },
-  { id:4, name:'Warehouse',       address:'Bhiwandi Logistics Park',      lat:'19.2813', lng:'73.0593', radius:75,  active:false, employees: 6 },
-];
-
-const BLANK = { name:'', address:'', lat:'', lng:'', radius:100, active:true, employees:0 };
+const BLANK = { name:'', address:'', lat:'', lng:'', radius_metres:100 };
 
 function Modal({ title, onClose, children }) {
   return (
@@ -33,32 +28,36 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function GeofencesPage() {
-  const [zones,  setZones]  = useState(INIT);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [modal,  setModal]  = useState(null);
   const [form,   setForm]   = useState(BLANK);
 
-  const filtered = zones.filter(z=>z.name.toLowerCase().includes(search.toLowerCase())||z.address.toLowerCase().includes(search.toLowerCase()));
+  const { data, isLoading } = useQuery({
+    queryKey: ['geofences'],
+    queryFn: () => hrShiftsAPI.geofences().then(r => r.data?.data || []),
+  });
+  const zones = data || [];
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['geofences'] });
+  const createMut = useMutation({ mutationFn: (d) => hrShiftsAPI.createGeofence(d), onSuccess: () => { invalidate(); toast.success('Geofence created'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to create') });
+  const updateMut = useMutation({ mutationFn: ({id,d}) => hrShiftsAPI.updateGeofence(id,d), onSuccess: () => { invalidate(); toast.success('Geofence updated'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to update') });
+  const deleteMut = useMutation({ mutationFn: (id) => hrShiftsAPI.deleteGeofence(id), onSuccess: () => { invalidate(); toast.success('Geofence removed'); }, onError: (e) => toast.error(e.response?.data?.error || 'Failed to delete') });
+  const toggleMut = useMutation({ mutationFn: (id) => hrShiftsAPI.toggleGeofence(id), onSuccess: invalidate, onError: (e) => toast.error(e.response?.data?.error || 'Failed to toggle') });
+
+  const filtered = zones.filter(z=>z.name.toLowerCase().includes(search.toLowerCase())||(z.address||'').toLowerCase().includes(search.toLowerCase()));
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const openAdd  = () => { setForm(BLANK); setModal('add'); };
-  const openEdit = (z) => { setForm({...z}); setModal(z); };
+  const openEdit = (z) => { setForm({ name:z.name, address:z.address||'', lat:z.lat, lng:z.lng, radius_metres:z.radius_metres }); setModal(z); };
   const close    = () => setModal(null);
 
   const save = () => {
     if(!form.name||!form.lat||!form.lng){ toast.error('Name and coordinates required'); return; }
-    if(modal==='add'){
-      setZones(p=>[...p,{...form,id:Date.now(),employees:0,radius:parseInt(form.radius)||100}]);
-      toast.success('Geofence created');
-    } else {
-      setZones(p=>p.map(z=>z.id===modal.id?{...form,id:modal.id,radius:parseInt(form.radius)||100}:z));
-      toast.success('Geofence updated');
-    }
+    if(modal==='add') createMut.mutate(form);
+    else updateMut.mutate({ id: modal.id, d: { ...form, active: modal.active } });
     close();
   };
-
-  const del = (id) => { setZones(p=>p.filter(z=>z.id!==id)); toast.success('Geofence removed'); };
-  const toggle = (id) => setZones(p=>p.map(z=>z.id===id?{...z,active:!z.active}:z));
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -69,7 +68,7 @@ export default function GeofencesPage() {
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><Radio className="w-5 h-5 text-white"/></div>
             <div>
               <h1 className="text-lg font-black text-white">Geofences</h1>
-              <p className="text-xs text-blue-200">{zones.filter(z=>z.active).length} active zones · {zones.reduce((s,z)=>s+z.employees,0)} employees covered</p>
+              <p className="text-xs text-blue-200">{zones.filter(z=>z.active).length} active zones</p>
             </div>
           </div>
           <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-black rounded-xl transition">
@@ -83,8 +82,10 @@ export default function GeofencesPage() {
             placeholder="Search zones..." value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
 
+        {isLoading && <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((z,i)=>(
+          {!isLoading && filtered.map((z,i)=>(
             <motion.div key={z.id} {...fade(0.05*i)}
               className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${z.active?'border-gray-100':'border-gray-200 opacity-60'}`}>
               <div className="flex items-start justify-between mb-3">
@@ -93,11 +94,11 @@ export default function GeofencesPage() {
                     <span className={`w-2.5 h-2.5 rounded-full ${z.active?'bg-green-500':'bg-gray-400'}`}/>
                     <h3 className="font-black text-gray-800 text-sm">{z.name}</h3>
                   </div>
-                  <p className="text-xs text-gray-500 ml-4.5">{z.address}</p>
+                  <p className="text-xs text-gray-500 ml-4.5">{z.address || '—'}</p>
                 </div>
                 <div className="flex gap-1.5">
                   <button onClick={()=>openEdit(z)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"><Edit2 className="w-3.5 h-3.5"/></button>
-                  <button onClick={()=>del(z.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
+                  <button onClick={()=>deleteMut.mutate(z.id)}   className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>
                 </div>
               </div>
 
@@ -112,13 +113,12 @@ export default function GeofencesPage() {
                 </div>
                 <div className="bg-blue-50 rounded-xl p-2.5 text-center">
                   <div className="text-[10px] text-blue-400 uppercase font-black">Radius</div>
-                  <div className="text-xs font-bold text-blue-700 mt-0.5">{z.radius}m</div>
+                  <div className="text-xs font-bold text-blue-700 mt-0.5">{z.radius_metres}m</div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">{z.employees} employees assigned</span>
-                <button onClick={()=>toggle(z.id)}>
+              <div className="flex items-center justify-end">
+                <button onClick={()=>toggleMut.mutate(z.id)}>
                   {z.active
                     ? <ToggleRight className="w-7 h-7 text-blue-600"/>
                     : <ToggleLeft  className="w-7 h-7 text-gray-300"/>}
@@ -126,6 +126,9 @@ export default function GeofencesPage() {
               </div>
             </motion.div>
           ))}
+          {!isLoading && !filtered.length && (
+            <div className="col-span-2 text-center py-12 text-gray-400 text-sm">No geofence zones found</div>
+          )}
         </div>
       </motion.div>
 
@@ -138,7 +141,7 @@ export default function GeofencesPage() {
               <div><label className={lbl}>Latitude</label><input className={inp} placeholder="e.g. 19.0760" value={form.lat} onChange={e=>set('lat',e.target.value)}/></div>
               <div><label className={lbl}>Longitude</label><input className={inp} placeholder="e.g. 72.8777" value={form.lng} onChange={e=>set('lng',e.target.value)}/></div>
             </div>
-            <div><label className={lbl}>Radius (metres)</label><input type="number" className={inp} value={form.radius} onChange={e=>set('radius',e.target.value)}/></div>
+            <div><label className={lbl}>Radius (metres)</label><input type="number" className={inp} value={form.radius_metres} onChange={e=>set('radius_metres',e.target.value)}/></div>
             <div className="flex gap-3 pt-2">
               <button onClick={close} className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition text-sm">Cancel</button>
               <button onClick={save} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl transition text-sm flex items-center justify-center gap-2">
