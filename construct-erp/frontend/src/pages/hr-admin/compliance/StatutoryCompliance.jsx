@@ -6,9 +6,11 @@
 // actions to mark filed or view history.
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Upload, History, CheckCircle2, User2, CalendarClock, Users2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { STATUTORY_ITEMS, STATUS_STYLES, C, fmtDate, daysUntil } from './complianceData';
+import { hrComplianceAPI } from '../../../api/client';
+import { STATUS_STYLES, C, fmtDate, daysUntil } from './complianceData';
 
 function initials(name) {
   return (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -24,10 +26,11 @@ function ProgressBar({ pct, status }) {
   );
 }
 
-function StatutoryCard({ item, index, expanded, onToggle, onMarkFiled }) {
+function StatutoryCard({ item, index, expanded, onToggle, onMarkFiled, markingFiled }) {
   const style = STATUS_STYLES[item.status];
   const d = daysUntil(item.dueDate);
-  const urgencyText = item.status === 'Overdue' ? `${Math.abs(d)}d overdue`
+  const urgencyText = d === null ? 'See Compliance Calendar'
+    : item.status === 'Overdue' ? `${Math.abs(d)}d overdue`
     : d <= 7 ? `Due in ${d}d` : fmtDate(item.dueDate);
 
   return (
@@ -121,8 +124,8 @@ function StatutoryCard({ item, index, expanded, onToggle, onMarkFiled }) {
                     <History size={13} /> History
                   </button>
                   {item.status !== 'Compliant' && (
-                    <button onClick={() => onMarkFiled(item.code)}
-                      className="h-8 px-3 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5"
+                    <button disabled={markingFiled} onClick={() => onMarkFiled(item.code)}
+                      className="h-8 px-3 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 disabled:opacity-50"
                       style={{ background: C.success }}>
                       <CheckCircle2 size={13} /> Mark Filed
                     </button>
@@ -138,16 +141,26 @@ function StatutoryCard({ item, index, expanded, onToggle, onMarkFiled }) {
 }
 
 export default function StatutoryCompliance() {
-  const [items, setItems] = useState(STATUTORY_ITEMS);
-  const [expandedCode, setExpandedCode] = useState(STATUTORY_ITEMS[0]?.code || null);
+  const qc = useQueryClient();
+  const [expandedCode, setExpandedCode] = useState(null);
 
-  const handleMarkFiled = (code) => {
-    setItems(prev => prev.map(it => it.code === code
-      ? { ...it, status: 'Compliant', progress: 100, lastFiling: new Date().toISOString().slice(0, 10) }
-      : it));
-    const item = items.find(it => it.code === code);
-    toast.success(`${item?.name || code} marked as filed`);
-  };
+  const { data, isLoading } = useQuery({
+    queryKey: ['compliance-tracker-statutory'],
+    queryFn: () => hrComplianceAPI.trackerStatutory().then(r => r.data.data),
+  });
+  const items = data || [];
+  if (expandedCode === null && items.length) setExpandedCode(items[0].code);
+
+  const markFiledMut = useMutation({
+    mutationFn: (code) => hrComplianceAPI.markStatutoryFiled(code),
+    onSuccess: (_, code) => {
+      const item = items.find(it => it.code === code);
+      toast.success(`${item?.name || code} marked as filed`);
+      qc.invalidateQueries({ queryKey: ['compliance-tracker-statutory'] });
+      qc.invalidateQueries({ queryKey: ['compliance-tracker-activity'] });
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to mark as filed'),
+  });
 
   const compliantCount = items.filter(it => it.status === 'Compliant').length;
 
@@ -155,7 +168,9 @@ export default function StatutoryCompliance() {
     <div>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <p className="text-sm text-slate-500">
-          <strong className="text-slate-700">{compliantCount}</strong> of <strong className="text-slate-700">{items.length}</strong> statutory obligations fully compliant
+          {isLoading ? 'Loading…' : (
+            <><strong className="text-slate-700">{compliantCount}</strong> of <strong className="text-slate-700">{items.length}</strong> statutory obligations fully compliant this period</>
+          )}
         </p>
       </div>
 
@@ -167,7 +182,8 @@ export default function StatutoryCompliance() {
             index={i}
             expanded={expandedCode === item.code}
             onToggle={() => setExpandedCode(expandedCode === item.code ? null : item.code)}
-            onMarkFiled={handleMarkFiled}
+            onMarkFiled={(code) => markFiledMut.mutate(code)}
+            markingFiled={markFiledMut.isPending}
           />
         ))}
       </div>

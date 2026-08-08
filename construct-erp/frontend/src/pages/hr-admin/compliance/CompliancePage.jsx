@@ -2,8 +2,9 @@
 // HR Compliance — premium enterprise dashboard (Zoho/Rippling-grade).
 // Composes: KPI cards, filter panel, data grid, right-rail analytics,
 // slide-in detail drawer, Add Compliance dialog, delete confirm dialog.
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Download, ShieldCheck, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ComplianceKpiCards from './ComplianceKpiCards';
@@ -13,7 +14,8 @@ import ComplianceDrawer from './ComplianceDrawer';
 import ComplianceForm from './ComplianceForm';
 import ComplianceAnalytics from './ComplianceAnalytics';
 import StatutoryCompliance from './StatutoryCompliance';
-import { DUMMY_COMPLIANCES, daysUntil } from './complianceData';
+import { hrComplianceAPI, hrMastersAPI } from '../../../api/client';
+import { daysUntil } from './complianceData';
 
 const EMPTY_FILTERS = { month: '', department: '', location: '', type: '', status: '', priority: '', search: '' };
 
@@ -48,16 +50,54 @@ const TABS = [
 ];
 
 export default function CompliancePage() {
+  const qc = useQueryClient();
   const [tab,     setTab]     = useState('dashboard');
-  const [items,   setItems]   = useState(DUMMY_COMPLIANCES);
-  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [drawerItem, setDrawerItem] = useState(null);
   const [formOpen,   setFormOpen]   = useState(false);
+  const [editItem,   setEditItem]   = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
 
-  // Skeleton pass on first mount — mirrors a react-query fetch lifecycle.
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 650); return () => clearTimeout(t); }, []);
+  const { data: itemsData, isLoading: loading } = useQuery({
+    queryKey: ['compliance-tracker-items'],
+    queryFn: () => hrComplianceAPI.trackerItems().then(r => r.data.data),
+  });
+  const items = itemsData || [];
+
+  const { data: deptData } = useQuery({
+    queryKey: ['hr-departments'],
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
+  });
+  const departments = (deptData || []).map(d => d.name).filter(Boolean);
+
+  const { data: locationData } = useQuery({
+    queryKey: ['compliance-tracker-locations'],
+    queryFn: () => hrComplianceAPI.trackerLocations().then(r => r.data.data),
+  });
+  const locations = locationData || [];
+
+  const invalidateItems = () => qc.invalidateQueries({ queryKey: ['compliance-tracker-items'] });
+
+  const createMut = useMutation({
+    mutationFn: (values) => hrComplianceAPI.createTrackerItem(values),
+    onSuccess: () => { invalidateItems(); toast.success('Compliance item saved'); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to save compliance item'),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, values }) => hrComplianceAPI.updateTrackerItem(id, values),
+    onSuccess: () => { invalidateItems(); toast.success('Compliance item updated'); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to update compliance item'),
+  });
+  const renewMut = useMutation({
+    mutationFn: (id) => hrComplianceAPI.renewTrackerItem(id),
+    onSuccess: () => { invalidateItems(); toast.success('Renewed for the next cycle'); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to renew'),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => hrComplianceAPI.deleteTrackerItem(id),
+    onSuccess: () => { invalidateItems(); toast.success('Compliance item deleted'); setDeleteItem(null); },
+    onError: (e) => { toast.error(e.response?.data?.error || 'Failed to delete'); setDeleteItem(null); },
+  });
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -96,33 +136,20 @@ export default function CompliancePage() {
   };
 
   const handleRowAction = (action, row) => {
-    if (action === 'edit')    { setDrawerItem(null); setFormOpen(true); toast('Editing pre-fill coming with backend wiring', { icon: '✏️' }); return; }
-    if (action === 'history') { setDrawerItem(row); return; }
-    if (action === 'delete')  { setDeleteItem(row); return; }
-    if (action === 'renew')   {
-      setItems(p => p.map(r => r.id === row.id
-        ? { ...r, status: 'Compliant', renewalDate: new Date(new Date(r.renewalDate).setFullYear(new Date(r.renewalDate).getFullYear() + 1)).toISOString().slice(0, 10), lastUpdated: new Date().toISOString().slice(0, 10) }
-        : r));
-      toast.success(`"${row.name}" renewed for the next cycle`);
+    if (row.readOnly && ['edit', 'renew', 'delete'].includes(action)) {
+      toast(`This item is sourced from ${row.sourcePage} — manage it there instead`, { icon: 'ℹ️' });
       return;
     }
-    if (action === 'upload')  { toast('Document upload will attach to this item once backend is wired', { icon: '📎' }); return; }
-    if (action === 'assign')  { toast('Owner reassignment opens the employee picker once backend is wired', { icon: '👤' }); return; }
+    if (action === 'edit')    { setDrawerItem(null); setEditItem(row); setFormOpen(true); return; }
+    if (action === 'history') { setDrawerItem(row); return; }
+    if (action === 'delete')  { setDeleteItem(row); return; }
+    if (action === 'renew')   { renewMut.mutate(row.id); return; }
   };
 
-  const handleCreate = (values) => {
-    const nextSeq = String(items.length + 1).padStart(3, '0');
-    setItems(p => [{
-      id: values.code || `CMP-2026-${nextSeq}`,
-      name: values.name, category: values.category || 'Statutory', type: values.type,
-      applicableTo: values.applicableTo || 'All Employees',
-      department: values.department || 'HR', location: values.location || 'Head Office',
-      dueDate: values.dueDate, renewalDate: values.dueDate,
-      status: 'Pending', priority: values.priority || 'Medium',
-      owner: values.owner, documents: 0,
-      lastUpdated: new Date().toISOString().slice(0, 10),
-      description: values.description || '', legalRef: '—',
-    }, ...p]);
+  const handleSave = (values) => {
+    if (editItem) updateMut.mutate({ id: editItem.id, values });
+    else createMut.mutate(values);
+    setEditItem(null);
   };
 
   return (
@@ -149,7 +176,7 @@ export default function CompliancePage() {
             className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-2 transition-colors">
             <Download className="w-4 h-4" /> Export Report
           </button>
-          <button onClick={() => setFormOpen(true)}
+          <button onClick={() => { setEditItem(null); setFormOpen(true); }}
             className="h-10 px-5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 transition-transform active:scale-[0.98]"
             style={{ background: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,.30)' }}>
             <Plus className="w-4 h-4" /> Add Compliance
@@ -181,7 +208,7 @@ export default function CompliancePage() {
         <>
           {/* ── Filters ── */}
           <div className="mb-4">
-            <ComplianceFilters onApply={setFilters} />
+            <ComplianceFilters onApply={setFilters} departments={departments} locations={locations} />
           </div>
 
           {/* ── Grid + analytics rail ── */}
@@ -191,7 +218,7 @@ export default function CompliancePage() {
               loading={loading}
               onView={setDrawerItem}
               onAction={handleRowAction}
-              onCreate={() => setFormOpen(true)}
+              onCreate={() => { setEditItem(null); setFormOpen(true); }}
             />
             <ComplianceAnalytics rows={items} />
           </div>
@@ -202,11 +229,25 @@ export default function CompliancePage() {
 
       {/* ── Overlays ── */}
       <ComplianceDrawer item={drawerItem} onClose={() => setDrawerItem(null)} />
-      <ComplianceForm open={formOpen} onClose={() => setFormOpen(false)} onSave={handleCreate} />
+      <ComplianceForm
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditItem(null); }}
+        onSave={handleSave}
+        departments={departments}
+        locations={locations}
+        initialValues={editItem ? {
+          name: editItem.name, category: editItem.category, type: editItem.type,
+          applicableTo: editItem.applicableTo, department: editItem.department === '—' ? '' : editItem.department,
+          location: editItem.location === '—' ? '' : editItem.location,
+          dueDate: editItem.dueDate ? String(editItem.dueDate).slice(0, 10) : '',
+          priority: editItem.priority, owner: editItem.owner === '—' ? '' : editItem.owner,
+          description: editItem.description, renewalFrequency: 'Annual', reminderDays: 30,
+        } : null}
+      />
       <DeleteDialog
         item={deleteItem}
         onCancel={() => setDeleteItem(null)}
-        onConfirm={() => { setItems(p => p.filter(r => r.id !== deleteItem.id)); toast.success('Compliance item deleted'); setDeleteItem(null); }}
+        onConfirm={() => deleteMut.mutate(deleteItem.id)}
       />
     </div>
   );

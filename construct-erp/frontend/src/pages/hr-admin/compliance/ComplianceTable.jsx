@@ -37,14 +37,14 @@ function RowMenu({ row, onAction }) {
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
-  const items = [
-    { key: 'edit',    label: 'Edit',            Icon: Pencil },
-    { key: 'upload',  label: 'Upload Document', Icon: Upload },
-    { key: 'renew',   label: 'Renew',           Icon: RefreshCw },
-    { key: 'assign',  label: 'Assign Owner',    Icon: UserPlus },
-    { key: 'history', label: 'History',         Icon: History },
-    { key: 'delete',  label: 'Delete',          Icon: Trash2, danger: true },
-  ];
+  const items = row.readOnly
+    ? [{ key: 'history', label: 'History', Icon: History }]
+    : [
+        { key: 'edit',    label: 'Edit',            Icon: Pencil },
+        { key: 'renew',   label: 'Renew',           Icon: RefreshCw },
+        { key: 'history', label: 'History',         Icon: History },
+        { key: 'delete',  label: 'Delete',          Icon: Trash2, danger: true },
+      ];
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(o => !o)}
@@ -136,7 +136,7 @@ export default function ComplianceTable({ rows, loading, onView, onAction, onCre
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <div className={`font-medium ${overdue ? 'text-red-600' : 'text-slate-700'}`}>{fmtDate(row.dueDate)}</div>
                     <div className={`text-xs mt-0.5 ${overdue ? 'text-red-400' : 'text-slate-400'}`}>
-                      {du < 0 ? `${Math.abs(du)}d overdue` : du === 0 ? 'Due today' : `in ${du}d`}
+                      {du === null ? '—' : du < 0 ? `${Math.abs(du)}d overdue` : du === 0 ? 'Due today' : `in ${du}d`}
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{fmtDate(row.renewalDate)}</td>

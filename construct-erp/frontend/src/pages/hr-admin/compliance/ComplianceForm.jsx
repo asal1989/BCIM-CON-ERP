@@ -1,23 +1,28 @@
 // src/pages/hr-admin/compliance/ComplianceForm.jsx
 // Large "Add Compliance" modal — react-hook-form, full field set, Save /
 // Save & Continue / Cancel.
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { X, UploadCloud, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  COMPLIANCE_TYPES, DEPARTMENTS, LOCATIONS, PRIORITIES, RENEWAL_FREQUENCIES,
+  COMPLIANCE_TYPES, PRIORITIES, RENEWAL_FREQUENCIES,
 } from './complianceData';
 
 const inp = 'w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-shadow';
 const lbl = 'text-xs font-semibold text-slate-600 block mb-1.5';
 const err = 'text-[11px] text-red-500 mt-1';
 
-export default function ComplianceForm({ open, onClose, onSave }) {
+export default function ComplianceForm({ open, onClose, onSave, departments = [], locations = [], initialValues = null }) {
+  const isEdit = !!initialValues;
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: { priority: 'Medium', renewalFrequency: 'Annual', reminderDays: 15 },
   });
+
+  useEffect(() => {
+    if (open) reset(initialValues || { priority: 'Medium', renewalFrequency: 'Annual', reminderDays: 15 });
+  }, [open, initialValues, reset]);
 
   const submit = (keepOpen) => handleSubmit((values) => {
     onSave(values);
@@ -44,8 +49,8 @@ export default function ComplianceForm({ open, onClose, onSave }) {
                   <ShieldCheck className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Add Compliance</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Register a statutory, license or internal compliance item</p>
+                  <h2 className="text-lg font-bold text-slate-900">{isEdit ? 'Edit Compliance' : 'Add Compliance'}</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Register a license, legal, audit, insurance, vendor or welfare compliance item</p>
                 </div>
               </div>
               <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50">
@@ -67,8 +72,9 @@ export default function ComplianceForm({ open, onClose, onSave }) {
                 <label className={lbl}>Category *</label>
                 <select {...register('category', { required: 'Required' })} className={inp}>
                   <option value="">Select…</option>
-                  {['Statutory', 'License', 'Legal', 'Audit', 'Insurance', 'Vendor', 'Welfare'].map(c => <option key={c}>{c}</option>)}
+                  {['License', 'Legal', 'Audit', 'Insurance', 'Vendor', 'Welfare'].map(c => <option key={c}>{c}</option>)}
                 </select>
+                <p className="text-[11px] text-slate-400 mt-1">Statutory obligations (PF/ESI/PT/etc.) are tracked automatically under the Statutory Compliance tab.</p>
                 {errors.category && <p className={err}>{errors.category.message}</p>}
               </div>
               <div>
@@ -83,14 +89,14 @@ export default function ComplianceForm({ open, onClose, onSave }) {
                 <label className={lbl}>Department</label>
                 <select {...register('department')} className={inp}>
                   <option value="">Select…</option>
-                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                  {departments.map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label className={lbl}>Location</label>
                 <select {...register('location')} className={inp}>
                   <option value="">Select…</option>
-                  {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+                  {locations.map(l => <option key={l}>{l}</option>)}
                 </select>
               </div>
               <div>

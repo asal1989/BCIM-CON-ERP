@@ -2364,6 +2364,18 @@ export const hrComplianceAPI = {
   celebrations:        ()         => api.get('/hr-admin/compliance/celebrations'),
   upcomingCelebrations:(days=30)  => api.get('/hr-admin/compliance/celebrations/upcoming', { params: { days } }),
   triggerCelebrations: ()         => api.post('/hr-admin/compliance/celebrations/trigger'),
+  // Compliance Tracker (real data)
+  trackerItems:        ()         => api.get('/hr-admin/compliance/tracker-items'),
+  createTrackerItem:   (d)        => api.post('/hr-admin/compliance/tracker-items', d),
+  updateTrackerItem:   (id, d)    => api.put(`/hr-admin/compliance/tracker-items/${id}`, d),
+  renewTrackerItem:    (id)       => api.patch(`/hr-admin/compliance/tracker-items/${id}/renew`),
+  deleteTrackerItem:   (id)       => api.delete(`/hr-admin/compliance/tracker-items/${id}`),
+  trackerLocations:    ()         => api.get('/hr-admin/compliance/tracker-locations'),
+  trackerStatutory:    ()         => api.get('/hr-admin/compliance/tracker-statutory'),
+  markStatutoryFiled:  (code)     => api.patch(`/hr-admin/compliance/tracker-statutory/${code}/mark-filed`),
+  trackerActivity:     ()         => api.get('/hr-admin/compliance/tracker-activity'),
+  trackerTrend:        ()         => api.get('/hr-admin/compliance/tracker-trend'),
+  trackerInsights:     ()         => api.get('/hr-admin/compliance/tracker-insights'),
 };
 
 export const mailAPI = {

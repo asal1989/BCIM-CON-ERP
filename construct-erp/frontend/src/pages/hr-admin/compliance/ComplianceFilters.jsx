@@ -4,14 +4,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, RotateCcw, SlidersHorizontal } from 'lucide-react';
-import { COMPLIANCE_TYPES, DEPARTMENTS, LOCATIONS, PRIORITIES, STATUSES } from './complianceData';
+import { COMPLIANCE_TYPES, PRIORITIES, STATUSES } from './complianceData';
 
 const EMPTY = { month: '', department: '', location: '', type: '', status: '', priority: '', search: '' };
 
 const selCls = 'h-10 px-3 pr-8 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-shadow appearance-none bg-no-repeat bg-[right_0.6rem_center]';
 const chevronBg = { backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` };
 
-export default function ComplianceFilters({ onApply }) {
+export default function ComplianceFilters({ onApply, departments = [], locations = [] }) {
   const [f, setF] = useState(EMPTY);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
@@ -24,11 +24,11 @@ export default function ComplianceFilters({ onApply }) {
           className="h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
         <select value={f.department} onChange={e => set('department', e.target.value)} className={selCls} style={chevronBg}>
           <option value="">Department</option>
-          {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+          {departments.map(d => <option key={d}>{d}</option>)}
         </select>
         <select value={f.location} onChange={e => set('location', e.target.value)} className={selCls} style={chevronBg}>
           <option value="">Location</option>
-          {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+          {locations.map(l => <option key={l}>{l}</option>)}
         </select>
         <select value={f.type} onChange={e => set('type', e.target.value)} className={selCls} style={chevronBg}>
           <option value="">Compliance Type</option>

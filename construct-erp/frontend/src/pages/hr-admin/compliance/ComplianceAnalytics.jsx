@@ -3,12 +3,14 @@
 // upcoming renewal deadlines, recent activity feed.
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { CalendarClock, Activity, Upload, AlertTriangle, RefreshCw, CalendarDays, Sparkles } from 'lucide-react';
-import { C, RECENT_ACTIVITIES, TREND_DATA, AI_INSIGHTS, fmtDate, daysUntil } from './complianceData';
+import { hrComplianceAPI } from '../../../api/client';
+import { C, fmtDate, daysUntil, relTime } from './complianceData';
 
 const INSIGHT_TONES = {
   warning: { bg: '#FFFBEB', text: '#B45309', dot: '#F59E0B' },
@@ -37,6 +39,19 @@ const ACTIVITY_ICONS = { upload: Upload, alert: AlertTriangle, renew: RefreshCw,
 const ACTIVITY_COLORS = { upload: '#2563EB', alert: '#EF4444', renew: '#22C55E', schedule: '#8B5CF6' };
 
 export default function ComplianceAnalytics({ rows }) {
+  const { data: insights } = useQuery({
+    queryKey: ['compliance-tracker-insights'],
+    queryFn: () => hrComplianceAPI.trackerInsights().then(r => r.data.data),
+  });
+  const { data: trend } = useQuery({
+    queryKey: ['compliance-tracker-trend'],
+    queryFn: () => hrComplianceAPI.trackerTrend().then(r => r.data.data),
+  });
+  const { data: activity } = useQuery({
+    queryKey: ['compliance-tracker-activity'],
+    queryFn: () => hrComplianceAPI.trackerActivity().then(r => r.data.data),
+  });
+
   const byDept = Object.entries(
     rows.reduce((acc, r) => { acc[r.department] = (acc[r.department] || 0) + 1; return acc; }, {})
   ).map(([name, value]) => ({ name, value }));
@@ -48,9 +63,9 @@ export default function ComplianceAnalytics({ rows }) {
 
   return (
     <div className="space-y-4">
-      <Panel title="AI Insights" icon={Sparkles} delay={0.2}>
+      <Panel title="Compliance Insights" icon={Sparkles} delay={0.2}>
         <div className="space-y-2.5">
-          {AI_INSIGHTS.map(insight => {
+          {(insights || []).map(insight => {
             const tone = INSIGHT_TONES[insight.tone] || INSIGHT_TONES.info;
             return (
               <div key={insight.id} className="flex items-start gap-2.5 rounded-xl p-3" style={{ background: tone.bg }}>
@@ -87,7 +102,7 @@ export default function ComplianceAnalytics({ rows }) {
       <Panel title="Compliance Trend" icon={Activity} delay={0.3}>
         <div className="h-40">
           <ResponsiveContainer>
-            <LineChart data={TREND_DATA} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
+            <LineChart data={trend || []} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
@@ -125,7 +140,7 @@ export default function ComplianceAnalytics({ rows }) {
 
       <Panel title="Recent Activities" icon={Activity} delay={0.4}>
         <div className="space-y-3">
-          {RECENT_ACTIVITIES.map(a => {
+          {(activity || []).map(a => {
             const Icon = ACTIVITY_ICONS[a.type] || Activity;
             const color = ACTIVITY_COLORS[a.type] || '#64748B';
             return (
@@ -135,11 +150,12 @@ export default function ComplianceAnalytics({ rows }) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-700 leading-snug">{a.text}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{a.time}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{relTime(a.time)}</p>
                 </div>
               </div>
             );
           })}
+          {activity && activity.length === 0 && <p className="text-sm text-slate-400">No recent activity.</p>}
         </div>
       </Panel>
     </div>

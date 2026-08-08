@@ -1067,10 +1067,10 @@ router.get('/ecr-file', async (req, res) => {
    Challan Filing Tracker — CRUD
    Track PF ECR, ESI, PT, TDS, Bonus, BOCW cess filings
 ══════════════════════════════════════════════════════ */
-const ensureChallanTable = () => query(`
+const ensureChallanTable = async () => { await query(`
   CREATE TABLE IF NOT EXISTS compliance_challan_filings (
     id SERIAL PRIMARY KEY,
-    company_id INT,
+    company_id UUID,
     challan_type TEXT NOT NULL,
     period_month INT,
     period_year INT NOT NULL,
@@ -1084,7 +1084,30 @@ const ensureChallanTable = () => query(`
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   )
-`);
+`); await fixChallanCompanyIdType(); };
+
+// One-time defensive fix: compliance_challan_filings.company_id was originally
+// declared INT while every other table in this codebase uses UUID company_id
+// (matching companies.id) — a mismatched-type company_id column means every
+// insert/select against it would fail, since a UUID string can't cast to INT.
+// If a production DB already created the table under the old (buggy) CREATE
+// statement, ensureChallanTable()'s CREATE TABLE IF NOT EXISTS above won't
+// fix it (table already exists). This corrects the column type in place; safe
+// because any row that got the type wrong could never have been successfully
+// inserted with a real UUID, so there's no real data to lose.
+let challanColumnFixed = false;
+async function fixChallanCompanyIdType() {
+  if (challanColumnFixed) return;
+  challanColumnFixed = true;
+  try {
+    const { rows } = await query(
+      `SELECT data_type FROM information_schema.columns WHERE table_name='compliance_challan_filings' AND column_name='company_id'`
+    );
+    if (rows.length && rows[0].data_type !== 'uuid') {
+      await query(`ALTER TABLE compliance_challan_filings ALTER COLUMN company_id TYPE UUID USING NULL`);
+    }
+  } catch (e) { console.error('[hr-compliance] challan company_id type fix:', e.message); }
+}
 
 router.get('/challan-filings', async (req, res) => {
   const { year = new Date().getFullYear(), type } = req.query;
@@ -1436,6 +1459,393 @@ router.post('/celebrations/test-email', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/* ═══════════════════════════════════════════════════════
+   Compliance Tracker — real data for the /hr-admin/compliance-tracker page.
+   Composes existing registers (labour-licenses, document-expiry, PF/ESI/PT/
+   LWF/IT/Bonus/Gratuity/Min-Wages/CLRA populations, challan-filings) rather
+   than a parallel data model. Only genuinely-manual items (License/Legal/
+   Audit/Insurance/Vendor/Welfare with no dedicated register elsewhere) get a
+   new table — Statutory obligations stay derived from the real registers.
+══════════════════════════════════════════════════════ */
+(async () => {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS hr_compliance_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'License' CHECK (category IN ('License','Legal','Audit','Insurance','Vendor','Welfare')),
+        type TEXT,
+        applicable_to TEXT,
+        department_id UUID REFERENCES hr_departments(id),
+        location TEXT,
+        effective_date DATE,
+        due_date DATE,
+        renewal_date DATE,
+        renewal_frequency TEXT,
+        status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Compliant','Pending','Overdue','In Progress','Expired')),
+        priority TEXT NOT NULL DEFAULT 'Medium' CHECK (priority IN ('Critical','High','Medium','Low')),
+        owner TEXT,
+        reminder_days INT DEFAULT 30,
+        description TEXT,
+        legal_ref TEXT,
+        documents_count INT DEFAULT 0,
+        created_by UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_compliance_items_company ON hr_compliance_items(company_id, status)`);
+  } catch (e) { console.error('[hr-compliance] tracker items table init:', e.message); }
+})();
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const trackerDaysUntil = (d) => { if (!d) return null; const t = new Date(); t.setHours(0,0,0,0); return Math.ceil((new Date(d) - t) / 86400000); };
+const priorityFromDays = (days) => days === null ? 'Medium' : days < 0 ? 'Critical' : days <= 15 ? 'High' : days <= 45 ? 'Medium' : 'Low';
+
+// ── GET /tracker-items — manual items + auto-derived from licences/doc-expiry
+router.get('/tracker-items', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const [manualRes, licenseRes, docRes] = await Promise.all([
+      query(
+        `SELECT ci.*, dep.name AS department_name FROM hr_compliance_items ci
+         LEFT JOIN hr_departments dep ON dep.id = ci.department_id
+         WHERE ci.company_id=$1 ORDER BY ci.due_date NULLS LAST`,
+        [companyId]
+      ),
+      query(`SELECT * FROM hr_labour_licenses WHERE company_id=$1`, [companyId]),
+      query(
+        `SELECT ed.*, u.name AS employee_name, dep.name AS department_name
+         FROM employee_documents ed JOIN users u ON u.id=ed.user_id
+         LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+         LEFT JOIN hr_departments dep ON dep.id=ep.department_id
+         WHERE u.company_id=$1 AND u.is_active=TRUE AND ed.expiry_date IS NOT NULL`,
+        [companyId]
+      ),
+    ]);
+
+    const manual = manualRes.rows.map(r => ({
+      id: r.id, name: r.name, category: r.category, type: r.type || r.category,
+      applicableTo: r.applicable_to || 'All Employees', department: r.department_name || '—',
+      location: r.location || '—', dueDate: r.due_date, renewalDate: r.renewal_date,
+      status: r.status, priority: r.priority, owner: r.owner || '—', documents: r.documents_count || 0,
+      lastUpdated: r.updated_at, description: r.description || '', legalRef: r.legal_ref || '—',
+      readOnly: false,
+    }));
+
+    const licenses = licenseRes.rows.map(r => {
+      const days = trackerDaysUntil(r.expiry_date);
+      const isExpired = days !== null && days < 0;
+      const expiringSoon = days !== null && days >= 0 && days <= (r.alert_days || 30);
+      return {
+        id: `LIC-${r.id}`, name: r.license_name || r.license_type, category: 'License', type: r.license_type,
+        applicableTo: 'Licensed Workforce', department: '—', location: '—',
+        dueDate: r.expiry_date, renewalDate: r.expiry_date,
+        status: isExpired ? 'Expired' : expiringSoon ? 'Pending' : 'Compliant',
+        priority: priorityFromDays(days), owner: '—', documents: r.file_url ? 1 : 0,
+        lastUpdated: r.updated_at, description: r.notes || `${r.license_type} issued by ${r.issuing_authority || 'the authority'}`,
+        legalRef: r.license_number ? `License No. ${r.license_number}` : '—',
+        readOnly: true, sourcePage: 'Compliance → Labour Licences',
+      };
+    });
+
+    const docs = docRes.rows.map(r => {
+      const days = trackerDaysUntil(r.expiry_date);
+      const isExpired = days !== null && days < 0;
+      const expiringSoon = days !== null && days >= 0 && days <= (r.alert_days || 30);
+      return {
+        id: `DOC-${r.id}`, name: `${r.doc_type || r.doc_name} — ${r.employee_name}`, category: 'Legal', type: 'Document Expiry',
+        applicableTo: r.employee_name, department: r.department_name || '—', location: '—',
+        dueDate: r.expiry_date, renewalDate: r.expiry_date,
+        status: isExpired ? 'Expired' : expiringSoon ? 'Pending' : 'Compliant',
+        priority: priorityFromDays(days), owner: r.employee_name, documents: 1,
+        lastUpdated: r.uploaded_at, description: `${r.doc_type || r.doc_name} document expiry for ${r.employee_name}`,
+        legalRef: r.document_number ? `Doc No. ${r.document_number}` : '—',
+        readOnly: true, sourcePage: 'Compliance → Doc Expiry',
+      };
+    });
+
+    res.json({ data: [...manual, ...licenses, ...docs] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/tracker-items', async (req, res) => {
+  try {
+    const { name, category, type, applicableTo, department, location, effectiveDate, dueDate, renewalFrequency, priority, owner, reminderDays, description, legalRef } = req.body;
+    if (!name || !dueDate) return res.status(400).json({ error: 'name and dueDate are required' });
+    let departmentId = null;
+    if (department) {
+      const d = await query(`SELECT id FROM hr_departments WHERE company_id=$1 AND name=$2`, [req.user.company_id, department]);
+      departmentId = d.rows[0]?.id || null;
+    }
+    const { rows } = await query(
+      `INSERT INTO hr_compliance_items (company_id,name,category,type,applicable_to,department_id,location,effective_date,due_date,renewal_date,renewal_frequency,priority,owner,reminder_days,description,legal_ref,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [req.user.company_id, name, category || 'License', type || category || 'License', applicableTo || 'All Employees',
+       departmentId, location || null, effectiveDate || null, dueDate, renewalFrequency || 'Annual',
+       priority || 'Medium', owner || null, reminderDays || 30, description || null, legalRef || null, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/tracker-items/:id', async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ error: 'This item is sourced from Labour Licences or Document Expiry — edit it there instead.' });
+    }
+    const { name, category, type, applicableTo, department, location, dueDate, renewalDate, priority, owner, description, legalRef, status } = req.body;
+    let departmentId;
+    if (department !== undefined) {
+      const d = await query(`SELECT id FROM hr_departments WHERE company_id=$1 AND name=$2`, [req.user.company_id, department]);
+      departmentId = d.rows[0]?.id || null;
+    }
+    const { rows } = await query(
+      `UPDATE hr_compliance_items SET
+         name=COALESCE($1,name), category=COALESCE($2,category), type=COALESCE($3,type),
+         applicable_to=COALESCE($4,applicable_to), department_id=COALESCE($5,department_id), location=COALESCE($6,location),
+         due_date=COALESCE($7,due_date), renewal_date=COALESCE($8,renewal_date), priority=COALESCE($9,priority),
+         owner=COALESCE($10,owner), description=COALESCE($11,description), legal_ref=COALESCE($12,legal_ref),
+         status=COALESCE($13,status), updated_at=NOW()
+       WHERE id=$14 AND company_id=$15 RETURNING *`,
+      [name, category, type, applicableTo, departmentId, location, dueDate, renewalDate, priority, owner, description, legalRef, status, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/tracker-items/:id/renew', async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ error: 'This item is sourced from Labour Licences or Document Expiry — renew it there instead.' });
+    }
+    const { rows } = await query(
+      `UPDATE hr_compliance_items SET status='Compliant',
+         renewal_date = (COALESCE(renewal_date, due_date) + INTERVAL '1 year')::date, updated_at=NOW()
+       WHERE id=$1 AND company_id=$2 RETURNING *`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/tracker-items/:id', async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ error: 'This item is sourced from Labour Licences or Document Expiry — remove it there instead.' });
+    }
+    await query(`DELETE FROM hr_compliance_items WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /tracker-departments / /tracker-locations — real filter dropdown data
+router.get('/tracker-locations', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT DISTINCT ep.work_location AS location FROM employee_profiles ep
+       JOIN users u ON u.id=ep.user_id
+       WHERE u.company_id=$1 AND ep.work_location IS NOT NULL AND ep.work_location <> '' ORDER BY 1`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows.map(r => r.location) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /tracker-statutory — real coverage/progress per statutory obligation,
+// derived from the existing registers + challan-filings (for filed/not-filed
+// status). FA/S&E/Leave Encashment are intentionally omitted — there's no
+// backing data source for those in this schema, and showing a fabricated
+// progress % for them would be worse than not showing them at all.
+const STATUTORY_DEFS = [
+  { code: 'EPF',   name: 'Employees Provident Fund',   act: 'EPF & MP Act, 1952',           frequency: 'Monthly',     challanType: 'PF',
+    extraWhere: 'AND COALESCE(es.pf_applicable,true) = TRUE',
+    description: 'Monthly ECR filing and contribution remittance (employer 12% + employee 12%) for all eligible employees.' },
+  { code: 'ESI',   name: 'Employees State Insurance',   act: 'ESI Act, 1948',                frequency: 'Half-yearly', challanType: 'ESI',
+    extraWhere: `AND COALESCE(es.esi_applicable,true) = TRUE AND COALESCE(es.gross_monthly,0) <= ${ESI_WAGE_CEILING}`,
+    description: 'Half-yearly contribution return for workers earning within the ESI wage ceiling.' },
+  { code: 'PT',    name: 'Professional Tax',            act: 'State Professional Tax Act',   frequency: 'Monthly',     challanType: 'PT',
+    extraWhere: 'AND COALESCE(es.pt_applicable,true) = TRUE',
+    description: 'Monthly PT deduction from salaries and remittance to the state commercial tax department.' },
+  { code: 'LWF',   name: 'Labour Welfare Fund',         act: 'State Labour Welfare Fund Act', frequency: 'Half-yearly', challanType: 'LWF',
+    extraWhere: '',
+    description: 'Half-yearly employer + employee contribution to the state labour welfare fund.' },
+  { code: 'IT',    name: 'Income Tax (TDS on Salary)',  act: 'Income Tax Act — Sec 192', frequency: 'Quarterly',  challanType: 'TDS',
+    extraWhere: '',
+    description: 'Quarterly TDS return (Form 24Q) on employee salaries for the current financial quarter.' },
+  { code: 'BONUS', name: 'Bonus Act',                    act: 'Payment of Bonus Act, 1965',   frequency: 'Annual',      challanType: 'BONUS',
+    extraWhere: '',
+    description: 'Annual statutory bonus computation and disbursement (8.33%–20% of eligible wages).' },
+  { code: 'GRAT',  name: 'Gratuity',                     act: 'Payment of Gratuity Act, 1972', frequency: 'Annual',     challanType: 'GRATUITY',
+    extraWhere: '',
+    description: 'Gratuity liability tracking for employees crossing 5 years of service.' },
+  { code: 'MW',    name: 'Minimum Wages',                act: 'Minimum Wages Act, 1948',      frequency: 'Half-yearly', challanType: 'MW',
+    extraWhere: '',
+    description: 'Wage register compliance against the latest state minimum-wage notification.' },
+  { code: 'CLRA',  name: 'Contract Labour',               act: 'CLRA Act, 1970',               frequency: 'Annual',     challanType: 'CLRA',
+    extraWhere: null, // sourced from workers table, not EMP_SALARY_SQL
+    description: 'Principal employer registration and contractor labour compliance for site workforce.' },
+  { code: 'LL',    name: 'Labour License',                act: 'CLRA Act, 1970 — Sec 12', frequency: 'Annual',     challanType: 'LL',
+    extraWhere: null, // sourced from hr_labour_licenses
+    description: 'Labour license renewal covering the contract workforce deployed on site.' },
+];
+
+router.get('/tracker-statutory', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    await ensureChallanTable();
+    const now = new Date();
+    const month = now.getMonth() + 1, year = now.getFullYear();
+
+    const [workersCount, licenses, allChallans] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS cnt FROM workers WHERE is_active=true`, []),
+      query(`SELECT * FROM hr_labour_licenses WHERE company_id=$1`, [companyId]),
+      query(`SELECT * FROM compliance_challan_filings WHERE company_id=$1 AND period_year=$2`, [companyId, year]),
+    ]);
+
+    const items = await Promise.all(STATUTORY_DEFS.map(async (def) => {
+      let coveredEmployees = 0;
+      if (def.extraWhere !== null) {
+        const { rows } = await query(`SELECT COUNT(*)::int AS cnt FROM (${EMP_SALARY_SQL} ${def.extraWhere}) sub`, [companyId]);
+        coveredEmployees = rows[0]?.cnt || 0;
+      } else if (def.code === 'CLRA' || def.code === 'LL') {
+        coveredEmployees = workersCount.rows[0]?.cnt || 0;
+      }
+
+      const filingsForType = allChallans.rows.filter(c => c.challan_type === def.challanType);
+      const currentPeriodFiled = filingsForType.some(c =>
+        (def.frequency === 'Monthly' ? c.period_month === month : true) && c.filed_on
+      );
+      const lastFiling = filingsForType
+        .filter(c => c.filed_on)
+        .sort((a, b) => new Date(b.filed_on) - new Date(a.filed_on))[0]?.filed_on || null;
+
+      let status, progress, dueDate;
+      if (def.code === 'LL' || def.code === 'CLRA') {
+        const relevant = licenses.rows.find(l => /labour|contract/i.test(l.license_type || ''));
+        const days = relevant ? trackerDaysUntil(relevant.expiry_date) : null;
+        status = !relevant ? 'Pending' : days !== null && days < 0 ? 'Overdue' : days !== null && days <= 30 ? 'Pending' : 'Compliant';
+        progress = !relevant ? 0 : status === 'Compliant' ? 100 : status === 'Pending' ? 60 : 25;
+        dueDate = relevant?.expiry_date || null;
+      } else {
+        status = currentPeriodFiled ? 'Compliant' : 'Pending';
+        progress = currentPeriodFiled ? 100 : coveredEmployees > 0 ? 40 : 0;
+        dueDate = null; // real per-period due dates come from the Compliance Calendar tab; not duplicated here
+      }
+
+      return {
+        code: def.code, name: def.name, act: def.act, frequency: def.frequency,
+        status, dueDate, lastFiling, responsible: 'HR & Payroll Team',
+        progress, coveredEmployees, description: def.description,
+      };
+    }));
+
+    res.json({ data: items });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/tracker-statutory/:code/mark-filed', async (req, res) => {
+  try {
+    const def = STATUTORY_DEFS.find(d => d.code === req.params.code);
+    if (!def) return res.status(404).json({ error: 'Unknown statutory code' });
+    await ensureChallanTable();
+    const now = new Date();
+    const { rows } = await query(
+      `INSERT INTO compliance_challan_filings (company_id,challan_type,period_month,period_year,filed_on,filed_by)
+       VALUES ($1,$2,$3,$4,CURRENT_DATE,$5) RETURNING *`,
+      [req.user.company_id, def.challanType, now.getMonth() + 1, now.getFullYear(), req.user.name || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /tracker-activity — merges real timestamped rows across sources
+router.get('/tracker-activity', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    await ensureChallanTable();
+    const [challans, licenses, docs] = await Promise.all([
+      query(`SELECT challan_type, filed_by, filed_on, created_at FROM compliance_challan_filings WHERE company_id=$1 ORDER BY created_at DESC LIMIT 10`, [companyId]),
+      query(`SELECT license_type, license_name, status, updated_at FROM hr_labour_licenses WHERE company_id=$1 ORDER BY updated_at DESC LIMIT 10`, [companyId]),
+      query(
+        `SELECT ed.doc_type, ed.doc_name, ed.uploaded_at, u.name AS employee_name FROM employee_documents ed
+         JOIN users u ON u.id=ed.user_id WHERE u.company_id=$1 AND ed.expiry_date IS NOT NULL ORDER BY ed.uploaded_at DESC LIMIT 10`,
+        [companyId]
+      ),
+    ]);
+    const events = [
+      ...challans.rows.map(c => ({ text: `${c.filed_by || 'HR'} filed ${c.challan_type} challan${c.filed_on ? ` for ${new Date(c.filed_on).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}` : ''}`, ts: c.created_at, type: 'upload' })),
+      ...licenses.rows.map(l => ({ text: `${l.license_name || l.license_type} status: ${l.status}`, ts: l.updated_at, type: l.status === 'active' ? 'renew' : 'alert' })),
+      ...docs.rows.map(d => ({ text: `${d.doc_type || d.doc_name} uploaded for ${d.employee_name}`, ts: d.uploaded_at, type: 'upload' })),
+    ]
+      .filter(e => e.ts)
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, 15)
+      .map((e, i) => ({ id: i + 1, text: e.text, time: e.ts, type: e.type }));
+    res.json({ data: events });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /tracker-trend — real last-6-months filed-on-time vs overdue, from
+// compliance_challan_filings compared against the Compliance Calendar's
+// statutory due-day rules (reused, not re-invented).
+router.get('/tracker-trend', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    await ensureChallanTable();
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ month: d.toLocaleString('en-IN', { month: 'short' }), m: d.getMonth() + 1, y: d.getFullYear() });
+    }
+    const { rows: challans } = await query(
+      `SELECT challan_type, period_month, period_year, filed_on FROM compliance_challan_filings WHERE company_id=$1`,
+      [companyId]
+    );
+    const dueDays = { PF: 15, PT: 20, ESI: 21, TDS: 7 };
+    const data = months.map(({ month, m, y }) => {
+      const periodFilings = challans.filter(c => c.period_month === m && c.period_year === y && c.filed_on);
+      const onTime = periodFilings.filter(c => {
+        const due = dueDays[c.challan_type];
+        if (!due) return true;
+        return new Date(c.filed_on).getDate() <= due;
+      }).length;
+      const overdue = periodFilings.length - onTime;
+      return { month, compliant: periodFilings.length, overdue };
+    });
+    res.json({ data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /tracker-insights — rule-based, computed from real counts (no LLM)
+router.get('/tracker-insights', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const [licenses, docs] = await Promise.all([
+      query(`SELECT * FROM hr_labour_licenses WHERE company_id=$1`, [companyId]),
+      query(
+        `SELECT ed.* FROM employee_documents ed JOIN users u ON u.id=ed.user_id
+         WHERE u.company_id=$1 AND u.is_active=TRUE AND ed.expiry_date IS NOT NULL`,
+        [companyId]
+      ),
+    ]);
+    const expiringLicenses = licenses.rows.filter(l => { const d = trackerDaysUntil(l.expiry_date); return d !== null && d >= 0 && d <= 30; }).length;
+    const overdueLicenses = licenses.rows.filter(l => { const d = trackerDaysUntil(l.expiry_date); return d !== null && d < 0; }).length;
+    const expiringDocs = docs.rows.filter(d => { const days = trackerDaysUntil(d.expiry_date); return days !== null && days >= 0 && days <= 30; }).length;
+
+    const insights = [];
+    if (overdueLicenses > 0) insights.push({ id: insights.length + 1, tone: 'danger', text: `${overdueLicenses} licence(s) are overdue for renewal — principal employer liability risk.` });
+    if (expiringLicenses > 0) insights.push({ id: insights.length + 1, tone: 'warning', text: `${expiringLicenses} licence(s) expiring within 30 days.` });
+    if (expiringDocs > 0) insights.push({ id: insights.length + 1, tone: 'warning', text: `${expiringDocs} employee document(s) expiring within 30 days.` });
+    if (!insights.length) insights.push({ id: 1, tone: 'success', text: 'No licences or employee documents are expiring in the next 30 days.' });
+    res.json({ data: insights });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
