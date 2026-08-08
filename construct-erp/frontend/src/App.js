@@ -324,7 +324,20 @@ const DocVerificationUploadPage    = lazy(() => import('./pages/hr-admin/onboard
 const DocVerificationVerifyPage    = lazy(() => import('./pages/hr-admin/onboarding/document-verification/VerifyDocumentsPage'));
 const DocVerificationRejectedPage  = lazy(() => import('./pages/hr-admin/onboarding/document-verification/RejectedDocumentsPage'));
 const DocVerificationMissingPage   = lazy(() => import('./pages/hr-admin/onboarding/document-verification/MissingDocumentsPage'));
-const OfferAppointmentPage         = lazy(() => import('./pages/hr-admin/onboarding/OfferAppointmentPage'));
+const OfferDashboardPage           = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/DashboardPage'));
+const OfferRequestsPage            = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/OfferRequestsPage'));
+const OfferApprovalPage            = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/OfferApprovalPage'));
+const OfferLetterPage              = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/OfferLetterPage'));
+const CandidateAcceptancePage      = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/CandidateAcceptancePage'));
+const AppointmentLetterPage        = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/AppointmentLetterPage'));
+const AppointmentApprovalPage      = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/AppointmentApprovalPage'));
+const OfferDocumentTemplatesPage   = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/DocumentTemplatesPage'));
+const OfferDigitalSignaturesPage   = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/DigitalSignaturesPage'));
+const OfferEmailDeliveryPage       = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/EmailDeliveryPage'));
+const OfferLetterHistoryPage       = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/LetterHistoryPage'));
+const OfferReportsPage             = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/ReportsPage'));
+const OfferSettingsPage            = lazy(() => import('./pages/hr-admin/onboarding/offer-appointment/SettingsPage'));
+const CandidateOfferPortalPage     = lazy(() => import('./pages/public/CandidateOfferPortalPage'));
 const OnboardingAssetAllocationPage = lazy(() => import('./pages/hr-admin/onboarding/OnboardingAssetAllocationPage'));
 const IdCardDashboardPage          = lazy(() => import('./pages/hr-admin/onboarding/id-card/DashboardPage'));
 const IdCardGeneratePage           = lazy(() => import('./pages/hr-admin/onboarding/id-card/GenerateIdCardPage'));
@@ -638,7 +651,7 @@ function AuthInitializer({ children }) {
   // stale loginAt data and misfire this check).
 
   useEffect(() => {
-    const isPublicVendorPortal = window.location.pathname.startsWith('/vendor-rfq/');
+    const isPublicVendorPortal = window.location.pathname.startsWith('/vendor-rfq/') || window.location.pathname.startsWith('/offer/');
     const handleAuthLogout = (event) => {
       queryClient.cancelQueries();
       queryClient.clear();
@@ -711,6 +724,7 @@ export default function App() {
               <Route path="/verify/advance/:id" element={<DocumentVerificationPage type="advance" />} />
               <Route path="/verify/boq/:id" element={<DocumentVerificationPage type="boq" />} />
               <Route path="/vendor-rfq/:token" element={<VendorRFQPortalPage />} />
+              <Route path="/offer/:token" element={<CandidateOfferPortalPage />} />
 
               {/* Print pages — ProtectedRoute but NO Layout sidebar */}
               <Route path="/tqs/bills/:id/payment-cert"    element={<ProtectedRoute><BillTrackerPaymentCertPrint /></ProtectedRoute>} />
@@ -976,7 +990,19 @@ export default function App() {
                 <Route path="hr-admin/onboarding/document-verification/verify" element={<RequireModule module="HR & Admin"><DocVerificationVerifyPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/document-verification/rejected" element={<RequireModule module="HR & Admin"><DocVerificationRejectedPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/document-verification/missing" element={<RequireModule module="HR & Admin"><DocVerificationMissingPage /></RequireModule>} />
-                <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferAppointmentPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment" element={<RequireModule module="HR & Admin"><OfferDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/requests" element={<RequireModule module="HR & Admin"><OfferRequestsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/approval" element={<RequireModule module="HR & Admin"><OfferApprovalPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/letter" element={<RequireModule module="HR & Admin"><OfferLetterPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/acceptance" element={<RequireModule module="HR & Admin"><CandidateAcceptancePage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/appointments" element={<RequireModule module="HR & Admin"><AppointmentLetterPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/appointment-approval" element={<RequireModule module="HR & Admin"><AppointmentApprovalPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/templates" element={<RequireModule module="HR & Admin"><OfferDocumentTemplatesPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/signatures" element={<RequireModule module="HR & Admin"><OfferDigitalSignaturesPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/email" element={<RequireModule module="HR & Admin"><OfferEmailDeliveryPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/history" element={<RequireModule module="HR & Admin"><OfferLetterHistoryPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/reports" element={<RequireModule module="HR & Admin"><OfferReportsPage /></RequireModule>} />
+                <Route path="hr-admin/onboarding/offer-appointment/settings" element={<RequireModule module="HR & Admin"><OfferSettingsPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/asset-allocation" element={<RequireModule module="HR & Admin"><OnboardingAssetAllocationPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/id-card" element={<RequireModule module="HR & Admin"><IdCardDashboardPage /></RequireModule>} />
                 <Route path="hr-admin/onboarding/id-card/generate" element={<RequireModule module="HR & Admin"><IdCardGeneratePage /></RequireModule>} />

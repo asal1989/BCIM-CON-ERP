@@ -101,7 +101,7 @@ api.interceptors.response.use(
     const original = error.config;
     const url = original?.url || '';
     const isAuthEndpoint = /\/auth\/(login|register|refresh|logout|forgot-password|reset-password)/.test(url);
-    const isPublicEndpoint = /\/quotations\/vendor-rfq\//.test(url);
+    const isPublicEndpoint = /\/(quotations\/vendor-rfq|hr-admin\/offers\/candidate-portal)\//.test(url);
 
     if (error.response?.status === 401 && !original._retry && !isAuthEndpoint && !isPublicEndpoint) {
       if (isRefreshing) {
@@ -2595,6 +2595,39 @@ export const paymentRecommendationAPI = {
   approve:      (id)       => api.patch(`/payment-recommendations/${id}/approve`),
   reject:       (id)       => api.patch(`/payment-recommendations/${id}/reject`),
   process:      (id, data) => api.patch(`/payment-recommendations/${id}/process`, data),
+};
+
+export const hrOffersAPI = {
+  summary:          ()        => api.get('/hr-admin/offers/summary'),
+  requests:         (p)       => api.get('/hr-admin/offers/requests', { params: p }),
+  request:          (id)      => api.get(`/hr-admin/offers/requests/${id}`),
+  createRequest:    (d)       => api.post('/hr-admin/offers/requests', d),
+  updateRequest:    (id, d)   => api.put(`/hr-admin/offers/requests/${id}`, d),
+  submitRequest:    (id)      => api.post(`/hr-admin/offers/requests/${id}/submit`),
+  pendingApprovals: ()        => api.get('/hr-admin/offers/approvals/pending'),
+  approveOffer:     (id, d)   => api.patch(`/hr-admin/offers/requests/${id}/approve`, d),
+  rejectOffer:      (id, d)   => api.patch(`/hr-admin/offers/requests/${id}/reject`, d),
+  sendBackOffer:    (id, d)   => api.patch(`/hr-admin/offers/requests/${id}/send-back`, d),
+  generateLetter:   (id, d)   => api.post(`/hr-admin/offers/requests/${id}/letter`, d),
+  sendLetter:       (id)      => api.post(`/hr-admin/offers/letters/${id}/send`),
+  createAppointment:(id, d)   => api.post(`/hr-admin/offers/requests/${id}/appointment`, d),
+  appointments:     (p)       => api.get('/hr-admin/offers/appointments', { params: p }),
+  appointment:      (id)      => api.get(`/hr-admin/offers/appointments/${id}`),
+  pendingAppointmentApprovals:() => api.get('/hr-admin/offers/appointment-approvals/pending'),
+  approveAppointment:(id, d)  => api.patch(`/hr-admin/offers/appointments/${id}/approve`, d),
+  rejectAppointment:(id, d)   => api.patch(`/hr-admin/offers/appointments/${id}/reject`, d),
+  sendAppointment:  (id)      => api.post(`/hr-admin/offers/appointments/${id}/send`),
+  templates:        ()        => api.get('/hr-admin/offers/templates'),
+  getSignatures:    ()        => api.get('/hr-admin/offers/signatures'),
+  updateSignatures: (d)       => api.put('/hr-admin/offers/signatures', d),
+  emailLog:         ()        => api.get('/hr-admin/offers/email-log'),
+  history:          (p)       => api.get('/hr-admin/offers/history', { params: p }),
+  report:           (key)     => api.get(`/hr-admin/offers/reports/${key}`),
+  getSettings:      ()        => api.get('/hr-admin/offers/settings'),
+  updateSettings:   (d)       => api.put('/hr-admin/offers/settings', d),
+  // Public candidate portal — no auth, matches isPublicEndpoint exemption below
+  candidatePortal:      (token)     => api.get(`/hr-admin/offers/candidate-portal/${token}`),
+  candidatePortalRespond:(token, d) => api.post(`/hr-admin/offers/candidate-portal/${token}`, d),
 };
 
 export default api;

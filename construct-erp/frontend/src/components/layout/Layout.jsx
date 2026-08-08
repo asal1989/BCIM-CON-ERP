@@ -19,6 +19,7 @@ import {
   RefreshCw, Shuffle, Globe, Database, CloudSun,
   UserPlus, GraduationCap, Timer, FileCheck2, Contact, Award,
   LayoutTemplate, Eye, Layers3, ListChecks, RotateCcw, FileWarning, QrCode,
+  PenTool, CheckCircle2,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -290,7 +291,19 @@ const navGroups = [
     { to: '/hr-admin/onboarding/document-verification/verify',    icon: ShieldCheck, label: 'Verify Documents' },
     { to: '/hr-admin/onboarding/document-verification/rejected',  icon: CircleSlash, label: 'Rejected Documents' },
     { to: '/hr-admin/onboarding/document-verification/missing',   icon: AlertTriangle, label: 'Missing Documents' },
-    { to: '/hr-admin/onboarding/offer-appointment',      icon: FileSignature,   label: 'Offer & Appointment' },
+    { to: '/hr-admin/onboarding/offer-appointment',                    icon: FileSignature, label: 'Offer & Appointment' },
+    { to: '/hr-admin/onboarding/offer-appointment/requests',           icon: ClipboardList, label: 'Offer Requests' },
+    { to: '/hr-admin/onboarding/offer-appointment/approval',           icon: ShieldCheck,   label: 'Offer Approval' },
+    { to: '/hr-admin/onboarding/offer-appointment/letter',             icon: FileSignature, label: 'Offer Letter' },
+    { to: '/hr-admin/onboarding/offer-appointment/acceptance',         icon: CheckCircle2,  label: 'Candidate Acceptance' },
+    { to: '/hr-admin/onboarding/offer-appointment/appointments',       icon: FileCheck2,    label: 'Appointment Letter' },
+    { to: '/hr-admin/onboarding/offer-appointment/appointment-approval', icon: ShieldCheck, label: 'Appointment Approval' },
+    { to: '/hr-admin/onboarding/offer-appointment/templates',          icon: LayoutTemplate, label: 'Offer Document Templates' },
+    { to: '/hr-admin/onboarding/offer-appointment/signatures',         icon: PenTool,       label: 'Digital Signatures' },
+    { to: '/hr-admin/onboarding/offer-appointment/email',              icon: Mail,          label: 'Offer Email & Delivery' },
+    { to: '/hr-admin/onboarding/offer-appointment/history',            icon: History,       label: 'Offer Letter History' },
+    { to: '/hr-admin/onboarding/offer-appointment/reports',            icon: FileBarChart,  label: 'Offer Reports' },
+    { to: '/hr-admin/onboarding/offer-appointment/settings',           icon: Settings,      label: 'Offer Settings' },
     { to: '/hr-admin/onboarding/asset-allocation',       icon: Package,         label: 'IT Asset Allocation' },
     { to: '/hr-admin/onboarding/id-card',                icon: Contact,         label: 'ID Card Generation' },
     { to: '/hr-admin/onboarding/id-card/generate',       icon: UserPlus,        label: 'Generate ID Card' },
