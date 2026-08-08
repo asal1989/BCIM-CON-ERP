@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-BAVvCkcf.js";import{O as e}from"./OnboardingPlaceholderPage-5i8r5M3u.js";import"./vendor-icons-B196i06x.js";function i(){return o.jsx(e,{title:"Compliance Forms",description:"Statutory and policy acknowledgement forms for new hires (PF/ESI nomination, code of conduct, etc.)."})}export{i as default};

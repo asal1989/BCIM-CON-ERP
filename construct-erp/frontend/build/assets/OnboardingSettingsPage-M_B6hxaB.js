@@ -1,0 +1,1 @@
+import{j as t}from"./vendor-react-BAVvCkcf.js";import{O as e}from"./OnboardingPlaceholderPage-5i8r5M3u.js";import"./vendor-icons-B196i06x.js";function i(){return t.jsx(e,{title:"Onboarding Settings",description:"Configure the onboarding checklist template, required documents, and workflow stages."})}export{i as default};
