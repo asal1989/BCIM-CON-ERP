@@ -98,7 +98,7 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
     params.push(projectId);
   }
 
-  const { rows } = await query(`
+  const { rows: staffRows } = await query(`
     SELECT
       CASE
           WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
@@ -116,6 +116,13 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
     LEFT JOIN employee_profiles ep ON ep.user_id = u.id
     LEFT JOIN hr_designations des  ON des.id = ep.designation_id
     WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+      -- Same de-dup guard as GET /manpower-report: ~80 site labourers exist in
+      -- BOTH users/hr_attendance and sc_workers/sc_attendance. When someone is
+      -- on the SC roster, the SC query below owns them.
+      AND NOT EXISTS (
+        SELECT 1 FROM sc_workers w
+        WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+      )
       ${projectFilter}
     GROUP BY
       CASE
@@ -128,6 +135,8 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
       COALESCE(des.name, u.designation, '—'),
       a.site, a.shift
   `, params);
+
+  const rows = [...staffRows, ...(await fetchScManpowerRows(companyId, projectId, targetDate))];
 
   const companyTotal = new Map();
   const companyDesigs = new Map();
@@ -143,6 +152,41 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
   const grandTotal = companySummary.reduce((s, c) => s + c.total, 0);
 
   return { rows, companySummary, grandTotal };
+}
+
+// ── SC/LC labour (subcontractor & labour-contractor site workers) ────────────
+// Separate system (sc_workers/sc_attendance), not part of users/hr_attendance
+// at all — must be fetched explicitly or Labour/LC contractor crews never
+// appear in the client report. withProject prefixes company rows the same
+// way fetchAllProjectsManpowerData does for staff, so the two sources merge
+// cleanly under the "All Projects (combined)" config.
+async function fetchScManpowerRows(companyId, projectId, targetDate, withProject = false) {
+  let projectFilter = '';
+  const params = [companyId, targetDate];
+  if (projectId === 'HEAD_OFFICE') {
+    projectFilter = ' AND 1=0'; // no SC/LC workers at head office
+  } else if (projectId) {
+    projectFilter = ' AND w.project_id = $3';
+    params.push(projectId);
+  }
+  const { rows } = await query(`
+    SELECT
+      ${withProject ? "COALESCE(p.name, 'Head Office') AS project," : ''}
+      UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))) AS company,
+      COALESCE(w.skill_type, '—')  AS designation,
+      COALESCE(p.name, '')         AS site,
+      'DAY'                        AS shift,
+      COUNT(*)::int                AS headcount
+    FROM sc_attendance a
+    JOIN sc_workers w              ON w.id = a.worker_id
+    LEFT JOIN sc_subcontractors sc ON sc.id = a.sc_id
+    LEFT JOIN projects p           ON p.id = w.project_id
+    WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+      ${projectFilter}
+    GROUP BY ${withProject ? 'COALESCE(p.name, \'Head Office\'),' : ''}
+      UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), COALESCE(w.skill_type, '—'), p.name
+  `, params);
+  return rows;
 }
 
 // ── Same as fetchManpowerData but for the "All Projects (combined)" config —
@@ -184,10 +228,13 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
       a.site, a.shift
   `, [companyId, targetDate]);
 
+  const scRawRows = await fetchScManpowerRows(companyId, null, targetDate, true);
+  const allRawRows = [...rawRows, ...scRawRows];
+
   // Project-wise summary (its own table, shown first)
   const projectTotal = new Map();
   const projectOrder = [];
-  for (const r of rawRows) {
+  for (const r of allRawRows) {
     if (!projectTotal.has(r.project)) { projectTotal.set(r.project, 0); projectOrder.push(r.project); }
     projectTotal.set(r.project, projectTotal.get(r.project) + r.headcount);
   }
@@ -197,7 +244,7 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
 
   // Compound "Project — Company" label reuses every existing company-grouped
   // pivot/PDF/email code path unchanged.
-  const rows = rawRows.map(r => ({ ...r, company: `${r.project} — ${r.company}` }));
+  const rows = allRawRows.map(r => ({ ...r, company: `${r.project} — ${r.company}` }));
 
   const companyTotal = new Map();
   const companyDesigs = new Map();

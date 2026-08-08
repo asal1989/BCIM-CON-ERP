@@ -86,14 +86,16 @@ runSchemaInit('hr_attendance_muster_columns', async () => {
 // GET — monthly grid (company-wide or per user)
 // ═══════════════════════════════════════════════════════════
 // "Company" grouping — same derivation used everywhere else in this file
-// (/timesheet-report, /monthly-report, /manpower-report): contractor_name on
-// employee_profiles when set (subcontractor labour is tracked as regular
-// users/hr_attendance rows, tagged with which contractor they belong to, NOT
-// via the separate sc_workers/sc_attendance tables — those are a different,
-// billing-oriented worker system this page does not report on), falling back
-// to BCIM WORKERS/BCIM STAFF by employee_category. Kept as one constant so
-// GET / and GET /summary can't drift from each other or from the other
-// reports.
+// (/timesheet-report, /monthly-report): contractor_name on employee_profiles
+// when set (subcontractor labour is tracked as regular users/hr_attendance
+// rows, tagged with which contractor they belong to, NOT via the separate
+// sc_workers/sc_attendance tables — those are a different, billing-oriented
+// worker system this page does not report on), falling back to BCIM
+// WORKERS/BCIM STAFF by employee_category. Kept as one constant so GET / and
+// GET /summary can't drift from each other or from the other reports.
+// /manpower-report is the one exception: it separately unions in
+// sc_workers/sc_attendance (see that handler) so Labour/Subcontractor crews
+// show up there, with the same de-dup guard as /timesheet-report.
 const COMPANY_CASE = `
   CASE
     WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
@@ -1043,6 +1045,13 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
         AND u.email != ALL($${mpSysIdx}::text[])
+        -- Same de-dup guard as /timesheet-report: ~80 site labourers exist in
+        -- BOTH users/hr_attendance and sc_workers/sc_attendance. When someone
+        -- is on the SC roster, the SC query below owns them.
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
         ${staffProjectFilter}
       GROUP BY
         UPPER(TRIM(CASE
@@ -1056,7 +1065,36 @@ router.get('/manpower-report', async (req, res) => {
         a.site, a.shift
     `, staffParams);
 
-    const rows = staffRes.rows;
+    // ── SC/LC labour (subcontractor & labour-contractor site workers) ────────
+    // Separate system (sc_workers/sc_attendance), not part of users/hr_attendance
+    // at all — must be unioned in explicitly or Labour/LC contractor crews
+    // (e.g. workers under a Labour Contractor) never appear in this report.
+    let scProjectFilter = '';
+    const scParams = [cid, reportDate];
+    let scIdx = 3;
+    if (effectiveProjectId === 'HEAD_OFFICE') {
+      scProjectFilter = ' AND 1=0'; // no SC/LC workers at head office
+    } else if (effectiveProjectId) {
+      scProjectFilter = ` AND w.project_id = $${scIdx++}`;
+      scParams.push(effectiveProjectId);
+    }
+    const scRes = await query(`
+      SELECT
+        UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))) AS company,
+        COALESCE(w.skill_type, '—')  AS designation,
+        COALESCE(p.name, '')         AS site,
+        'DAY'                        AS shift,
+        COUNT(*)::int                AS headcount
+      FROM sc_attendance a
+      JOIN sc_workers w              ON w.id = a.worker_id
+      LEFT JOIN sc_subcontractors sc ON sc.id = a.sc_id
+      LEFT JOIN projects p           ON p.id = w.project_id
+      WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+        ${scProjectFilter}
+      GROUP BY UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), COALESCE(w.skill_type, '—'), p.name
+    `, scParams);
+
+    const rows = [...staffRes.rows, ...scRes.rows];
 
     // Pivot in JS: rows keyed by company+designation, columns = site bucket + shift
     const rowMap = {};
