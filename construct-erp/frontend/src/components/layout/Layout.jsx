@@ -340,6 +340,8 @@ const navGroups = [
     // ── 6. Attendance ──
     { to: '/hr-admin/attendance',              icon: Clock,           label: 'Attendance' },
     { to: '/hr-admin/attendance/dashboard',    icon: LayoutDashboard, label: 'Attendance Dashboard' },
+    { to: '/hr-admin/attendance/live',         icon: Activity,        label: 'Live Attendance' },
+    { to: '/hr-admin/attendance/missing-punch', icon: AlertTriangle,  label: 'Missing Punch' },
     { to: '/hr-admin/attendance/biometric',    icon: Fingerprint,     label: 'Biometric Attendance' },
     { to: '/hr-admin/attendance/regularization', icon: ClipboardCheck, label: 'Attendance Regularization' },
     { to: '/hr-admin/attendance/bulk-correction', icon: AlertTriangle, label: 'Bulk Attendance Correction' },
@@ -649,7 +651,7 @@ const NAV_SECTIONS = {
     { label: 'Organization Structure',paths: ['/hr-admin/company-settings','/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
     { label: 'Recruitment',           paths: ['/hr-admin/recruitment'] },
     { label: 'Onboarding',            paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
-    { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
+    { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/live','/hr-admin/attendance/missing-punch','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
     { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leave-entries'] },
     { label: 'Shift Management',      paths: ['/hr-admin/shifts','/hr-admin/shift-calendar','/hr-admin/shift-roster','/hr-admin/emp-shifts','/hr-admin/shift-schedule'] },
     { label: 'Holiday Calendar',      paths: ['/hr-admin/holidays'] },

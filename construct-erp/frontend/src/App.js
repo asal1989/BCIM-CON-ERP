@@ -364,6 +364,8 @@ const OnboardingReportsPage        = lazy(() => import('./pages/hr-admin/onboard
 const OnboardingSettingsPage       = lazy(() => import('./pages/hr-admin/onboarding/OnboardingSettingsPage'));
 const HRAttendancePage            = lazy(() => import('./pages/hr-admin/AttendancePage'));
 const HRAttendanceDashboardPage   = lazy(() => import('./pages/hr-admin/attendance/AttendanceDashboardPage'));
+const HRLiveAttendancePage        = lazy(() => import('./pages/hr-admin/attendance/LiveAttendancePage'));
+const HRMissingPunchPage          = lazy(() => import('./pages/hr-admin/attendance/MissingPunchPage'));
 const HRBiometricAttendancePage   = lazy(() => import('./pages/hr-admin/attendance/BiometricAttendancePage'));
 const HRAttendanceRegularizationPage = lazy(() => import('./pages/hr-admin/attendance/AttendanceRegularizationPage'));
 const HRBulkAttendanceCorrectionPage = lazy(() => import('./pages/hr-admin/attendance/BulkAttendanceCorrectionPage'));
@@ -1043,6 +1045,8 @@ export default function App() {
                 <Route path="hr-admin/onboarding/settings" element={<RequireModule module="HR & Admin"><OnboardingSettingsPage /></RequireModule>} />
                 <Route path="hr-admin/attendance" element={<RequireModule module="HR & Admin"><HRAttendancePage /></RequireModule>} />
                 <Route path="hr-admin/attendance/dashboard" element={<RequireModule module="HR & Admin"><HRAttendanceDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/live" element={<RequireModule module="HR & Admin"><HRLiveAttendancePage /></RequireModule>} />
+                <Route path="hr-admin/attendance/missing-punch" element={<RequireModule module="HR & Admin"><HRMissingPunchPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/biometric" element={<RequireModule module="HR & Admin"><HRBiometricAttendancePage /></RequireModule>} />
                 <Route path="hr-admin/attendance/regularization" element={<RequireModule module="HR & Admin"><HRAttendanceRegularizationPage /></RequireModule>} />
                 <Route path="hr-admin/attendance/bulk-correction" element={<RequireModule module="HR & Admin"><HRBulkAttendanceCorrectionPage /></RequireModule>} />

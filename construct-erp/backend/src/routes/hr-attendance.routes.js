@@ -147,6 +147,56 @@ router.get('/', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// LIVE / DAILY PUNCH STATUS — every active staff employee for one date,
+// left-joined against hr_attendance so employees with NO row at all still
+// show up (unlike GET '/' above, which only returns rows that exist).
+// Powers both "Live Attendance" (today, who's in/out right now) and
+// "Missing Punch" (any date, incomplete or absent-without-leave punches).
+// ═══════════════════════════════════════════════════════════
+router.get('/live-status', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toLocaleDateString('en-CA');
+    const cid = req.user.company_id;
+    const scopeProjectId = await getProjectScope(req);
+    const params = [cid, date, SYSTEM_ACCOUNT_EMAILS];
+    let projFilter = '';
+    if (scopeProjectId !== null) { projFilter = ` AND ep.project_id=$4`; params.push(scopeProjectId); }
+
+    const { rows } = await query(`
+      SELECT
+        u.id AS user_id, u.name, u.employee_code,
+        COALESCE(dep.name, u.department, '—') AS department_name,
+        COALESCE(des.name, u.designation, '—') AS designation,
+        a.in_time, a.out_time, a.status, a.late_minutes,
+        CASE
+          WHEN a.id IS NULL THEN 'no_record'
+          WHEN a.status IN ('leave','absent') THEN a.status
+          WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL THEN 'complete'
+          WHEN a.in_time IS NOT NULL AND a.out_time IS NULL THEN 'checked_in'
+          WHEN a.in_time IS NULL AND a.out_time IS NOT NULL THEN 'missing_in'
+          ELSE 'no_record'
+        END AS punch_status
+      FROM users u
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+      LEFT JOIN hr_attendance a      ON a.user_id = u.id AND a.company_id = $1 AND a.attendance_date = $2
+      WHERE u.company_id = $1
+        AND u.is_active = TRUE
+        AND u.email != ALL($3::text[])
+        AND COALESCE(ep.employee_category, 'staff') != 'system'
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
+        ${projFilter}
+      ORDER BY u.name
+    `, params);
+    res.json({ data: rows, date });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // SUMMARY — per employee for a month
 // ═══════════════════════════════════════════════════════════
 // /summary — per-employee monthly summary (month/year) OR department-grouped (from/to)
