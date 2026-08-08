@@ -86,6 +86,17 @@ export default function MonthlyStatusPage() {
   });
   const allRows = Object.values(empMap);
 
+  // A Sunday/holiday is only a "day off" when nobody actually punched in —
+  // construction sites routinely work Sundays, and a present punch on an
+  // off-day must still count as a worked day instead of being silently
+  // dropped just because it falls on the weekly-off/holiday calendar.
+  function isOffDay(dateStr, d) { return holidaySet.has(dateStr) || sundaySet.has(d); }
+  function workedPresent(p) {
+    if (!p) return false;
+    if (p.status === 'absent' || p.status === 'leave' || p.status === 'half_day') return false;
+    return p.status === 'present' || !!p.in || !!p.out;
+  }
+
   const availableCompanies = useMemo(() => {
     const seen = new Set();
     allRows.forEach(r => { if (r.company) seen.add(r.company); });
@@ -102,8 +113,11 @@ export default function MonthlyStatusPage() {
     rows.forEach(r => {
       for (let d = 1; d <= days; d++) {
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        if (holidaySet.has(dateStr) || sundaySet.has(d)) continue;
         const p = r.days[d];
+        if (isOffDay(dateStr, d)) {
+          if (workedPresent(p)) { present++; if (p.lateMin > 0) late++; }
+          continue;
+        }
         if (!p || p.status === 'absent' || (!p.in && !p.out && !p.status)) { absent++; continue; }
         if (p.status === 'leave') { leave++; continue; }
         if (p.status === 'half_day') { halfDay++; continue; }
@@ -123,8 +137,11 @@ export default function MonthlyStatusPage() {
     rows.forEach(r => {
       for (let d = 1; d <= days; d++) {
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        if (holidaySet.has(dateStr) || sundaySet.has(d)) continue;
         const p = r.days[d];
+        if (isOffDay(dateStr, d)) {
+          if (workedPresent(p)) present[d-1]++;
+          continue;
+        }
         if (!p || p.status === 'absent' || (!p.in && !p.out && !p.status)) { absent[d-1]++; continue; }
         if (p.status === 'leave' || p.status === 'half_day') continue;
         present[d-1]++;
@@ -139,8 +156,11 @@ export default function MonthlyStatusPage() {
     let present = 0, absent = 0;
     for (let d = 1; d <= days; d++) {
       const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      if (holidaySet.has(dateStr) || sundaySet.has(d)) continue;
       const p = r.days[d];
+      if (isOffDay(dateStr, d)) {
+        if (workedPresent(p)) present++;
+        continue;
+      }
       if (!p || p.status === 'absent' || (!p.in && !p.out && !p.status)) { absent++; continue; }
       if (p.status === 'leave' || p.status === 'half_day') continue;
       present++;
@@ -159,6 +179,8 @@ export default function MonthlyStatusPage() {
     const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isHoliday = holidaySet.has(dateStr);
     const isSunday  = sundaySet.has(d);
+    if ((isHoliday || isSunday) && workedPresent(p))
+      return { bg:'#CFFAFE', label:'P', labelColor:'#0E7490' };
     if (isHoliday) return { bg:'#F5F3FF' };
     if (isSunday)  return { bg:'#F8FAFC' };
     if (!p) return { bg:'#FEF2F2', label:'A', labelColor:'#DC2626' };
@@ -199,6 +221,7 @@ export default function MonthlyStatusPage() {
     { label:'Half day', bg:'#DBEAFE', border:'#BFDBFE' },
     { label:'Sunday',   bg:'#F8FAFC', border:'#E2E8F0' },
     { label:'Holiday',  bg:'#F5F3FF', border:'#DDD6FE' },
+    { label:'Worked (Sun/Holiday)', bg:'#CFFAFE', border:'#67E8F9' },
   ];
 
   return (
