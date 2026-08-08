@@ -1724,16 +1724,20 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                             <button
                               onClick={() => setExpandedSection(subOpen ? null : key)}
                               style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: 5,
-                                padding: '5px 8px 2px 20px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
-                                color: subActive ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.35)',
-                                fontSize: 10, fontWeight: 700,
-                                textTransform: 'uppercase', letterSpacing: '0.07em',
+                                width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                                margin: '2px 0', padding: '6px 8px 6px 20px', borderRadius: 6,
+                                background: subOpen ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                border: 'none', cursor: 'pointer', textAlign: 'left',
+                                color: subOpen || subActive ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)',
+                                fontSize: 10.5, fontWeight: 700,
+                                textTransform: 'uppercase', letterSpacing: '0.06em',
+                                transition: 'background 0.15s, color 0.15s',
                               }}
                             >
-                              <SubIcon size={10} style={{ flexShrink: 0 }} />
-                              <span style={{ flex: 1 }}>{t(section.label)}</span>
-                              <ChevronDown size={10} style={{ opacity: 0.75, transform: subOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', flexShrink: 0 }} />
+                              <SubIcon size={11} style={{ flexShrink: 0, opacity: subOpen || subActive ? 1 : 0.75 }} />
+                              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(section.label)}</span>
+                              <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>{section.items.length}</span>
+                              <ChevronDown size={11} style={{ opacity: 0.85, transform: subOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', flexShrink: 0 }} />
                             </button>
                             {subOpen && section.items.map(item => renderLink(item, true))}
                           </div>
