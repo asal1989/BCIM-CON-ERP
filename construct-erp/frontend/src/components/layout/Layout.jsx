@@ -375,6 +375,7 @@ const navGroups = [
     { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
     // ── 11. Claims & Reimbursements ──
     { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Expense Claims' },
+    { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Reimbursements' },
     { to: '/hr-admin/travel',            icon: MapPin,          label: 'Travel Requests' },
     // ── 12. Loans & Advances ──
     { to: '/hr-admin/loans',             icon: Wallet,          label: 'Loans & Advances' },
@@ -398,6 +399,7 @@ const navGroups = [
     { to: '/hr-admin/letters',            icon: FileText,        label: 'Letter Generation' },
     // ── 16. Asset Management ──
     { to: '/hr-admin/emp-assets',        icon: Package,         label: 'Employee Assets' },
+    { to: '/hr-admin/emp-assets?category=uniform', icon: Package, label: 'Uniform Issue' },
     // ── 17. Exit Management ──
     { to: '/hr-admin/exit',              icon: LogOut,          label: 'Exit Management' },
     { to: '/hr-admin/fnf',               icon: Wallet,          label: 'Full & Final' },
@@ -417,6 +419,12 @@ const navGroups = [
     { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
     { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
     { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
+    { to: '/hr-admin/reports?view=empm:master',   icon: Users,           label: 'Employee Reports' },
+    { to: '/hr-admin/reports?view=adv:recruitment', icon: Briefcase,     label: 'Recruitment Reports' },
+    { to: '/hr-admin/reports?view=adv:training',  icon: BookOpen,        label: 'Training Reports' },
+    { to: '/hr-admin/reports?view=adv:goals',     icon: Target,          label: 'Performance Reports' },
+    { to: '/hr-admin/reports?view=compliance',    icon: ShieldCheck,     label: 'Compliance Reports' },
+    { to: '/hr-admin/reports?view=adv:exits',     icon: LogOut,          label: 'Exit Reports' },
     { to: '/hr-admin/import',                     icon: Upload,          label: 'Import Data' },
     // ── 20. Settings ──
     { to: '/hr-admin/company-settings',  icon: Settings,        label: 'Company Settings' },

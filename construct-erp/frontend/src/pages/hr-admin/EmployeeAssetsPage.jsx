@@ -1,5 +1,6 @@
 // EmployeeAssetsPage.jsx — Assets assigned to employees
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Pencil, Trash2, RotateCcw, Package } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -14,9 +15,9 @@ const CATEGORIES = ['laptop','mobile','sim_card','vehicle','tools','uniform','sa
 const CONDITIONS  = ['new','good','fair','poor'];
 const STATUS_C    = { assigned:'blue', returned:'green', lost:'red', damaged:'orange' };
 
-function AssetForm({ asset, employees=[], onClose, onSaved }) {
+function AssetForm({ asset, employees=[], defaultCategory='', onClose, onSaved }) {
   const isEdit = !!asset;
-  const [f, setF] = useState(asset || { employee_id:'', asset_name:'', asset_code:'', category:'laptop', serial_number:'', assigned_on:dayjs().format('YYYY-MM-DD'), return_expected:'', condition_at_issue:'good', asset_value:0, notes:'' });
+  const [f, setF] = useState(asset || { employee_id:'', asset_name:'', asset_code:'', category:defaultCategory||'laptop', serial_number:'', assigned_on:dayjs().format('YYYY-MM-DD'), return_expected:'', condition_at_issue:'good', asset_value:0, notes:'' });
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const mut = useMutation({
     mutationFn: d => isEdit ? hrEmpAssetsAPI.update(asset.id, d) : hrEmpAssetsAPI.create(d),
@@ -119,21 +120,26 @@ function ReturnModal({ asset, onClose, onSaved }) {
 
 export default function EmployeeAssetsPage() {
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const categoryLock = searchParams.get('category') || '';
   const [showForm, setShowForm] = useState(false);
   const [editAsset, setEditAsset] = useState(null);
   const [returnAsset, setReturnAsset] = useState(null);
   const [filterStatus, setFilterStatus] = useState('assigned');
 
-  const { data: assets=[] } = useQuery({ queryKey:['hr-emp-assets',filterStatus], queryFn:()=>hrEmpAssetsAPI.list({status:filterStatus||undefined}).then(r=>r.data?.data||[]) });
+  const { data: assets=[] } = useQuery({ queryKey:['hr-emp-assets',filterStatus,categoryLock], queryFn:()=>hrEmpAssetsAPI.list({status:filterStatus||undefined,category:categoryLock||undefined}).then(r=>r.data?.data||[]) });
   const { data: empRes } = useQuery({ queryKey:['hr-employees-simple'], queryFn:()=>hrEmployeesAPI.list({ employment_status:'active', limit:500 }).then(r=>r.data) });
   const employees = empRes?.data || [];
   const del = useMutation({ mutationFn:id=>hrEmpAssetsAPI.remove(id), onSuccess:()=>{ toast.success('Deleted'); qc.invalidateQueries({queryKey:['hr-emp-assets']}); } });
 
+  const pageTitle = categoryLock === 'uniform' ? 'Uniform Issue' : 'Employee Assets';
+  const pageSubtitle = categoryLock === 'uniform' ? 'Issue and track uniforms given to employees' : 'Assign and track assets given to employees';
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[#f5f6fa]">
-      <PageHeader title="Employee Assets" subtitle="Assign and track assets given to employees"
-        breadcrumbs={[{label:'HR & Admin'},{label:'Assets'}]}
-        actions={<button onClick={()=>{setEditAsset(null);setShowForm(true);}} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-2"><Plus size={14}/> Assign Asset</button>}
+      <PageHeader title={pageTitle} subtitle={pageSubtitle}
+        breadcrumbs={[{label:'HR & Admin'},{label:categoryLock==='uniform'?'Uniform Issue':'Assets'}]}
+        actions={<button onClick={()=>{setEditAsset(null);setShowForm(true);}} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-2"><Plus size={14}/> {categoryLock==='uniform'?'Issue Uniform':'Assign Asset'}</button>}
       />
       <div className="flex-1 overflow-auto p-5">
         <div className="flex gap-2 mb-4">
@@ -190,7 +196,7 @@ export default function EmployeeAssetsPage() {
           </table>
         </div>
       </div>
-      {showForm && <AssetForm asset={editAsset} employees={employees} onClose={()=>{setShowForm(false);setEditAsset(null);}} onSaved={()=>qc.invalidateQueries({queryKey:['hr-emp-assets']})} />}
+      {showForm && <AssetForm asset={editAsset} defaultCategory={categoryLock} employees={employees} onClose={()=>{setShowForm(false);setEditAsset(null);}} onSaved={()=>qc.invalidateQueries({queryKey:['hr-emp-assets']})} />}
       {returnAsset && <ReturnModal asset={returnAsset} onClose={()=>setReturnAsset(null)} onSaved={()=>qc.invalidateQueries({queryKey:['hr-emp-assets']})} />}
     </div>
   );

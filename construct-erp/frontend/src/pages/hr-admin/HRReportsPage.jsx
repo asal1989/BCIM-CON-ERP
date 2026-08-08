@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -965,7 +966,8 @@ function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setEx
 
 export default function HRReportsPage() {
   const now = new Date();
-  const [view, setView] = useState('');        // '' = catalog landing; otherwise a report id
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState(searchParams.get('view') || '');        // '' = catalog landing; otherwise a report id
   const [search, setSearch] = useState('');
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hrReportFavs') || '[]'); } catch { return []; }
