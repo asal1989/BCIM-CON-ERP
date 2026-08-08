@@ -2082,6 +2082,30 @@ export const hrEmployeeBackgroundAPI = {
   },
 };
 
+export const hrOnboardingTrainingAPI = {
+  dashboard:      ()          => api.get('/hr-admin/onboarding/training/dashboard'),
+  courses:        (params)    => api.get('/hr-admin/onboarding/training/courses', { params }),
+  createCourse:   (d)         => api.post('/hr-admin/onboarding/training/courses', d),
+  updateCourse:   (id, d)     => api.put(`/hr-admin/onboarding/training/courses/${id}`, d),
+  questions:      (courseId)  => api.get(`/hr-admin/onboarding/training/courses/${courseId}/questions`),
+  addQuestion:    (courseId, d) => api.post(`/hr-admin/onboarding/training/courses/${courseId}/questions`, d),
+  deleteQuestion: (qid)       => api.delete(`/hr-admin/onboarding/training/questions/${qid}`),
+  assignments:    (params)    => api.get('/hr-admin/onboarding/training/assignments', { params }),
+  assign:         (d)         => api.post('/hr-admin/onboarding/training/assign', d),
+  start:          (id)        => api.patch(`/hr-admin/onboarding/training/assignments/${id}/start`),
+  reassign:       (id, d)     => api.patch(`/hr-admin/onboarding/training/assignments/${id}/reassign`, d),
+  extend:         (id, d)     => api.patch(`/hr-admin/onboarding/training/assignments/${id}/extend`, d),
+  remind:         (id)        => api.post(`/hr-admin/onboarding/training/assignments/${id}/remind`),
+  submitQuiz:     (id, d)     => api.post(`/hr-admin/onboarding/training/assignments/${id}/submit-quiz`, d),
+  attempts:       (id)        => api.get(`/hr-admin/onboarding/training/assignments/${id}/attempts`),
+  certificate:    (assignmentId) => api.get(`/hr-admin/onboarding/training/certificates/${assignmentId}`),
+  history:        (userId)    => api.get(`/hr-admin/onboarding/training/history/${userId}`),
+  report:         (key, params) => api.get(`/hr-admin/onboarding/training/reports/${key}`, { params }),
+  trainers:       ()          => api.get('/hr-admin/onboarding/training/trainers'),
+  addTrainer:     (d)         => api.post('/hr-admin/onboarding/training/trainers', d),
+  deleteTrainer:  (id)        => api.delete(`/hr-admin/onboarding/training/trainers/${id}`),
+};
+
 export const hrOnboardingAPI = {
   summary:        (params)      => api.get('/hr-admin/onboarding/summary', { params }),
   employees:      (params)      => api.get('/hr-admin/onboarding/employees', { params }),
