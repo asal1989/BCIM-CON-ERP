@@ -11,7 +11,7 @@ const { sendMail } = require('../services/mail.service');
 const HR_ROLES = ['super_admin','admin','hr_admin','hr_manager'];
 const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
 
-const uploadDir = path.join(__dirname, '../../../uploads/hr-resumes');
+const uploadDir = path.join(__dirname, '../../uploads/hr-resumes');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
