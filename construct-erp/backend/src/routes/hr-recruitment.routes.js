@@ -373,6 +373,17 @@ router.patch('/applicants/:id/status', authorize(...HR_ROLES), async (req, res) 
   res.json({ data: rows[0] });
 });
 
+// Removes a duplicate/erroneous candidate entry — interviews, approvals and
+// offers cascade via FK, so this is a genuine delete, not a status change.
+router.delete('/applicants/:id', authorize(...HR_ROLES), async (req, res) => {
+  const { rows } = await query(
+    `DELETE FROM hr_applicants WHERE id=$1 AND company_id=$2 RETURNING id`,
+    [req.params.id, req.user.company_id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Candidate not found' });
+  res.json({ success: true });
+});
+
 // ── Resume Screening ─────────────────────────────────────────────────────
 router.patch('/applicants/:id/screening', authorize(...HR_ROLES), async (req, res) => {
   const { screening_notes, screening_score } = req.body;
