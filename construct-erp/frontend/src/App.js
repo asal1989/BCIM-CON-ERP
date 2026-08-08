@@ -409,6 +409,11 @@ const HRCompliancePage            = lazy(() => import('./pages/hr-admin/HRCompli
 const ComplianceTrackerPage       = lazy(() => import('./pages/hr-admin/compliance/CompliancePage'));
 const HRConfirmationReportPage    = lazy(() => import('./pages/hr-admin/HRConfirmationReportPage'));
 const HRCompanySettingsPage       = lazy(() => import('./pages/hr-admin/CompanySettingsPage'));
+const HRBusinessUnitPage          = lazy(() => import('./pages/hr-admin/BusinessUnitPage'));
+const HRDivisionPage              = lazy(() => import('./pages/hr-admin/DivisionPage'));
+const HRGradePage                 = lazy(() => import('./pages/hr-admin/GradePage'));
+const HRCostCenterPage            = lazy(() => import('./pages/hr-admin/CostCenterPage'));
+const HRReportingStructurePage    = lazy(() => import('./pages/hr-admin/ReportingStructurePage'));
 const HRMasterSettingsPage        = lazy(() => import('./pages/hr-admin/MasterSettingsPage'));
 const HRSmsSettingsPage           = lazy(() => import('./pages/hr-admin/SmsSettingsPage'));
 const HRShiftCalendarPage         = lazy(() => import('./pages/hr-admin/ShiftCalendarPage'));
@@ -965,6 +970,11 @@ export default function App() {
                 <Route path="hr-admin/analytics" element={<RequireModule module="HR & Admin"><HRAnalyticsHubPage /></RequireModule>} />
                 <Route path="hr-admin/directory" element={<RequireModule module="HR & Admin"><HREmployeeDirectoryPage /></RequireModule>} />
                 <Route path="hr-admin/org-chart" element={<RequireModule module="HR & Admin"><HROrgChartPage /></RequireModule>} />
+                <Route path="hr-admin/business-units" element={<RequireModule module="HR & Admin"><HRBusinessUnitPage /></RequireModule>} />
+                <Route path="hr-admin/divisions" element={<RequireModule module="HR & Admin"><HRDivisionPage /></RequireModule>} />
+                <Route path="hr-admin/grades" element={<RequireModule module="HR & Admin"><HRGradePage /></RequireModule>} />
+                <Route path="hr-admin/cost-centers" element={<RequireModule module="HR & Admin"><HRCostCenterPage /></RequireModule>} />
+                <Route path="hr-admin/reporting-structure" element={<RequireModule module="HR & Admin"><HRReportingStructurePage /></RequireModule>} />
                 <Route path="hr-admin/policies" element={<RequireModule module="HR & Admin"><HRPoliciesPage /></RequireModule>} />
                 <Route path="hr-admin/segments" element={<RequireModule module="HR & Admin"><HRSegmentsPage /></RequireModule>} />
                 <Route path="hr-admin/emp-filters"  element={<RequireModule module="HR & Admin"><HREmployeeFiltersPage /></RequireModule>} />

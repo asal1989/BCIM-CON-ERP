@@ -2036,6 +2036,29 @@ export const hrMastersAPI = {
   createHoliday:  (data)   => api.post('/hr-admin/masters/holidays', data),
   updateHoliday:  (id, d)  => api.put(`/hr-admin/masters/holidays/${id}`, d),
   deleteHoliday:  (id)     => api.delete(`/hr-admin/masters/holidays/${id}`),
+  // Business Units
+  listBUs:    (params) => api.get('/hr-admin/masters/business-units', { params }),
+  createBU:   (data)   => api.post('/hr-admin/masters/business-units', data),
+  updateBU:   (id, d)  => api.put(`/hr-admin/masters/business-units/${id}`, d),
+  deleteBU:   (id)     => api.delete(`/hr-admin/masters/business-units/${id}`),
+  // Divisions
+  listDivisions:  (params) => api.get('/hr-admin/masters/divisions', { params }),
+  createDivision: (data)   => api.post('/hr-admin/masters/divisions', data),
+  updateDivision: (id, d)  => api.put(`/hr-admin/masters/divisions/${id}`, d),
+  deleteDivision: (id)     => api.delete(`/hr-admin/masters/divisions/${id}`),
+  // Grades
+  listGrades:   (params) => api.get('/hr-admin/masters/grades', { params }),
+  createGrade:  (data)   => api.post('/hr-admin/masters/grades', data),
+  updateGrade:  (id, d)  => api.put(`/hr-admin/masters/grades/${id}`, d),
+  deleteGrade:  (id)     => api.delete(`/hr-admin/masters/grades/${id}`),
+  // Cost Centers
+  listCostCenters:   (params) => api.get('/hr-admin/masters/cost-centers', { params }),
+  createCostCenter:  (data)   => api.post('/hr-admin/masters/cost-centers', data),
+  updateCostCenter:  (id, d)  => api.put(`/hr-admin/masters/cost-centers/${id}`, d),
+  deleteCostCenter:  (id)     => api.delete(`/hr-admin/masters/cost-centers/${id}`),
+  // Reporting Structure
+  listReportingStructure:   ()      => api.get('/hr-admin/masters/reporting-structure'),
+  updateReportingManager:   (userId, d) => api.put(`/hr-admin/masters/reporting-structure/${userId}`, d),
 };
 
 export const hrEmployeesAPI = {

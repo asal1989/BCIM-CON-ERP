@@ -274,8 +274,14 @@ const navGroups = [
     { to: '/hr-admin/emp-filters',       icon: Users,           label: 'Employee Filter' },
     { to: '/hr-admin/emp-categories',    icon: Users,           label: 'Employee Categories' },
     // ── 3. Organization Structure ──
-    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
+    { to: '/hr-admin/company-settings',  icon: Building,        label: 'Company' },
+    { to: '/hr-admin/business-units',    icon: Building,        label: 'Business Unit' },
+    { to: '/hr-admin/divisions',         icon: Layers3,         label: 'Division' },
     { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
+    { to: '/hr-admin/grades',            icon: Award,           label: 'Grade' },
+    { to: '/hr-admin/cost-centers',      icon: Landmark,        label: 'Cost Center' },
+    { to: '/hr-admin/reporting-structure', icon: History,       label: 'Reporting Structure' },
+    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
     { to: '/hr-admin/project-staff',     icon: FolderKanban,    label: 'Project-wise Staff' },
     { to: '/hr/workers',                 icon: HardHat,         label: 'Site Workers' },
     // ── 4. Recruitment ──
@@ -616,7 +622,7 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'Dashboard',             paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist'] },
     { label: 'Employee Management',   paths: ['/hr-admin/employees','/hr-admin/directory','/hr-admin/segments','/hr-admin/emp-filters','/hr-admin/emp-categories'] },
-    { label: 'Organization Structure',paths: ['/hr-admin/org-chart','/hr-admin/departments','/hr-admin/project-staff','/hr/workers'] },
+    { label: 'Organization Structure',paths: ['/hr-admin/company-settings','/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
     { label: 'Recruitment',           paths: ['/hr-admin/recruitment'] },
     { label: 'Onboarding',            paths: ['/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist','/hr-admin/onboarding/document-verification','/hr-admin/onboarding/offer-appointment','/hr-admin/onboarding/asset-allocation','/hr-admin/onboarding/id-card','/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions','/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms','/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback','/hr-admin/onboarding/reports','/hr-admin/onboarding/settings'] },
     { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
