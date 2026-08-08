@@ -2170,6 +2170,7 @@ export const hrLeaveAPI = {
 
 export const hrAttendanceAPI = {
   list:        (params) => api.get('/hr-admin/attendance', { params }),
+  liveStatus:  (params) => api.get('/hr-admin/attendance/live-status', { params }),
   summary:     (params) => api.get('/hr-admin/attendance/summary', { params }),
   dailyTrend:  (params) => api.get('/hr-admin/attendance/daily-trend', { params }),
   deptSummary: (params) => api.get('/hr-admin/attendance/department-summary', { params }),
