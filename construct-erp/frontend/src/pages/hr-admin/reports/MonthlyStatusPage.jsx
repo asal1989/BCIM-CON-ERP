@@ -180,7 +180,7 @@ export default function MonthlyStatusPage() {
     const isHoliday = holidaySet.has(dateStr);
     const isSunday  = sundaySet.has(d);
     if ((isHoliday || isSunday) && workedPresent(p))
-      return { bg:'#CFFAFE', label:'P', labelColor:'#0E7490' };
+      return { bg:'#CFFAFE' };
     if (isHoliday) return { bg:'#F5F3FF' };
     if (isSunday)  return { bg:'#F8FAFC' };
     if (!p) return { bg:'#FEF2F2', label:'A', labelColor:'#DC2626' };
