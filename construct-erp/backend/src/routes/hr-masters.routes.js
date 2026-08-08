@@ -57,6 +57,16 @@ const initTables = async () => {
       is_active BOOLEAN DEFAULT TRUE
     )
   `);
+};
+runSchemaInit('hr-masters', initTables);
+
+// Separate migration key — 'hr-masters' already ran in production long
+// before Organization Structure masters (Business Unit/Division/Grade/
+// Cost Center) were added here, and runSchemaInit tasks execute exactly
+// once ever, so these tables were never actually created on the live
+// database (surfaced as "relation hr_cost_centers/hr_divisions does not
+// exist" once the Organization Structure UI started calling these routes).
+const initOrgStructureTables = async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS hr_business_units (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,7 +115,7 @@ const initTables = async () => {
   `);
   await query(`ALTER TABLE hr_departments ADD COLUMN IF NOT EXISTS division_id UUID REFERENCES hr_divisions(id)`);
 };
-runSchemaInit('hr-masters', initTables);
+runSchemaInit('hr-org-structure-masters-v1', initOrgStructureTables);
 
 // ═══════════════════════════════════════════════════════════
 // DEPARTMENTS
