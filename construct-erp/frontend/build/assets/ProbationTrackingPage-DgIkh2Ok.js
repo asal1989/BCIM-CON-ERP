@@ -1,1 +1,0 @@
-import{j as r}from"./vendor-react-C3P8e1DV.js";import{O as o}from"./OnboardingPlaceholderPage-BQx2r8zq.js";import"./vendor-icons-BUsau7eS.js";function t(){return r.jsx(o,{title:"Probation Tracking",description:"Track probation periods and review dates for new hires."})}export{t as default};

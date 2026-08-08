@@ -20,7 +20,7 @@ export default function RejectedDocumentsPage() {
   });
   const { data: departments } = useQuery({
     queryKey: ['hr-departments'],
-    queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
+    queryFn: () => hrMastersAPI.listDepts().then(r => r.data?.data || []),
   });
 
   const docs = data || [];
