@@ -754,7 +754,7 @@ router.post('/talent-pool/:id/convert', authorize(...HR_ROLES), async (req, res)
 function masterCrud(table, path) {
   router.get(`/settings/${path}`, authorize(...HR_ALL), async (req, res) => {
     try {
-      const { rows } = await query(`SELECT * FROM ${table} WHERE company_id=$1 ORDER BY name`, [req.user.company_id]);
+      const { rows } = await query(`SELECT * FROM ${table} WHERE company_id=$1 AND active=TRUE ORDER BY name`, [req.user.company_id]);
       res.json({ data: rows });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
