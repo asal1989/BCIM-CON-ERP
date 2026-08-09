@@ -1035,7 +1035,13 @@ router.get('/manpower-report', async (req, res) => {
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
         END)) AS company,
-        COALESCE(des.name, u.designation, '—')       AS designation,
+        -- UPPER(TRIM(...)) so a designation reaching this report from the two
+        -- different sources with different casing ("STEEL FITTER" off
+        -- users.designation vs "Steel Fitter" off sc_workers.skill_type) folds
+        -- into ONE row. Without it they grouped separately but rendered
+        -- identically (the UI uppercases), so the same trade appeared twice —
+        -- e.g. Astha showed "STEEL FITTER 13" and "STEEL FITTER 2" as two rows.
+        UPPER(TRIM(COALESCE(des.name, u.designation, '—')))  AS designation,
         COALESCE(a.site, '')                              AS site,
         COALESCE(a.shift, 'DAY')                          AS shift,
         COUNT(*)::int                                     AS headcount
@@ -1061,7 +1067,7 @@ router.get('/manpower-report', async (req, res) => {
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
         END)),
-        COALESCE(des.name, u.designation, '—'),
+        UPPER(TRIM(COALESCE(des.name, u.designation, '—'))),
         a.site, a.shift
     `, staffParams);
 
@@ -1081,7 +1087,7 @@ router.get('/manpower-report', async (req, res) => {
     const scRes = await query(`
       SELECT
         UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))) AS company,
-        COALESCE(w.skill_type, '—')  AS designation,
+        UPPER(TRIM(COALESCE(w.skill_type, '—')))  AS designation,
         COALESCE(p.name, '')         AS site,
         'DAY'                        AS shift,
         COUNT(*)::int                AS headcount
@@ -1091,7 +1097,7 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN projects p           ON p.id = w.project_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
         ${scProjectFilter}
-      GROUP BY UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), COALESCE(w.skill_type, '—'), p.name
+      GROUP BY UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), UPPER(TRIM(COALESCE(w.skill_type, '—'))), p.name
     `, scParams);
 
     const rows = [...staffRes.rows, ...scRes.rows];

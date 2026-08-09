@@ -100,14 +100,14 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
 
   const { rows: staffRows } = await query(`
     SELECT
-      CASE
+      UPPER(TRIM(CASE
           WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
                AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
             THEN ep.contractor_name
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
-        END AS company,
-      COALESCE(des.name, u.designation, '—')       AS designation,
+        END)) AS company,
+      UPPER(TRIM(COALESCE(des.name, u.designation, '—')))  AS designation,
       COALESCE(a.site, '')                              AS site,
       COALESCE(a.shift, 'DAY')                          AS shift,
       COUNT(*)::int                                     AS headcount
@@ -125,14 +125,14 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
       )
       ${projectFilter}
     GROUP BY
-      CASE
+      UPPER(TRIM(CASE
           WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
                AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
             THEN ep.contractor_name
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
-        END,
-      COALESCE(des.name, u.designation, '—'),
+        END)),
+      UPPER(TRIM(COALESCE(des.name, u.designation, '—'))),
       a.site, a.shift
   `, params);
 
@@ -173,7 +173,7 @@ async function fetchScManpowerRows(companyId, projectId, targetDate, withProject
     SELECT
       ${withProject ? "COALESCE(p.name, 'Head Office') AS project," : ''}
       UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))) AS company,
-      COALESCE(w.skill_type, '—')  AS designation,
+      UPPER(TRIM(COALESCE(w.skill_type, '—')))  AS designation,
       COALESCE(p.name, '')         AS site,
       'DAY'                        AS shift,
       COUNT(*)::int                AS headcount
@@ -184,7 +184,7 @@ async function fetchScManpowerRows(companyId, projectId, targetDate, withProject
     WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
       ${projectFilter}
     GROUP BY ${withProject ? 'COALESCE(p.name, \'Head Office\'),' : ''}
-      UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), COALESCE(w.skill_type, '—'), p.name
+      UPPER(TRIM(COALESCE(sc.name, 'UNKNOWN CONTRACTOR'))), UPPER(TRIM(COALESCE(w.skill_type, '—'))), p.name
   `, params);
   return rows;
 }
@@ -198,14 +198,14 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
   const { rows: rawRows } = await query(`
     SELECT
       COALESCE(pr.name, 'Head Office')                  AS project,
-      CASE
+      UPPER(TRIM(CASE
           WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
                AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
             THEN ep.contractor_name
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
-        END AS company,
-      COALESCE(des.name, u.designation, '—')       AS designation,
+        END)) AS company,
+      UPPER(TRIM(COALESCE(des.name, u.designation, '—')))  AS designation,
       COALESCE(a.site, '')                              AS site,
       COALESCE(a.shift, 'DAY')                          AS shift,
       COUNT(*)::int                                     AS headcount
@@ -217,14 +217,14 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
     WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
     GROUP BY
       COALESCE(pr.name, 'Head Office'),
-      CASE
+      UPPER(TRIM(CASE
           WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
                AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
             THEN ep.contractor_name
           WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
           ELSE 'BCIM STAFF'
-        END,
-      COALESCE(des.name, u.designation, '—'),
+        END)),
+      UPPER(TRIM(COALESCE(des.name, u.designation, '—'))),
       a.site, a.shift
   `, [companyId, targetDate]);
 
