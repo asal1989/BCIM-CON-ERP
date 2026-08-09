@@ -2554,17 +2554,23 @@ function ComplianceOverview({ depts, onNavigate }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-function NavItem({ active, onClick, icon: Icon, label, badge }) {
+// Horizontal pill instead of a vertical nav row — this page used to render its
+// own full-height left sidebar alongside the app's global sidebar, which read
+// as two competing sidebars stacked side by side. A scrollable pill bar keeps
+// the same tabs/groups but frees the width back to the content.
+function TabPill({ active, onClick, icon: Icon, label, badge }) {
   return (
     <button onClick={onClick}
-      className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-colors mb-0.5 ${
-        active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'
+      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12.5px] font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+        active ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-100 hover:bg-gray-50'
       }`}>
-      <span className="flex items-center gap-2 truncate">
-        <Icon size={15} className={active ? 'text-indigo-600' : 'text-gray-400'}/>
-        <span className="truncate">{label}</span>
-      </span>
-      {!!badge && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 flex-shrink-0">{badge}</span>}
+      <Icon size={14} className={active ? 'text-white' : 'text-gray-400'}/>
+      <span>{label}</span>
+      {!!badge && (
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+          active ? 'bg-white/20 text-white' : 'bg-red-50 text-red-700'
+        }`}>{badge}</span>
+      )}
     </button>
   );
 }
@@ -2607,32 +2613,30 @@ export default function HRCompliancePage({ embedded = false, initialTab }) {
         </motion.div>
       )}
 
-      {/* Sidebar + Content */}
-      <motion.div {...fade(0.06)} className="hrc-shell px-5 py-4 flex gap-3.5 items-start">
+      {/* Tab bar + Content */}
+      <motion.div {...fade(0.06)} className="hrc-shell px-5 py-4">
 
-        <div className="no-print w-56 flex-shrink-0 bg-white rounded-2xl border border-gray-100 p-2.5 sticky top-4"
-          style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
-          <div className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Overview</div>
-          <NavItem active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}
+        <div className="no-print flex items-center gap-1.5 overflow-x-auto pb-3 mb-1" style={{ scrollbarWidth: 'thin' }}>
+          <TabPill active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}
             icon={LayoutDashboard} label="Dashboard" badge={licenceAlerts > 0 ? licenceAlerts : null}/>
 
-          {TAB_GROUPS.map(g => (
-            <div key={g.label}>
-              <div className="px-2.5 pt-3.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">{g.label}</div>
+          {TAB_GROUPS.map((g, gi) => (
+            <React.Fragment key={g.label}>
+              <div className="w-px h-6 bg-gray-200 flex-shrink-0 mx-0.5" title={g.label}/>
               {g.keys.map(k => {
                 const t = TABS.find(x => x.key === k);
                 if (!t) return null;
                 return (
-                  <NavItem key={k} active={activeTab === k} onClick={() => setActiveTab(k)}
+                  <TabPill key={k} active={activeTab === k} onClick={() => setActiveTab(k)}
                     icon={t.icon} label={t.label}
                     badge={k === 'licenses' && licenceAlerts > 0 ? licenceAlerts : null}/>
                 );
               })}
-            </div>
+            </React.Fragment>
           ))}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           {activeTab === 'overview'   && <ComplianceOverview depts={depts} onNavigate={setActiveTab}/>}
           {activeTab === 'pf'         && <PFRegister depts={depts}/>}
           {activeTab === 'esi'        && <ESIRegister depts={depts}/>}
