@@ -357,8 +357,10 @@ const navGroups = [
     { to: '/hr-admin/geofences',               icon: Globe,           label: 'Geofences' },
     { to: '/hr-admin/work-codes',              icon: Cog,             label: 'Work Codes' },
     // ── 7. Leave Management ──
+    // 'Leave Approval' was a second entry pointing at this exact same URL --
+    // LeaveManagementPage's own Requests tab already has Approve/Reject
+    // actions, so it was a dead duplicate of this link.
     { to: '/hr-admin/leaves',            icon: CalendarOff,     label: 'Leave Management' },
-    { to: '/hr-admin/leaves',            icon: ShieldCheck,     label: 'Leave Approval' },
     { to: '/hr-admin/leave-entries',     icon: CalendarOff,     label: 'Leave Entries' },
     // ── 8. Shift Management ──
     { to: '/hr-admin/shifts',            icon: Clock,           label: 'Shift Management' },
@@ -680,7 +682,7 @@ const NAV_SECTIONS = {
       '/hr-admin/onboarding/reports','/hr-admin/onboarding/settings',
     ] },
     { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/live','/hr-admin/attendance/missing-punch','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/reports/daily-attendance','/hr-admin/attendance/dashboard?focus=late','/hr-admin/reports/overtime-earlyexit?type=early_exit','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
-    { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leaves','/hr-admin/leave-entries'] },
+    { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leave-entries'] },
     { label: 'Shift Management',      paths: ['/hr-admin/shifts','/hr-admin/shift-calendar','/hr-admin/shift-roster','/hr-admin/emp-shifts','/hr-admin/shift-schedule'] },
     { label: 'Holiday Calendar',      paths: ['/hr-admin/holidays'] },
     { label: 'Payroll',               paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/compliance?tab=bonus','/hr-admin/lop-days','/hr-admin/stop-salary','/hr/payroll'] },
