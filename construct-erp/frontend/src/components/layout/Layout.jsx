@@ -334,6 +334,9 @@ const navGroups = [
     { to: '/hr-admin/onboarding/compliance-forms',       icon: ShieldCheck,     label: 'Compliance Forms' },
     { to: '/hr-admin/onboarding/probation',              icon: Timer,           label: 'Probation Tracking' },
     { to: '/hr-admin/onboarding/confirmation',           icon: Award,           label: 'Confirmation Process' },
+    // Moved here from Compliance — it reports on the probation→confirmation
+    // lifecycle above, so it belongs beside the process it reports on.
+    { to: '/hr-admin/reports/confirmation',              icon: BadgeCheck,      label: 'Confirmation Report' },
     { to: '/hr-admin/onboarding/feedback',               icon: MessageSquare,   label: 'Onboarding Feedback' },
     { to: '/hr-admin/onboarding/reports',                icon: FileBarChart,    label: 'Onboarding Reports' },
     { to: '/hr-admin/onboarding/settings',               icon: Settings,        label: 'Onboarding Settings' },
@@ -370,6 +373,9 @@ const navGroups = [
     { to: '/hr-admin/payroll-reports',   icon: FileText,        label: 'Payroll Reports' },
     { to: '/hr-admin/salary-structures', icon: Banknote,        label: 'Salary Structures' },
     { to: '/hr-admin/employee-salaries', icon: IndianRupee,     label: 'Employee Salaries' },
+    // Moved here from Compliance — bonus is a payroll earning, not a statutory
+    // register. Still deep-links to the Bonus Register tab that computes it.
+    { to: '/hr-admin/compliance?tab=bonus',   icon: Star,       label: 'Bonus' },
     { to: '/hr-admin/lop-days',          icon: MinusCircle,     label: 'LOP Days' },
     { to: '/hr-admin/stop-salary',       icon: CircleSlash,     label: 'Stop Salary' },
     { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
@@ -387,12 +393,14 @@ const navGroups = [
     { to: '/hr-admin/training/certifications', icon: Award,     label: 'Certifications' },
     { to: '/hr-admin/training/assessment',     icon: ClipboardCheck, label: 'Assessment' },
     // ── 15. Compliance ──
-    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
+    // 'Compliance' → 'Dashboard': the label repeated its own section name, so
+    // the menu read "Compliance › Compliance". Bonus moved to Payroll and
+    // Confirmation Report moved to Onboarding — both belong to those lifecycles,
+    // not to statutory compliance.
+    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Dashboard' },
     { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
     { to: '/hr-admin/compliance?tab=it',      icon: FileText,      label: 'TDS' },
     { to: '/hr-admin/compliance?tab=challan', icon: Send,          label: 'Statutory Forms' },
-    { to: '/hr-admin/compliance?tab=bonus',   icon: Star,          label: 'Bonus' },
-    { to: '/hr-admin/reports/confirmation', icon: BadgeCheck,    label: 'Confirmation Report' },
     { to: '/hr-admin/policies',           icon: FileText,        label: 'Company Policies & Forms' },
     { to: '/hr-admin/letters',            icon: FileText,        label: 'Letter Generation' },
     // ── 16. Asset Management ──
@@ -667,19 +675,21 @@ const NAV_SECTIONS = {
       '/hr-admin/onboarding/id-card/reports','/hr-admin/onboarding/id-card/settings',
       '/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions',
       '/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms',
-      '/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation','/hr-admin/onboarding/feedback',
+      '/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation',
+      '/hr-admin/reports/confirmation',
+      '/hr-admin/onboarding/feedback',
       '/hr-admin/onboarding/reports','/hr-admin/onboarding/settings',
     ] },
     { label: 'Attendance',            paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/live','/hr-admin/attendance/missing-punch','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/bulk-correction','/hr-admin/attendance/timesheet','/hr-admin/reports/daily-attendance','/hr-admin/attendance/dashboard?focus=late','/hr-admin/reports/overtime-earlyexit?type=early_exit','/hr/attendance','/hr-admin/outdoor-entries','/hr-admin/geofences','/hr-admin/work-codes'] },
     { label: 'Leave Management',      paths: ['/hr-admin/leaves','/hr-admin/leaves','/hr-admin/leave-entries'] },
     { label: 'Shift Management',      paths: ['/hr-admin/shifts','/hr-admin/shift-calendar','/hr-admin/shift-roster','/hr-admin/emp-shifts','/hr-admin/shift-schedule'] },
     { label: 'Holiday Calendar',      paths: ['/hr-admin/holidays'] },
-    { label: 'Payroll',               paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/lop-days','/hr-admin/stop-salary','/hr/payroll'] },
+    { label: 'Payroll',               paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/compliance?tab=bonus','/hr-admin/lop-days','/hr-admin/stop-salary','/hr/payroll'] },
     { label: 'Claims & Reimbursements', paths: ['/hr-admin/expenses','/hr-admin/travel'] },
     { label: 'Loans & Advances',      paths: ['/hr-admin/loans'] },
     { label: 'Performance Management', paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/advanced?tab=performance'] },
     { label: 'Training & Development', paths: ['/hr-admin/training','/hr-admin/training/certifications','/hr-admin/training/assessment'] },
-    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/compliance?tab=it','/hr-admin/compliance?tab=challan','/hr-admin/compliance?tab=bonus','/hr-admin/reports/confirmation','/hr-admin/policies','/hr-admin/letters'] },
+    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/compliance?tab=it','/hr-admin/compliance?tab=challan','/hr-admin/policies','/hr-admin/letters'] },
     { label: 'Asset Management',      paths: ['/hr-admin/emp-assets','/hr-admin/emp-assets?category=uniform'] },
     { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
