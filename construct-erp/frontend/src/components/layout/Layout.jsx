@@ -393,14 +393,13 @@ const navGroups = [
     { to: '/hr-admin/training/certifications', icon: Award,     label: 'Certifications' },
     { to: '/hr-admin/training/assessment',     icon: ClipboardCheck, label: 'Assessment' },
     // ── 15. Compliance ──
-    // 'Compliance' → 'Dashboard': the label repeated its own section name, so
-    // the menu read "Compliance › Compliance". Bonus moved to Payroll and
-    // Confirmation Report moved to Onboarding — both belong to those lifecycles,
-    // not to statutory compliance.
-    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Dashboard' },
+    // Single entry instead of separate Dashboard/TDS/Statutory Forms links —
+    // HRCompliancePage already has its own internal sidebar covering all of
+    // those (and more) as tabs, so the three deep-links just duplicated it.
+    // Bonus moved to Payroll and Confirmation Report moved to Onboarding —
+    // both belong to those lifecycles, not to statutory compliance.
+    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
     { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
-    { to: '/hr-admin/compliance?tab=it',      icon: FileText,      label: 'TDS' },
-    { to: '/hr-admin/compliance?tab=challan', icon: Send,          label: 'Statutory Forms' },
     { to: '/hr-admin/policies',           icon: FileText,        label: 'Company Policies & Forms' },
     { to: '/hr-admin/letters',            icon: FileText,        label: 'Letter Generation' },
     // ── 16. Asset Management ──
@@ -689,7 +688,7 @@ const NAV_SECTIONS = {
     { label: 'Loans & Advances',      paths: ['/hr-admin/loans'] },
     { label: 'Performance Management', paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/advanced?tab=performance'] },
     { label: 'Training & Development', paths: ['/hr-admin/training','/hr-admin/training/certifications','/hr-admin/training/assessment'] },
-    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/compliance?tab=it','/hr-admin/compliance?tab=challan','/hr-admin/policies','/hr-admin/letters'] },
+    { label: 'Compliance',            paths: ['/hr-admin/compliance','/hr-admin/compliance-tracker','/hr-admin/policies','/hr-admin/letters'] },
     { label: 'Asset Management',      paths: ['/hr-admin/emp-assets','/hr-admin/emp-assets?category=uniform'] },
     { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
