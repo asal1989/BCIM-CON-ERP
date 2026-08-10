@@ -436,6 +436,9 @@ const navGroups = [
     { to: '/hr-admin/master-settings',   icon: Cog,             label: 'Master Settings' },
     { to: '/hr-admin/sms-settings',      icon: MessageSquare,   label: 'SMS Settings' },
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
+    { to: '/approval-engine',            icon: ShieldCheck,     label: 'Approval Workflows' },
+    { to: '/role-permissions',           icon: Key,             label: 'Roles & Permissions' },
+    { to: '/audit-log',                  icon: History,         label: 'Audit Log' },
   ]},
   { label: 'Setup & Tools', superAdminOnly: true, items: [
     { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
