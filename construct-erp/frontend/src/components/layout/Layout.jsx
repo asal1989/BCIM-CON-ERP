@@ -433,7 +433,6 @@ const navGroups = [
     { to: '/hr-admin/reports?view=adv:exits',     icon: LogOut,          label: 'Exit Reports' },
     { to: '/hr-admin/import',                     icon: Upload,          label: 'Import Data' },
     // ── 20. Settings ──
-    { to: '/hr-admin/master-settings',   icon: Cog,             label: 'Master Settings' },
     { to: '/hr-admin/sms-settings',      icon: MessageSquare,   label: 'SMS Settings' },
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
     { to: '/approval-engine',            icon: ShieldCheck,     label: 'Approval Workflows' },
@@ -698,7 +697,7 @@ const NAV_SECTIONS = {
     { label: 'Exit Management',       paths: ['/hr-admin/exit', '/hr-admin/fnf'] },
     { label: 'ESS Management',        paths: ['/ess'] },
     { label: 'Reports',               paths: ['/hr-admin/reports','/hr-admin/reports/overtime-earlyexit','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check','/hr-admin/reports?view=empm:master','/hr-admin/reports?view=adv:recruitment','/hr-admin/reports?view=adv:training','/hr-admin/reports?view=adv:goals','/hr-admin/reports?view=compliance','/hr-admin/reports?view=adv:exits','/hr-admin/import'] },
-    { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/master-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },
+    { label: 'Settings',              paths: ['/hr-admin/company-settings','/hr-admin/sms-settings','/hr-admin/advanced'] },
   ],
   'Bill Tracker': [
     { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
