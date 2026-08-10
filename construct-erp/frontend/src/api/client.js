@@ -2047,6 +2047,11 @@ export const hrMastersAPI = {
   createDesig:  (data)   => api.post('/hr-admin/masters/designations', data),
   updateDesig:  (id, d)  => api.put(`/hr-admin/masters/designations/${id}`, d),
   deleteDesig:  (id)     => api.delete(`/hr-admin/masters/designations/${id}`),
+  // Locations
+  listLocations:  (params) => api.get('/hr-admin/masters/locations', { params }),
+  createLocation: (data)   => api.post('/hr-admin/masters/locations', data),
+  updateLocation: (id, d)  => api.put(`/hr-admin/masters/locations/${id}`, d),
+  deleteLocation: (id)     => api.delete(`/hr-admin/masters/locations/${id}`),
   // Leave Types
   listLeaveTypes:   (params) => api.get('/hr-admin/masters/leave-types', { params }),
   createLeaveType:  (data)   => api.post('/hr-admin/masters/leave-types', data),

@@ -376,6 +376,7 @@ const HRPayslipPrintPage    = lazy(() => import('./pages/hr-admin/PayslipPrintPa
 const HRSalaryStructurePage = lazy(() => import('./pages/hr-admin/SalaryStructurePage'));
 const HREmployeeSalaryPage  = lazy(() => import('./pages/hr-admin/EmployeeSalaryPage'));
 const HRDepartmentPage      = lazy(() => import('./pages/hr-admin/DepartmentPage'));
+const HRLocationsPage       = lazy(() => import('./pages/hr-admin/LocationsPage'));
 const HRLoanPage            = lazy(() => import('./pages/hr-admin/LoanPage'));
 const HRExpenseClaimPage    = lazy(() => import('./pages/hr-admin/ExpenseClaimPage'));
 const HRAppraisalPage       = lazy(() => import('./pages/hr-admin/AppraisalPage'));
@@ -1056,6 +1057,7 @@ export default function App() {
                 <Route path="hr-admin/salary-structures" element={<RequireModule module="HR & Admin"><HRSalaryStructurePage /></RequireModule>} />
                 <Route path="hr-admin/employee-salaries" element={<RequireModule module="HR & Admin"><HREmployeeSalaryPage /></RequireModule>} />
                 <Route path="hr-admin/departments" element={<RequireModule module="HR & Admin"><HRDepartmentPage /></RequireModule>} />
+                <Route path="hr-admin/locations" element={<RequireModule module="HR & Admin"><HRLocationsPage /></RequireModule>} />
                 <Route path="hr-admin/loans" element={<RequireModule module="HR & Admin"><HRLoanPage /></RequireModule>} />
                 <Route path="hr-admin/expenses" element={<RequireModule module="HR & Admin"><HRExpenseClaimPage /></RequireModule>} />
                 <Route path="hr-admin/appraisals" element={<RequireModule module="HR & Admin"><HRAppraisalPage /></RequireModule>} />

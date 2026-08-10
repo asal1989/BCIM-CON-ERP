@@ -155,6 +155,23 @@ const initWorkforceMasters = async () => {
 };
 runSchemaInit('hr-workforce-masters-v1', initWorkforceMasters);
 
+const initLocationsMaster = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_locations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id),
+      name TEXT NOT NULL,
+      address TEXT,
+      city TEXT,
+      state TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS location_id UUID REFERENCES hr_locations(id)`);
+};
+runSchemaInit('hr-locations-master-v1', initLocationsMaster);
+
 // ═══════════════════════════════════════════════════════════
 // DEPARTMENTS
 // ═══════════════════════════════════════════════════════════
@@ -250,6 +267,55 @@ router.put('/designations/:id', async (req, res) => {
 router.delete('/designations/:id', async (req, res) => {
   try {
     await query(`UPDATE hr_designations SET is_active=FALSE WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// LOCATIONS — employee_profiles.work_location was free text with no
+// managed list. Adds a real master + an optional location_id FK; the
+// Employee Form's location field becomes a picker over this list (writing
+// both location_id and work_location=name, so every existing report/query
+// reading the text column keeps working unchanged).
+// ═══════════════════════════════════════════════════════════
+router.get('/locations', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM hr_locations WHERE company_id=$1 AND is_active=TRUE ORDER BY name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/locations', async (req, res) => {
+  try {
+    const { name, address, city, state } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const { rows } = await query(
+      `INSERT INTO hr_locations (company_id, name, address, city, state) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.company_id, name, address || null, city || null, state || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/locations/:id', async (req, res) => {
+  try {
+    const { name, address, city, state, is_active } = req.body;
+    const { rows } = await query(
+      `UPDATE hr_locations SET name=$1, address=$2, city=$3, state=$4, is_active=$5
+       WHERE id=$6 AND company_id=$7 RETURNING *`,
+      [name, address || null, city || null, state || null, is_active ?? true, req.params.id, req.user.company_id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/locations/:id', async (req, res) => {
+  try {
+    await query(`UPDATE hr_locations SET is_active=FALSE WHERE id=$1 AND company_id=$2`,
       [req.params.id, req.user.company_id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

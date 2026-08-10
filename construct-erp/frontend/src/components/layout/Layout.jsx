@@ -279,6 +279,7 @@ const navGroups = [
     { to: '/hr-admin/business-units',    icon: Building,        label: 'Business Unit' },
     { to: '/hr-admin/divisions',         icon: Layers3,         label: 'Division' },
     { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
+    { to: '/hr-admin/locations',         icon: MapPin,          label: 'Locations' },
     { to: '/hr-admin/departments?panel=designations', icon: Award, label: 'Designation' },
     { to: '/hr-admin/grades',            icon: Award,           label: 'Grade' },
     { to: '/hr-admin/cost-centers',      icon: Landmark,        label: 'Cost Center' },
@@ -653,7 +654,7 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'Dashboard',             paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist'] },
     { label: 'Employee Management',   paths: ['/hr-admin/employees','/hr-admin/directory','/hr-admin/segments','/hr-admin/emp-filters','/hr-admin/emp-categories','/hr-admin/employee-transfer'] },
-    { label: 'Organization Structure',paths: ['/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/departments?panel=designations','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
+    { label: 'Organization Structure',paths: ['/hr-admin/business-units','/hr-admin/divisions','/hr-admin/departments','/hr-admin/departments?panel=designations','/hr-admin/locations','/hr-admin/grades','/hr-admin/cost-centers','/hr-admin/reporting-structure','/hr-admin/org-chart','/hr-admin/project-staff','/hr/workers'] },
     { label: 'Recruitment',           paths: ['/hr-admin/recruitment','/hr-admin/recruitment?tab=Candidates'] },
     { label: 'Onboarding',            paths: [
       '/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist',
