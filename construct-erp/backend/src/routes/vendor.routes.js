@@ -304,10 +304,11 @@ vendorRouter.get('/project-breakdown', async (req, res) => {
         COUNT(DISTINCT po.id)::int        AS doc_count,
         COALESCE(SUM(po.grand_total), 0)  AS total_value,
         COALESCE((
-          SELECT SUM(i.total_amount)
-          FROM invoices i
-          WHERE i.vendor_id = v.id AND i.project_id = p.id
-            AND i.payment_status = 'paid'
+          SELECT SUM(tb.total_amount)
+          FROM tqs_bills tb
+          JOIN purchase_orders po2 ON po2.id = tb.po_id
+          WHERE po2.vendor_id = v.id AND po2.project_id = p.id
+            AND tb.workflow_status = 'paid'
         ), 0)          AS paid_value
       FROM projects p
       JOIN purchase_orders po ON po.project_id = p.id
