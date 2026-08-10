@@ -89,6 +89,15 @@ const upload = multer({
     feedback TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
+  // hr_interviews existed in production under an older shape before this
+  // file's CREATE TABLE definition included applicant_id — IF NOT EXISTS
+  // doesn't retrofit columns onto an already-existing table, and safe()
+  // above silently swallows the resulting failure, so this went unnoticed
+  // until the Recruitment Dashboard's aggregate query hit it directly.
+  // Not NOT NULL here (unlike the CREATE TABLE) — ALTER ADD COLUMN NOT NULL
+  // with no DEFAULT fails outright on a non-empty table; application code
+  // always supplies it on insert regardless.
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS applicant_id UUID REFERENCES hr_applicants(id) ON DELETE CASCADE`);
 
   // ── Job Requisition — the approval workflow that precedes a job opening ──
   await safe(`CREATE TABLE IF NOT EXISTS hr_job_requisitions (
