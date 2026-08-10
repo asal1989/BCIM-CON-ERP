@@ -1949,12 +1949,10 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
       }
     }
 
-    // Profit per month = 10% of sum of base heads for that month
-    for (const month of Object.keys(monthly)) {
-      const baseSum = PROFIT_BASE_HEADS.reduce((s, h) => s + (monthly[month][h] || 0), 0);
-      if (baseSum > 0) monthly[month]['Profit'] = baseSum * PROFIT_PCT;
-    }
-
+    // Deliberately no "Profit" pseudo-cost-head here (unlike costhead-summary) —
+    // this endpoint feeds the Monthly Expenditure Analysis table/CSV/S-curve/
+    // cash-forecast views, which should show only real money spent per month,
+    // not a 10% markup estimate on top of it.
     const months = Object.keys(monthly).sort();
     const data = months.map(month => ({ month, breakdown: monthly[month] }));
     res.json({ data, months });
