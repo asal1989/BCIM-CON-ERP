@@ -9,7 +9,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, X, Pencil, Users, Briefcase, ClipboardList, UserCheck, Send,
   TrendingUp, CheckCircle2, Calendar, Star, ChevronRight, ThumbsUp, ThumbsDown,
-  FileText, UserPlus, Settings, Trash2, Mail, Printer,
+  FileText, UserPlus, Settings, Trash2, Mail, Printer, LayoutDashboard,
+  XCircle, ClipboardCheck, Hourglass,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -17,10 +18,11 @@ import toast from 'react-hot-toast';
 import { hrRecruitmentAPI } from '../../api/client';
 import { PageHeader } from '../../theme';
 import { FIELD_HL } from '../../constants/fieldStyles';
+import { KpiCard } from '../../components/hr/DashboardKit';
 
 const INP = `w-full h-9 rounded-lg px-3 text-xs font-medium outline-none transition-all border ${FIELD_HL}`;
 const TA  = `w-full rounded-lg px-3 py-2 text-xs outline-none transition-all border ${FIELD_HL} resize-none`;
-const TABS = ['Requisitions', 'Job Openings', 'Candidates', 'Joining Tracker', 'Talent Pool', 'Settings'];
+const TABS = ['Dashboard', 'Requisitions', 'Job Openings', 'Candidates', 'Joining Tracker', 'Talent Pool', 'Settings'];
 
 const REQ_STATUS_C = { pending_hr_review: 'amber', pending_management_approval: 'blue', approved: 'green', rejected: 'red', converted: 'slate' };
 const REQ_STATUS_LABEL = { pending_hr_review: 'Pending HR Review', pending_management_approval: 'Pending Management Approval', approved: 'Approved', rejected: 'Rejected', converted: 'Converted' };
@@ -84,6 +86,32 @@ function RequisitionForm({ onClose, onSaved }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════ Dashboard ═══════════════════════════ */
+function DashboardTab() {
+  const { data, isLoading } = useQuery({ queryKey: ['hr-recruitment-dashboard'], queryFn: () => hrRecruitmentAPI.dashboard().then(r => r.data?.data || {}) });
+  const cards = [
+    ['Open Positions', data?.open_positions, Briefcase, '#2563EB'],
+    ['Open Vacancies', data?.open_vacancies, ClipboardList, '#0EA5E9'],
+    ['Total Candidates', data?.total_candidates, Users, '#7C3AED'],
+    ['Applied (30 days)', data?.applied_last_30d, UserPlus, '#8B5CF6'],
+    ['Interviewing', data?.interviewing, Calendar, '#D97706'],
+    ['Upcoming Interviews', data?.upcoming_interviews, Hourglass, '#F59E0B'],
+    ['Offers Pending', data?.offers_pending, Send, '#0891B2'],
+    ['Offers Accepted', data?.offers_accepted, ClipboardCheck, '#059669'],
+    ['Joined', data?.joined, CheckCircle2, '#10B981'],
+    ['Rejected', data?.rejected, XCircle, '#DC2626'],
+    ['Pending Requisitions', data?.pending_requisitions, UserCheck, '#B91C1C'],
+  ];
+  if (isLoading) return <p className="text-center py-16 text-slate-400 text-sm">Loading…</p>;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-w-5xl">
+      {cards.map(([label, value, Icon, color], i) => (
+        <KpiCard key={label} label={label} value={value ?? 0} icon={Icon} color={color} bg={`${color}18`} delay={i * 0.03} />
+      ))}
     </div>
   );
 }
@@ -979,7 +1007,7 @@ function RecruitmentSettingsTab() {
 export default function RecruitmentPage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(searchParams.get('tab') || 'Requisitions');
+  const [tab, setTab] = useState(searchParams.get('tab') || 'Dashboard');
   const [showJobForm, setShowJobForm] = useState(false);
   const [editJob, setEditJob] = useState(null);
   const [showAppForm, setShowAppForm] = useState(false);
@@ -1007,6 +1035,7 @@ export default function RecruitmentPage() {
           <button key={t} onClick={() => setTab(t)}
             className={clsx('px-4 py-2 text-xs font-medium rounded-t-lg border-b-2 -mb-px flex items-center gap-1.5',
               tab === t ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500')}>
+            {t === 'Dashboard' && <LayoutDashboard size={13} />}
             {t === 'Requisitions' && <ClipboardList size={13} />}
             {t === 'Job Openings' && <Briefcase size={13} />}
             {t === 'Candidates' && <Users size={13} />}
@@ -1019,6 +1048,7 @@ export default function RecruitmentPage() {
       </div>
 
       <div className="flex-1 overflow-auto p-5">
+        {tab === 'Dashboard' && <DashboardTab />}
         {tab === 'Requisitions' && <RequisitionsTab />}
         {tab === 'Job Openings' && <JobOpeningsTab jobs={jobs} onEdit={(j) => { setEditJob(j); setShowJobForm(true); }} onViewCandidates={(jobId) => { setFilterJobId(jobId); setTab('Candidates'); }} />}
         {tab === 'Candidates' && (

@@ -678,6 +678,7 @@ export const hrRecruitmentAPI = {
   addInterview:   (id,d)   => api.post(`/hr-admin/recruitment/applicants/${id}/interviews`, d),
   updateInterview:(id,d)   => api.patch(`/hr-admin/recruitment/interviews/${id}`, d),
   pipeline:       ()       => api.get('/hr-admin/recruitment/pipeline'),
+  dashboard:      ()       => api.get('/hr-admin/recruitment/dashboard'),
 
   requisitions:       (p)      => api.get('/hr-admin/recruitment/requisitions', { params: p }),
   createRequisition:  (d)      => api.post('/hr-admin/recruitment/requisitions', d),

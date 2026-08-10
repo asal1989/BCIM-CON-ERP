@@ -268,6 +268,53 @@ function joiningProgress(t) {
 
 router.use(authenticate);
 
+// ── Dashboard — company-wide recruitment KPIs ───────────────────────────────
+router.get('/dashboard', authorize(...HR_ALL), async (req, res) => {
+  try {
+    const cid = req.user.company_id;
+    const jobsRes = await query(`
+      SELECT COUNT(*) FILTER (WHERE status='open') AS open_positions,
+             COALESCE(SUM(vacancies) FILTER (WHERE status='open'), 0) AS open_vacancies
+      FROM hr_job_postings WHERE company_id=$1
+    `, [cid]);
+    const appsRes = await query(`
+      SELECT
+        COUNT(*) AS total_candidates,
+        COUNT(*) FILTER (WHERE status IN ('interview_scheduled','interview_done')) AS interviewing,
+        COUNT(*) FILTER (WHERE status IN ('selected','offer_sent')) AS offers_pending,
+        COUNT(*) FILTER (WHERE status='offer_accepted') AS offers_accepted,
+        COUNT(*) FILTER (WHERE status='joined') AS joined,
+        COUNT(*) FILTER (WHERE status='rejected') AS rejected,
+        COUNT(*) FILTER (WHERE applied_on >= CURRENT_DATE - INTERVAL '30 days') AS applied_last_30d
+      FROM hr_applicants a JOIN hr_job_postings j ON j.id=a.job_id
+      WHERE j.company_id=$1
+    `, [cid]);
+    const reqRes = await query(`
+      SELECT COUNT(*) FILTER (WHERE status IN ('pending_hr_review','pending_management_approval')) AS pending_requisitions
+      FROM hr_job_requisitions WHERE company_id=$1
+    `, [cid]);
+    const interviewsRes = await query(`
+      SELECT COUNT(*) AS upcoming_interviews
+      FROM hr_interviews i JOIN hr_applicants a ON a.id=i.applicant_id JOIN hr_job_postings j ON j.id=a.job_id
+      WHERE j.company_id=$1 AND i.scheduled_on >= NOW() AND i.result IS NULL
+    `, [cid]);
+    const j = jobsRes.rows[0], a = appsRes.rows[0], r = reqRes.rows[0], iv = interviewsRes.rows[0];
+    res.json({ data: {
+      open_positions: Number(j.open_positions) || 0,
+      open_vacancies: Number(j.open_vacancies) || 0,
+      total_candidates: Number(a.total_candidates) || 0,
+      interviewing: Number(a.interviewing) || 0,
+      upcoming_interviews: Number(iv.upcoming_interviews) || 0,
+      offers_pending: Number(a.offers_pending) || 0,
+      offers_accepted: Number(a.offers_accepted) || 0,
+      joined: Number(a.joined) || 0,
+      rejected: Number(a.rejected) || 0,
+      applied_last_30d: Number(a.applied_last_30d) || 0,
+      pending_requisitions: Number(r.pending_requisitions) || 0,
+    }});
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Job Postings ──────────────────────────────────────────────────────────────
 router.get('/jobs', authorize(...HR_ALL), async (req, res) => {
   const { status, department } = req.query;
