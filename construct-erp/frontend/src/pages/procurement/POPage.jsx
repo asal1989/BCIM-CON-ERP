@@ -2609,7 +2609,7 @@ export default function POPage() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-400 ml-auto hidden sm:block">{filtered.length} of {poData.length}</span>
+        <span className="text-xs text-black ml-auto hidden sm:block">{filtered.length} of {poData.length}</span>
       </div>
 
       {/* Table */}
@@ -2631,7 +2631,7 @@ export default function POPage() {
                   { label: 'Status',         key: 'status' },
                   { label: '',               key: null },
                 ].map(h => (
-                  <th key={h.label || 'actions'} className="px-5 py-3.5 text-left text-xs font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  <th key={h.label || 'actions'} className="px-5 py-3.5 text-left text-xs font-medium text-black uppercase tracking-wider whitespace-nowrap">
                     {h.key ? (
                       <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
                         {h.label}
@@ -2652,18 +2652,18 @@ export default function POPage() {
                 <tr onClick={() => setSelectedPO(po)}
                   className="cursor-pointer hover:bg-slate-50 transition-colors group">
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    <span className="text-xs font-medium font-mono text-indigo-600 group-hover:underline">
+                    <span className="text-xs font-medium font-mono text-black group-hover:underline">
                       {po.po_ref_no || po.po_number || po.serial_no_formatted}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="text-sm font-medium text-slate-800 max-w-56 truncate">{(po.vendor_name || '').toUpperCase()}</div>
+                    <div className="text-sm font-medium text-black max-w-56 truncate">{(po.vendor_name || '').toUpperCase()}</div>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="text-xs text-slate-400 truncate max-w-56">{(po.project_name || '').toUpperCase()}</div>
+                    <div className="text-xs text-black truncate max-w-56">{(po.project_name || '').toUpperCase()}</div>
                   </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium text-slate-700">{fmt(po.po_date)}</td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-xs text-slate-400">{fmt(po.delivery_date)}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium text-black">{fmt(po.po_date)}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-xs text-black">{fmt(po.delivery_date)}</td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {po.items_total > 0 ? (
                       <div className="flex items-center gap-2">
@@ -2673,32 +2673,32 @@ export default function POPage() {
                             style={{ width: `${Math.round((po.items_received / po.items_total) * 100)}%` }}
                           />
                         </div>
-                        <span className="text-xs text-slate-500">{po.items_received}/{po.items_total}</span>
+                        <span className="text-xs text-black">{po.items_received}/{po.items_total}</span>
                       </div>
-                    ) : <span className="text-xs text-slate-300">—</span>}
+                    ) : <span className="text-xs text-black">—</span>}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    <div className="text-sm font-medium text-slate-800">{inr(po.grand_total)}</div>
-                    <div className="text-xs text-slate-400">{po.gst_inclusive ? 'Tax inclusive' : 'Basic + GST'}</div>
+                    <div className="text-sm font-medium text-black">{inr(po.grand_total)}</div>
+                    <div className="text-xs text-black">{po.gst_inclusive ? 'Tax inclusive' : 'Basic + GST'}</div>
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    <div className="text-sm font-medium text-blue-700">{inrCompact(po.billed_amount)}</div>
+                    <div className="text-sm font-medium text-black">{inrCompact(po.billed_amount)}</div>
                     {parseFloat(po.grand_total) > 0 && (
-                      <div className="text-xs text-slate-400">{((parseFloat(po.billed_amount || 0) / parseFloat(po.grand_total)) * 100).toFixed(0)}% of PO</div>
+                      <div className="text-xs text-black">{((parseFloat(po.billed_amount || 0) / parseFloat(po.grand_total)) * 100).toFixed(0)}% of PO</div>
                     )}
                     {isRecvUnbilled(po) && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                        <span className="text-[10px] font-medium text-amber-600">
+                        <span className="text-[10px] font-medium text-black">
                           {inrCompact((parseFloat(po.received_value) || 0) - (parseFloat(po.billed_amount) || 0))} recv'd unbilled
                         </span>
                       </div>
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    <div className="text-sm font-medium text-green-700">{inrCompact(po.paid_amount)}</div>
+                    <div className="text-sm font-medium text-black">{inrCompact(po.paid_amount)}</div>
                     {parseFloat(po.billed_amount) > 0 && (
-                      <div className="text-xs text-slate-400">{((parseFloat(po.paid_amount || 0) / parseFloat(po.billed_amount)) * 100).toFixed(0)}% of billed</div>
+                      <div className="text-xs text-black">{((parseFloat(po.paid_amount || 0) / parseFloat(po.billed_amount)) * 100).toFixed(0)}% of billed</div>
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
