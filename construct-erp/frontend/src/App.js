@@ -891,7 +891,7 @@ export default function App() {
                 {/* Procurement */}
                 <Route path="procurement/dashboard" element={<RequireModule module="Procurement"><ProcurementDashboardPage /></RequireModule>} />
                 <Route path="procurement/vendors" element={<RequireAnyModule modules={['Procurement', 'Bill Tracker']}><VendorList /></RequireAnyModule>} />
-                <Route path="procurement/vendor-mapping" element={<VendorProjectMappingPage />} />
+                <Route path="procurement/vendor-mapping" element={<RequireModule module="Procurement"><VendorProjectMappingPage /></RequireModule>} />
                 <Route path="procurement/live-rate-checker" element={<RequireModule module="Procurement"><LiveRateCheckerPage /></RequireModule>} />
                 <Route path="procurement/po-amendments" element={<RequireModule module="Procurement"><POAmendmentLogPage /></RequireModule>} />
                 <Route path="procurement/wo-amendments" element={<RequireModule module="Procurement"><WOAmendmentLogPage /></RequireModule>} />

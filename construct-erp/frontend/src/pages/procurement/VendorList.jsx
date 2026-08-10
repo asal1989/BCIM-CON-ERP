@@ -1,8 +1,7 @@
 // src/pages/procurement/VendorList.jsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import useAuthStore from '../../store/authStore';
 import {
   Users, Plus, X, Phone, Mail, Star, MapPin, CreditCard,
   Shield, Search, Building2, ChevronDown, ChevronUp,
@@ -14,32 +13,57 @@ import { clsx } from 'clsx';
 import DataToolbar from '../../components/common/DataToolbar';
 import TableActions from '../../components/common/TableActions';
 
+// The six canonical vendor types. Everything rendered, filtered and counted
+// resolves to one of these via normalizeType() below.
 const TYPES = {
   material_supplier:  { label: 'Material Supplier',  dot: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200' },
-  subcontractor:      { label: 'Subcontractor',       dot: 'bg-purple-500',  badge: 'bg-purple-50 text-purple-700 border-purple-200' },
-  'Sub-contractor':   { label: 'Sub-contractor',      dot: 'bg-purple-500',  badge: 'bg-purple-50 text-purple-700 border-purple-200' },
-  labour_contractor:  { label: 'Labour Contractor',   dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
-  'Labour Contractor':{ label: 'Labour Contractor',   dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
-  equipment_supplier: { label: 'Equipment Supplier',  dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  service_provider:   { label: 'Service Provider',    dot: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-900 border-slate-200' },
-  'Service Provider': { label: 'Service Provider',    dot: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-900 border-slate-200' },
-  Contractor:         { label: 'Contractor',          dot: 'bg-orange-500',  badge: 'bg-orange-50 text-orange-700 border-orange-200' },
-  Supplier:           { label: 'Supplier',            dot: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200' },
-  Consultant:         { label: 'Consultant',          dot: 'bg-teal-500',    badge: 'bg-teal-50 text-teal-700 border-teal-200' },
-  Other:              { label: 'Other',               dot: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-900 border-slate-200' },
+  subcontractor:      { label: 'Sub-contractor',     dot: 'bg-purple-500',  badge: 'bg-purple-50 text-purple-700 border-purple-200' },
+  labour_contractor:  { label: 'Labour Contractor',  dot: 'bg-amber-500',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+  equipment_supplier: { label: 'Equipment Supplier', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  service_provider:   { label: 'Service Provider',   dot: 'bg-teal-500',    badge: 'bg-teal-50 text-teal-700 border-teal-200' },
+  other:              { label: 'Other',              dot: 'bg-slate-400',   badge: 'bg-slate-100 text-slate-700 border-slate-200' },
 };
 
 const VENDOR_TYPE_OPTIONS = [
   { value: 'material_supplier',  label: 'Material Supplier' },
-  { value: 'subcontractor',      label: 'Subcontractor' },
+  { value: 'subcontractor',      label: 'Sub-contractor' },
   { value: 'labour_contractor',  label: 'Labour Contractor' },
   { value: 'equipment_supplier', label: 'Equipment Supplier' },
   { value: 'service_provider',   label: 'Service Provider' },
-  { value: 'Contractor',         label: 'Contractor' },
-  { value: 'Supplier',           label: 'Supplier' },
-  { value: 'Consultant',         label: 'Consultant' },
-  { value: 'Other',              label: 'Other' },
+  { value: 'other',              label: 'Other' },
 ];
+
+// vendor_type was historically free-form: the same six concepts exist in the
+// database under 14 different spellings ('material_supplier' vs 'Material
+// Supplier' vs 'material' vs 'supplier', 'subcontractor' vs 'Sub-contractor',
+// …). The old three-entry lookup silently missed most of them, so the KPI
+// tiles under-counted (Material showed 14 of 47, Equipment/Labour showed 0)
+// and unmatched types rendered with the wrong badge. Collapse case, spaces
+// and hyphens first, then map every known spelling onto a canonical key.
+const TYPE_ALIASES = {
+  material_supplier:  'material_supplier',
+  material:           'material_supplier',
+  supplier:           'material_supplier',
+  materials:          'material_supplier',
+  subcontractor:      'subcontractor',
+  sub_contractor:     'subcontractor',
+  contractor:         'subcontractor',
+  labour_contractor:  'labour_contractor',
+  labor_contractor:   'labour_contractor',
+  labour:             'labour_contractor',
+  equipment_supplier: 'equipment_supplier',
+  equipment_hire:     'equipment_supplier',
+  equipment:          'equipment_supplier',
+  service_provider:   'service_provider',
+  consultant:         'service_provider',
+  services:           'service_provider',
+  other:              'other',
+};
+
+const normalizeType = (t) => {
+  const key = String(t || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return TYPE_ALIASES[key] || 'other';
+};
 
 const STATES = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
@@ -81,7 +105,7 @@ const inputCls = 'w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded
 // ─── By-Project Tab ─────────────────────────────────────────────────────────
 
 function VendorTypeBadge({ type }) {
-  const vt = TYPES[type] || TYPES.Other;
+  const vt = TYPES[normalizeType(type)];
   return (
     <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border', vt.badge)}>
       {vt.label}
@@ -273,20 +297,20 @@ function ByProjectTab({ projects }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function VendorList() {
-  const { selectedProjectId } = useAuthStore();
   const [activeTab, setActiveTab]   = useState('list');
   const [showForm, setShowForm]     = useState(false);
   const [editVendor, setEditVendor] = useState(null);
   const [filterType, setFilterType] = useState('all');
-  const [filterProjectId, setFilterProjectId] = useState(selectedProjectId || '');
+  // The vendor master is deliberately company-wide by default. It used to
+  // inherit (and re-sync to) the navbar's selected project, which silently
+  // showed a project-mapped subset — e.g. 30 of 112 — while the page still
+  // called itself the shared master. The project dropdown below is now the
+  // only thing that narrows the list, and the header says so when it does.
+  const [filterProjectId, setFilterProjectId] = useState('');
   const [search, setSearch]         = useState('');
   const [expanded, setExpanded]     = useState(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const qc = useQueryClient();
-
-  useEffect(() => {
-    setFilterProjectId(selectedProjectId || '');
-  }, [selectedProjectId]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: { credit_days: 30 },
   });
@@ -306,7 +330,11 @@ export default function VendorList() {
   const openEdit   = v  => {
     setEditVendor(v);
     reset({
-      name: v.name, trade_name: v.trade_name, vendor_type: v.vendor_type,
+      // Normalize on open so a legacy value ('Material Supplier', 'Equipment
+      // Hire', …) preselects the right option instead of falling through to a
+      // blank select and being silently rewritten on save. Saving an edited
+      // vendor therefore also cleans its type, without a bulk DB migration.
+      name: v.name, trade_name: v.trade_name, vendor_type: normalizeType(v.vendor_type),
       contact_person: v.contact_person, phone: v.phone,
       mobile_number_1: v.mobile_number_1, mobile_number_2: v.mobile_number_2,
       email: v.email, website_url: v.website_url, credit_days: v.credit_days || 30,
@@ -359,18 +387,20 @@ export default function VendorList() {
     onError: e => toast.error(e?.response?.data?.error || 'Import failed'),
   });
 
-  const normalizeType = t => ({
-    'Sub-contractor':   'subcontractor',
-    'Labour Contractor':'labour_contractor',
-    'Service Provider': 'service_provider',
-  })[t] || t;
-
   const allVendors = data || [];
   const vendors = allVendors.filter(v => {
-    if (filterType !== 'all' && normalizeType(v.vendor_type) !== filterType) return false;
+    if (filterType !== 'all' && normalizeType(v.vendor_type) !== normalizeType(filterType)) return false;
     if (search && !`${v.name} ${v.vendor_code} ${v.city} ${v.contact_person}`.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  // One count per canonical type, so the tiles always add up to Total.
+  const typeCounts = allVendors.reduce((acc, v) => {
+    const k = normalizeType(v.vendor_type);
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const activeProject = projects.find(p => String(p.id) === String(filterProjectId));
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto min-h-screen bg-[#f4f6f9]">
@@ -382,7 +412,11 @@ export default function VendorList() {
             <Building2 className="w-3.5 h-3.5" /> Shared · Procurement &amp; Bill Tracker
           </div>
           <h1 className="text-2xl font-medium text-slate-900">Vendor Master</h1>
-          <p className="text-sm text-slate-900 font-medium mt-0.5">{allVendors.length} vendors · shared across Procurement &amp; Bill Tracker</p>
+          <p className="text-sm text-slate-900 font-medium mt-0.5">
+            {activeProject
+              ? <>Showing <span className="text-indigo-700">{allVendors.length}</span> vendors mapped to <span className="text-indigo-700">{activeProject.name || activeProject.project_name}</span> · <button onClick={() => setFilterProjectId('')} className="text-indigo-600 underline underline-offset-2 hover:text-indigo-800">show all vendors</button></>
+              : <>{allVendors.length} vendors · shared across Procurement &amp; Bill Tracker</>}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <DataToolbar
@@ -402,19 +436,29 @@ export default function VendorList() {
         </div>
       </div>
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      {/* KPI Strip — one tile per canonical type; the six always sum to Total.
+          Clicking a tile applies that type filter. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         {[
-          { label: 'Total',     val: allVendors.length,                                                  color: 'text-slate-900',   bg: 'bg-slate-100' },
-          { label: 'Material',  val: allVendors.filter(v => normalizeType(v.vendor_type)==='material_supplier').length,  color: 'text-blue-700',    bg: 'bg-blue-50' },
-          { label: 'Sub-Con',   val: allVendors.filter(v => normalizeType(v.vendor_type)==='subcontractor').length,       color: 'text-purple-700',  bg: 'bg-purple-50' },
-          { label: 'Labour',    val: allVendors.filter(v => normalizeType(v.vendor_type)==='labour_contractor').length,   color: 'text-amber-700',   bg: 'bg-amber-50' },
-          { label: 'Equipment', val: allVendors.filter(v => normalizeType(v.vendor_type)==='equipment_supplier').length,  color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { key: 'all',                label: 'Total',     val: allVendors.length,                     color: 'text-slate-900' },
+          { key: 'material_supplier',  label: 'Material',  val: typeCounts.material_supplier  || 0,    color: 'text-blue-700' },
+          { key: 'subcontractor',      label: 'Sub-Con',   val: typeCounts.subcontractor      || 0,    color: 'text-purple-700' },
+          { key: 'labour_contractor',  label: 'Labour',    val: typeCounts.labour_contractor  || 0,    color: 'text-amber-700' },
+          { key: 'equipment_supplier', label: 'Equipment', val: typeCounts.equipment_supplier || 0,    color: 'text-emerald-700' },
+          { key: 'service_provider',   label: 'Service',   val: typeCounts.service_provider   || 0,    color: 'text-teal-700' },
+          { key: 'other',              label: 'Other',     val: typeCounts.other              || 0,    color: 'text-slate-600' },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
+          <button
+            key={s.label}
+            onClick={() => setFilterType(s.key)}
+            className={clsx(
+              'bg-white border rounded-xl p-4 text-center shadow-sm transition-all',
+              filterType === s.key ? 'border-indigo-400 ring-1 ring-indigo-100' : 'border-slate-200 hover:border-indigo-300'
+            )}
+          >
             <div className={clsx('text-2xl font-medium font-mono', s.color)}>{s.val}</div>
             <div className="text-xs text-slate-900 font-medium mt-0.5">{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -507,7 +551,7 @@ export default function VendorList() {
 
               <div className="divide-y divide-slate-50">
                 {vendors.map(v => {
-                  const vt = TYPES[v.vendor_type] || TYPES.service_provider;
+                  const vt = TYPES[normalizeType(v.vendor_type)];
                   const isOpen = expanded === v.id;
 
                   return (

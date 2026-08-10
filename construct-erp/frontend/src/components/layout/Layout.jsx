@@ -76,16 +76,22 @@ const navGroups = [
     { to: '/procurement/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/procurement/material-request', icon: ClipboardList, label: 'Material Request (MRS)' },
     { to: '/procurement/mr-register',      icon: ClipboardList, label: 'MR Register' },
-    { to: '/procurement/vendors',          icon: Users,         label: 'Vendors' },
+    // ── Vendors ── kept as one consecutive block; these four were previously
+    // split across the menu with eight PO/WO items wedged between them, and
+    // Vendor–Project Mapping had no link at all despite the page existing.
+    { to: '/procurement/vendors',           icon: Users,         label: 'Vendor Master' },
+    { to: '/procurement/vendor-mapping',    icon: Link2,         label: 'Vendor–Project Mapping' },
+    { to: '/procurement/vendor-performance',icon: Star,          label: 'Vendor Performance' },
+    { to: '/procurement/vendor-payments',   icon: Wallet,        label: 'Vendor Payments' },
+    // ── Purchase Orders ──
     { to: '/procurement/po',               icon: ShoppingCart,  label: 'Purchase Orders' },
     { to: '/procurement/po-amendments',    icon: FileSignature, label: 'PO Amendments' },
     { to: '/procurement/po-register',      icon: ClipboardList, label: 'PO Register' },
     { to: '/procurement/boq-budget',      icon: BarChart3,     label: 'BOQ Budget Breakdown' },
+    // ── Work Orders ──
     { to: '/procurement/work-orders',      icon: Hammer,        label: 'Work Orders' },
     { to: '/procurement/wo-amendments',    icon: FileSignature, label: 'WO Amendments' },
     { to: '/procurement/wo-register',      icon: ClipboardList, label: 'WO Register' },
-    { to: '/procurement/vendor-performance',icon: Star,         label: 'Vendor Performance' },
-    { to: '/procurement/vendor-payments',  icon: Wallet,        label: 'Vendor Payments' },
     { to: '/procurement/advance-tracker',  icon: Wallet,        label: 'Advance Tracker' },
     { to: '/procurement/inventory',        icon: Package,       label: 'Inventory' },
     { to: '/procurement/documents',        icon: FolderSearch,  label: 'Documents' },
@@ -611,10 +617,9 @@ const NAV_SECTIONS = {
     { label: 'Dashboard',        paths: ['/procurement/dashboard'] },
     { label: 'Request',          paths: ['/procurement/material-request'] },
     { label: 'MR Register',      paths: ['/procurement/mr-register'] },
-    { label: 'Vendors & Rates',  paths: ['/procurement/vendors'] },
+    { label: 'Vendors',          paths: ['/procurement/vendors','/procurement/vendor-mapping','/procurement/vendor-performance','/procurement/vendor-payments'] },
     { label: 'Purchase Orders',  paths: ['/procurement/po','/procurement/po-register','/procurement/po-amendments'] },
     { label: 'Work Orders',      paths: ['/procurement/work-orders','/procurement/wo-register','/procurement/wo-amendments'] },
-    { label: 'Performance & Payment', paths: ['/procurement/vendor-performance','/procurement/vendor-payments'] },
     { label: 'Budget & Cost Control', paths: ['/procurement/budget-control'] },
     { label: 'Stock',            paths: ['/procurement/inventory'] },
     { label: 'Documents',        paths: ['/procurement/documents'] },
