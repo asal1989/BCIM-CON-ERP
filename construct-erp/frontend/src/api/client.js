@@ -2176,6 +2176,7 @@ export const hrOnboardingAPI = {
   probationChart: ()            => api.get('/hr-admin/onboarding/charts/probation-status'),
   report:         (key, params) => api.get(`/hr-admin/onboarding/reports/${key}`, { params }),
   welcomeChecklist:(params)     => api.get('/hr-admin/onboarding/welcome-checklist', { params }),
+  checklist:      (params)      => api.get('/hr-admin/onboarding/checklist', { params }),
 };
 
 export const hrDocVerificationAPI = {

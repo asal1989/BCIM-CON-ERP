@@ -548,6 +548,37 @@ router.get('/employees/:id/tracker', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// GET /checklist — per-employee checklist rows, filterable by stage_group
+// and/or item_key, including completed ones (unlike /tasks/:item_key/employees
+// which only shows pending). Returns lc.id so callers can PATCH
+// /hr-admin/employees/:userId/lifecycle/:itemId to mark items done. Powers
+// the Orientation Schedule, Probation Tracking, Confirmation Process and
+// Compliance Forms pages — all thin views over the same lifecycle table.
+// ═══════════════════════════════════════════════════════════
+router.get('/checklist', async (req, res) => {
+  try {
+    const { stage_group, item_key } = req.query;
+    const conds = ["lc.company_id=$1", "lc.stage='onboarding'", "COALESCE(ep.employment_status,'active')='active'"];
+    const params = [req.user.company_id];
+    if (stage_group) { params.push(stage_group.split(',')); conds.push(`lc.stage_group = ANY($${params.length}::text[])`); }
+    if (item_key)    { params.push(item_key.split(','));    conds.push(`lc.item_key = ANY($${params.length}::text[])`); }
+    params.push(SYSTEM_ACCOUNT_EMAILS);
+    const { rows } = await query(`
+      SELECT lc.id, lc.item_key, lc.title, lc.stage_group, lc.owner_department,
+             lc.status, lc.due_date, lc.remarks, lc.completed_at,
+             u.id AS user_id, u.name, u.employee_code, u.email, dep.name AS department_name
+      FROM employee_lifecycle_checklist lc
+      JOIN users u ON u.id = lc.user_id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      WHERE ${conds.join(' AND ')} AND u.email != ALL($${params.length}::text[])
+      ORDER BY lc.due_date ASC NULLS LAST, u.name
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // GET /tasks — pending items grouped by item_key
 // ═══════════════════════════════════════════════════════════
 router.get('/tasks', async (req, res) => {

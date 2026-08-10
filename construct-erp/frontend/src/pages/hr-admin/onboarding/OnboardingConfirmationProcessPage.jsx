@@ -1,5 +1,4 @@
-import React from 'react';
-import OnboardingPlaceholderPage from './OnboardingPlaceholderPage';
-export default function OnboardingConfirmationProcessPage() {
-  return <OnboardingPlaceholderPage title="Confirmation Process" description="Manage end-of-probation confirmation reviews and sign-off. See also HR Confirmation Report." />;
-}
+// Confirmation Process (Onboarding menu) — same page as Probation Tracking
+// and the HR Reports "Employee Confirmation Report"; see ProbationTrackingPage.jsx
+// for why this re-exports rather than duplicates.
+export { default } from '../HRConfirmationReportPage';
