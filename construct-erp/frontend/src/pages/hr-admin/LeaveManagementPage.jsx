@@ -5,9 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Calendar, Check, X, Plus, Users, Clock,
   CheckCircle, XCircle, AlertCircle, RefreshCw, Edit2, Trash2,
-  SlidersHorizontal,
+  SlidersHorizontal, IndianRupee, Banknote,
 } from 'lucide-react';
-import { hrLeaveAPI, hrMastersAPI, hrEmployeesAPI } from '../../api/client';
+import { hrLeaveAPI, hrLeaveExtAPI, hrMastersAPI, hrEmployeesAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -809,6 +809,217 @@ function LeaveCalendarTab() {
   );
 }
 
+// ── Encashment Tab ────────────────────────────────────────────────────────────
+const ENCASH_STATUS_CFG = {
+  pending:  { label: 'Pending',  bg: 'bg-amber-50',  text: 'text-amber-700',  icon: Clock       },
+  approved: { label: 'Approved', bg: 'bg-blue-50',   text: 'text-blue-700',   icon: CheckCircle },
+  paid:     { label: 'Paid',     bg: 'bg-green-50',  text: 'text-green-700',  icon: Banknote    },
+  rejected: { label: 'Rejected', bg: 'bg-red-50',    text: 'text-red-700',    icon: XCircle     },
+};
+
+function NewEncashmentModal({ onClose, onSuccess }) {
+  const year = new Date().getFullYear();
+  const [form, setForm] = useState({ user_id: '', leave_type_id: '', year, days_encashed: '', amount: '', basis: 'basic', remarks: '' });
+  const { data: empData } = useQuery({ queryKey: ['hr-employees-all'], queryFn: () => hrEmployeesAPI.list({ employment_status: 'active' }).then(r => r.data) });
+  const { data: ltData }  = useQuery({ queryKey: ['hr-leave-types'],   queryFn: () => hrMastersAPI.listLeaveTypes().then(r => r.data) });
+
+  const createMut = useMutation({
+    mutationFn: (d) => hrLeaveExtAPI.createEncash(d),
+    onSuccess: () => { toast.success('Encashment recorded'); onSuccess(); },
+    onError: e => toast.error(e.response?.data?.error || 'Error creating encashment'),
+  });
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-black text-gray-900 mb-4">New Leave Encashment</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className={label}>Employee *</label>
+            <select className={inp} value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))}>
+              <option value="">Select employee…</option>
+              {(empData?.data || []).map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_code || '—'})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Leave Type</label>
+            <select className={inp} value={form.leave_type_id} onChange={e => setForm(f => ({ ...f, leave_type_id: e.target.value }))}>
+              <option value="">—</option>
+              {(ltData?.data || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Year</label>
+            <input type="number" className={inp} value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} />
+          </div>
+          <div>
+            <label className={label}>Days Encashed *</label>
+            <input type="number" step="0.5" className={inp} value={form.days_encashed} onChange={e => setForm(f => ({ ...f, days_encashed: e.target.value }))} />
+          </div>
+          <div>
+            <label className={label}>Amount (₹)</label>
+            <input type="number" className={inp} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div>
+            <label className={label}>Basis</label>
+            <select className={inp} value={form.basis} onChange={e => setForm(f => ({ ...f, basis: e.target.value }))}>
+              <option value="basic">Basic</option>
+              <option value="gross">Gross</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className={label}>Remarks</label>
+            <input className={inp} value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+          <button
+            disabled={!form.user_id || !form.days_encashed || createMut.isPending}
+            onClick={() => createMut.mutate(form)}
+            className="px-5 py-2.5 rounded-xl text-sm font-black text-white disabled:opacity-40"
+            style={{ background: B.blue }}>
+            {createMut.isPending ? 'Saving…' : 'Record Encashment'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function EncashmentTab() {
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [payTarget, setPayTarget] = useState(null);
+  const [paidOn, setPaidOn] = useState(new Date().toISOString().split('T')[0]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['hr-leave-encashment', statusFilter],
+    queryFn: () => hrLeaveExtAPI.encashment({ status: statusFilter || undefined }).then(r => r.data),
+  });
+  const rows = data?.data || [];
+  const refresh = () => qc.invalidateQueries({ queryKey: ['hr-leave-encashment'] });
+
+  const approveMut = useMutation({
+    mutationFn: (id) => hrLeaveExtAPI.approveEncash(id),
+    onSuccess: () => { toast.success('Approved'); refresh(); },
+    onError: e => toast.error(e.response?.data?.error || 'Error approving'),
+  });
+  const payMut = useMutation({
+    mutationFn: ({ id, paid_on }) => hrLeaveExtAPI.payEncash(id, { paid_on }),
+    onSuccess: () => { toast.success('Marked as paid'); setPayTarget(null); refresh(); },
+    onError: e => toast.error(e.response?.data?.error || 'Error recording payment'),
+  });
+
+  const totalPending = rows.filter(r => r.status === 'pending').length;
+  const totalPaidAmount = rows.filter(r => r.status === 'paid').reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5">
+            <p className="text-[11px] font-bold text-gray-400 uppercase">Pending Approval</p>
+            <p className="text-lg font-black text-amber-600">{totalPending}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5">
+            <p className="text-[11px] font-bold text-gray-400 uppercase">Total Paid (all time)</p>
+            <p className="text-lg font-black text-green-600">₹{totalPaidAmount.toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+        <button onClick={() => setShowNew(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black text-white"
+          style={{ background: B.blue }}>
+          <Plus className="w-4 h-4" /> New Encashment
+        </button>
+      </div>
+
+      <div className="flex gap-2">
+        {['', 'pending', 'approved', 'paid', 'rejected'].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-500'}`}>
+            {s || 'All'}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              {['Employee', 'Leave Type', 'Year', 'Days', 'Amount', 'Basis', 'Status', 'Paid On', ''].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={9} className="text-center py-10 text-gray-400">Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={9} className="text-center py-10 text-gray-400">No encashment records</td></tr>
+            ) : rows.map(r => {
+              const cfg = ENCASH_STATUS_CFG[r.status] || ENCASH_STATUS_CFG.pending;
+              return (
+                <tr key={r.id} className="border-b border-gray-50">
+                  <td className="px-4 py-3 font-semibold text-gray-800">{r.full_name}</td>
+                  <td className="px-4 py-3 text-gray-600">{r.leave_type_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{r.year}</td>
+                  <td className="px-4 py-3 text-gray-600">{r.days_encashed}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">₹{Number(r.amount || 0).toLocaleString('en-IN')}</td>
+                  <td className="px-4 py-3 text-gray-600 capitalize">{r.basis}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${cfg.bg} ${cfg.text}`}>
+                      <cfg.icon className="w-3 h-3" /> {cfg.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{r.paid_on ? new Date(r.paid_on).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.status === 'pending' && (
+                      <button onClick={() => approveMut.mutate(r.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100">Approve</button>
+                    )}
+                    {r.status === 'approved' && (
+                      <button onClick={() => setPayTarget(r)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-50 text-green-700 hover:bg-green-100">Mark Paid</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <AnimatePresence>
+        {showNew && <NewEncashmentModal onClose={() => setShowNew(false)} onSuccess={() => { setShowNew(false); refresh(); }} />}
+        {payTarget && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setPayTarget(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-black text-gray-900 mb-1">Mark as Paid</h3>
+              <p className="text-sm text-gray-500 mb-4">{payTarget.full_name} — ₹{Number(payTarget.amount || 0).toLocaleString('en-IN')}</p>
+              <label className={label}>Payment Date</label>
+              <input type="date" className={inp} value={paidOn} onChange={e => setPaidOn(e.target.value)} />
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => setPayTarget(null)} className="px-4 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+                <button
+                  disabled={payMut.isPending}
+                  onClick={() => payMut.mutate({ id: payTarget.id, paid_on: paidOn })}
+                  className="px-5 py-2.5 rounded-xl text-sm font-black text-white disabled:opacity-40"
+                  style={{ background: '#059669' }}>
+                  {payMut.isPending ? 'Saving…' : 'Confirm Payment'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LeaveManagementPage() {
   const [activeTab, setActiveTab] = useState('Requests');
@@ -817,6 +1028,7 @@ export default function LeaveManagementPage() {
     { key: 'Balances',    label: 'Balances',    icon: RefreshCw },
     { key: 'Leave Types', label: 'Leave Types', icon: Users     },
     { key: 'Calendar',    label: 'Calendar',    icon: Calendar  },
+    { key: 'Encashment',  label: 'Encashment',  icon: IndianRupee },
   ];
 
   return (
@@ -859,6 +1071,7 @@ export default function LeaveManagementPage() {
           {activeTab === 'Balances'    && <BalancesTab />}
           {activeTab === 'Leave Types' && <LeaveTypesTab />}
           {activeTab === 'Calendar'    && <LeaveCalendarTab />}
+          {activeTab === 'Encashment'  && <EncashmentTab />}
         </motion.div>
       </AnimatePresence>
     </div>
