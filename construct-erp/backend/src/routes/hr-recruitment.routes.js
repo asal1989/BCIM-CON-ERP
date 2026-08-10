@@ -280,12 +280,12 @@ router.get('/dashboard', authorize(...HR_ALL), async (req, res) => {
     const appsRes = await query(`
       SELECT
         COUNT(*) AS total_candidates,
-        COUNT(*) FILTER (WHERE status IN ('interview_scheduled','interview_done')) AS interviewing,
-        COUNT(*) FILTER (WHERE status IN ('selected','offer_sent')) AS offers_pending,
-        COUNT(*) FILTER (WHERE status='offer_accepted') AS offers_accepted,
-        COUNT(*) FILTER (WHERE status='joined') AS joined,
-        COUNT(*) FILTER (WHERE status='rejected') AS rejected,
-        COUNT(*) FILTER (WHERE applied_on >= CURRENT_DATE - INTERVAL '30 days') AS applied_last_30d
+        COUNT(*) FILTER (WHERE a.status IN ('interview_scheduled','interview_done')) AS interviewing,
+        COUNT(*) FILTER (WHERE a.status IN ('selected','offer_sent')) AS offers_pending,
+        COUNT(*) FILTER (WHERE a.status='offer_accepted') AS offers_accepted,
+        COUNT(*) FILTER (WHERE a.status='joined') AS joined,
+        COUNT(*) FILTER (WHERE a.status='rejected') AS rejected,
+        COUNT(*) FILTER (WHERE a.applied_on >= CURRENT_DATE - INTERVAL '30 days') AS applied_last_30d
       FROM hr_applicants a JOIN hr_job_postings j ON j.id=a.job_id
       WHERE j.company_id=$1
     `, [cid]);
