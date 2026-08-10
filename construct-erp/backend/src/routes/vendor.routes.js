@@ -307,7 +307,7 @@ vendorRouter.get('/project-breakdown', async (req, res) => {
           SELECT SUM(i.total_amount)
           FROM invoices i
           WHERE i.vendor_id = v.id AND i.project_id = p.id
-            AND i.workflow_status = 'paid'
+            AND i.payment_status = 'paid'
         ), 0)          AS paid_value
       FROM projects p
       JOIN purchase_orders po ON po.project_id = p.id
