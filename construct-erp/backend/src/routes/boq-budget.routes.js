@@ -1871,6 +1871,25 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
       WHERE tb.project_id=$1 AND tb.is_deleted = FALSE AND li.cost_head IS NOT NULL
       GROUP BY 1, 2`, [project_id]);
 
+    // Same PO-item cost_head fallback costhead-summary uses for bill lines that
+    // were never tagged with a cost head themselves — without this, any such
+    // line is silently dropped from the monthly view entirely (it still counts
+    // toward the "Total Spent" KPI via costhead-summary, so the two disagreed).
+    const poFallbackM = await query(`
+      SELECT TO_CHAR(COALESCE(tb.inv_date, tb.created_at), 'YYYY-MM') AS month,
+             pi.cost_head, SUM(li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0)) AS actual
+      FROM po_items pi
+      JOIN purchase_orders po ON po.id = pi.po_id
+      JOIN tqs_bill_line_items li ON li.po_item_id = pi.id
+      JOIN tqs_bills tb ON tb.id = li.bill_id
+      WHERE po.project_id = $1
+        AND po.status NOT IN ('rejected', 'cancelled')
+        AND pi.cost_head IS NOT NULL
+        AND li.cost_head IS NULL
+        AND tb.is_deleted = FALSE
+        AND tb.workflow_status NOT IN ('rejected')
+      GROUP BY 1, 2`, [project_id]);
+
     const advM = await query(`
       SELECT TO_CHAR(COALESCE(advance_date, created_at), 'YYYY-MM') AS month,
              'Sub Con' AS cost_head, SUM(amount) AS actual
@@ -1922,7 +1941,7 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
 
     // Merge all sources into { [month]: { [cost_head]: amount } }
     const monthly = {};
-    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows, subM.rows]) {
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, poFallbackM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows, subM.rows]) {
       for (const r of rows) {
         if (!r.month || !r.cost_head) continue;
         if (!monthly[r.month]) monthly[r.month] = {};
