@@ -89,15 +89,27 @@ const upload = multer({
     feedback TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
-  // hr_interviews existed in production under an older shape before this
-  // file's CREATE TABLE definition included applicant_id — IF NOT EXISTS
-  // doesn't retrofit columns onto an already-existing table, and safe()
-  // above silently swallows the resulting failure, so this went unnoticed
-  // until the Recruitment Dashboard's aggregate query hit it directly.
-  // Not NOT NULL here (unlike the CREATE TABLE) — ALTER ADD COLUMN NOT NULL
-  // with no DEFAULT fails outright on a non-empty table; application code
-  // always supplies it on insert regardless.
+  // hr_interviews existed in production under a much older/different shape
+  // than this file's CREATE TABLE definition — IF NOT EXISTS doesn't
+  // retrofit columns onto an already-existing table, and safe() above
+  // silently swallowed the resulting failures, so this went unnoticed until
+  // the Recruitment Dashboard's aggregate query hit it directly. Discovered
+  // applicant_id missing first, fixed it, then scheduled_on also turned out
+  // missing — so instead of chasing columns one error at a time, backfill
+  // every column from the CREATE TABLE above via ALTER. None are NOT NULL
+  // here (unlike some in the CREATE TABLE) — ALTER ADD COLUMN NOT NULL with
+  // no DEFAULT fails outright on a non-empty table; application code always
+  // supplies these on insert regardless.
   await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS applicant_id UUID REFERENCES hr_applicants(id) ON DELETE CASCADE`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS round INT DEFAULT 1`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS interview_type VARCHAR(30) DEFAULT 'face_to_face'`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS interviewer_id UUID REFERENCES users(id)`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS interviewer_name VARCHAR(200)`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS scheduled_on TIMESTAMPTZ`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS venue_or_link TEXT`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS result VARCHAR(20)`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS rating INT`);
+  await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS feedback TEXT`);
 
   // ── Job Requisition — the approval workflow that precedes a job opening ──
   await safe(`CREATE TABLE IF NOT EXISTS hr_job_requisitions (
