@@ -70,7 +70,7 @@ function JEDetail({ je, onClose, onEdit }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-2">
             <div>
-              <p className="text-sm font-semibold text-slate-800">{je.entry_no}</p>
+              <p className="text-sm font-semibold text-black">{je.entry_no}</p>
               <p className="text-xs text-slate-400">{dayjs(je.entry_date).format('DD MMM YYYY')} · {je.narration || '—'}</p>
             </div>
             <SourceBadge source={je.source || 'manual'} />
@@ -194,7 +194,7 @@ function JEForm({ onClose, accounts, entry }) {
             <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center">
               <ScrollText className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-sm font-semibold text-slate-800">{isEdit ? `Edit Entry · ${entry.entry_no}` : 'New Journal Entry'}</p>
+            <p className="text-sm font-semibold text-black">{isEdit ? `Edit Entry · ${entry.entry_no}` : 'New Journal Entry'}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
@@ -641,7 +641,7 @@ function RecurringTab({ accounts }) {
               {templates.map(t => (
                 <tr key={t.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800">{t.template_name}</p>
+                    <p className="font-medium text-black">{t.template_name}</p>
                     {t.narration && <p className="text-xs text-slate-400">{t.narration}</p>}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{FREQ_LABELS[t.frequency] || t.frequency}</td>
@@ -691,7 +691,7 @@ function RecurringTab({ accounts }) {
         <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4 overflow-auto">
           <div className="bg-white w-full max-w-3xl rounded-md border border-slate-200 shadow-xl flex flex-col max-h-[94vh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-              <p className="text-sm font-semibold text-slate-800">New Recurring JV Template</p>
+              <p className="text-sm font-semibold text-black">New Recurring JV Template</p>
               <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -799,7 +799,7 @@ function RecurringTab({ accounts }) {
         <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-md border border-slate-200 shadow-xl p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-800">Run: {selected.template_name}</p>
+              <p className="text-sm font-semibold text-black">Run: {selected.template_name}</p>
               <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
             </div>
             <div>
@@ -925,7 +925,7 @@ export default function JournalEntryPage() {
             <ScrollText className="w-4 h-4 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">Journal Vouchers</h1>
+            <h1 className="text-xl font-semibold text-black">Journal Vouchers</h1>
             <p className="text-xs text-slate-400">Manual entries · Auto-posting · Recurring templates</p>
           </div>
           {dueCount > 0 && (

@@ -234,7 +234,7 @@ function ChapterBudgetCell({ value, onSave, saving }) {
 
   return (
     <div className="flex items-center justify-end gap-2 px-3 py-1.5">
-      <span className={clsx('text-sm font-semibold', value > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
+      <span className={clsx('text-sm font-semibold', value > 0 ? 'text-black' : 'text-slate-300 italic text-xs')}>
         {value > 0 ? `₹${Math.round(value).toLocaleString('en-IN')}` : 'Not set'}
       </span>
       <button onClick={open} disabled={saving}
@@ -414,7 +414,7 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, actualS
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm font-bold text-slate-800">RA Bills — Planned vs Actual</p>
+              <p className="text-sm font-bold text-black">RA Bills — Planned vs Actual</p>
               <p className="text-xs text-slate-400">Bars: billed per RA period · Line: cumulative progress against BOQ value</p>
             </div>
             <div className="flex items-center gap-4 text-xs">
@@ -722,7 +722,7 @@ function CostHeadDrilldownInline({ projectId, costHead, boqItemId, chapter, unli
                     {r.source}
                   </span>
                 </td>
-                <td className="px-4 py-1.5 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+                <td className="px-4 py-1.5 text-right font-semibold text-black font-mono">{fmt(r.amount)}</td>
               </tr>
             ))}
           </tbody>
@@ -813,7 +813,7 @@ function UnlinkedLineTagger({ projectId, costHead, chapterNames }) {
                 </td>
                 <td className="px-4 py-1.5 font-mono text-indigo-700 text-[11px]">{r.reference || '—'}</td>
                 <td className="px-4 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
-                <td className="px-4 py-1.5 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+                <td className="px-4 py-1.5 text-right font-semibold text-black font-mono">{fmt(r.amount)}</td>
                 <td className="px-4 py-1.5">
                   <select
                     className="w-full text-[11px] border border-slate-200 rounded-md px-1.5 py-1 bg-white"
@@ -1116,7 +1116,7 @@ function CostHeadDrilldown({ projectId, costHead }) {
                       {r.source}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-black font-mono">{fmt(r.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1494,17 +1494,17 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
                 {forecastData.rows.map((r, i) => (
                   <tr key={r.head} className={clsx('border-b border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
                     <td className="px-4 py-2 font-medium text-slate-700">{r.head}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-slate-800">{fmtAmt(r.trailing_avg)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-black">{fmtAmt(r.trailing_avg)}</td>
                     {r.projected.map((v, j) => (
                       <td key={j} className="px-4 py-2 text-right text-indigo-600 font-medium">{fmtAmt(v)}</td>
                     ))}
-                    <td className="px-4 py-2 text-right font-bold text-slate-800">{fmtAmt(r.trailing_avg * 3)}</td>
+                    <td className="px-4 py-2 text-right font-bold text-black">{fmtAmt(r.trailing_avg * 3)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
-                  <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
+                  <td className="px-4 py-2.5 text-sm font-bold text-black">Total</td>
                   <td className="px-4 py-2.5 text-right text-sm text-emerald-700">{fmtAmt(forecastData.totalAvg)}</td>
                   {[0, 1, 2].map(j => (
                     <td key={j} className="px-4 py-2.5 text-right text-sm text-indigo-700 font-bold">{fmtAmt(forecastData.totalAvg)}</td>
@@ -1549,12 +1549,12 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
                 {months.map(m => {
                   const amt = byMonthBreakdown[m]?.[head] || 0;
                   return (
-                    <td key={m} className={clsx('px-3 py-2 text-right tabular-nums', amt > 0 ? 'text-slate-800 font-semibold' : 'text-slate-300')}>
+                    <td key={m} className={clsx('px-3 py-2 text-right tabular-nums', amt > 0 ? 'text-black font-semibold' : 'text-slate-300')}>
                       {fmtAmt(amt)}
                     </td>
                   );
                 })}
-                <td className="px-4 py-2 text-right font-bold text-slate-800 bg-slate-50 tabular-nums">
+                <td className="px-4 py-2 text-right font-bold text-black bg-slate-50 tabular-nums">
                   {fmtAmt(headTotals[head] || 0)}
                 </td>
               </tr>
@@ -1562,7 +1562,7 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
           </tbody>
           <tfoot>
             <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
-              <td className="px-4 py-2.5 text-sm font-bold text-slate-800 sticky left-0 bg-[#E4EFDC]">Monthly Total</td>
+              <td className="px-4 py-2.5 text-sm font-bold text-black sticky left-0 bg-[#E4EFDC]">Monthly Total</td>
               {months.map(m => (
                 <td key={m} className="px-3 py-2.5 text-right text-sm text-emerald-700 tabular-nums">
                   {fmtAmt(monthTotals[m] || 0)}
@@ -1609,7 +1609,7 @@ const CTC_AUTO_NOTES = {
 function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note, danger }) {
   return (
     <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50', danger && 'bg-rose-50/60')}>
-      <td className={clsx('px-4 py-2 text-right', danger ? 'font-bold text-rose-700' : 'text-slate-600', bold && !danger && 'font-bold text-slate-800')}>
+      <td className={clsx('px-4 py-2 text-right', danger ? 'font-bold text-rose-700' : 'text-slate-600', bold && !danger && 'font-bold text-black')}>
         <span className="inline-flex items-center gap-1">
           {label}
           {note && (
@@ -1870,7 +1870,7 @@ function ClientKPI({ label, value, sub, icon: Icon, color }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-medium text-slate-500 leading-tight">{label}</div>
-        <div className="text-[15px] font-bold text-slate-800 mt-0.5 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
+        <div className="text-[15px] font-bold text-black mt-0.5 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
           {n > 0 ? inrCompact(n) : '—'}
         </div>
         {sub ? <div className="text-[9.5px] text-slate-400 mt-0.5 truncate">{sub}</div> : null}
@@ -2367,7 +2367,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                   <td className="px-2 py-3.5">
                     {r.derived ? (
                       <div className="flex items-center justify-end gap-2 px-2">
-                        <span className="text-sm font-medium text-slate-800">
+                        <span className="text-sm font-medium text-black">
                           {r.budget !== 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : '—'}
                         </span>
                         {r.cost_head === 'Profit' ? (
@@ -2390,7 +2390,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-2 px-2">
-                        <span className={clsx('text-sm font-medium', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
+                        <span className={clsx('text-sm font-medium', r.budget > 0 ? 'text-black' : 'text-slate-300 italic text-xs')}>
                           {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
                         </span>
                         <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
@@ -2570,7 +2570,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
         <tfoot>
           <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
             <td className="px-4 py-2.5" />
-            <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
+            <td className="px-4 py-2.5 text-sm font-bold text-black">Total</td>
             <td className="px-4 py-2.5 text-right text-sm">₹{Math.round(totalBudget).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-sm text-emerald-700">₹{Math.round(totalReceived).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-sm text-indigo-700">₹{Math.round(totalPaid).toLocaleString('en-IN')}</td>
@@ -2728,7 +2728,7 @@ function SubitemSplitModal({ projectId, costHead, onClose }) {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="font-bold text-slate-800">
+                <tr className="font-bold text-black">
                   <td className="pt-3">Total</td>
                   <td className="pt-3 text-right text-emerald-700">₹{Math.round(totalReceived).toLocaleString('en-IN')}</td>
                   <td className="pt-3 text-right text-indigo-700">₹{Math.round(totalPaid).toLocaleString('en-IN')}</td>
@@ -3277,8 +3277,8 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                         className="w-full grid grid-cols-[auto_40px_1fr_repeat(5,minmax(0,1fr))_90px_110px] gap-2 items-center px-4 py-3 text-xs">
                         <span className="w-4" />
                         <span className="font-bold text-slate-500">{ci + 1}</span>
-                        <span className="font-semibold text-slate-800">{ch.name}</span>
-                        <span className="text-right font-semibold text-slate-800">{inr(chBoq)}</span>
+                        <span className="font-semibold text-black">{ch.name}</span>
+                        <span className="text-right font-semibold text-black">{inr(chBoq)}</span>
                         <span className={clsx('text-right font-semibold', chOver ? 'text-rose-600' : chAllocated ? 'text-indigo-700' : 'text-slate-300')}>
                           {chBudgeted > 0 ? inr(chBudgeted) : '—'}
                         </span>

@@ -207,7 +207,7 @@ export default function ComparativeStatementPage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-sm font-medium text-slate-800">Comparative Rate Approval</h1>
+            <h1 className="text-sm font-medium text-black">Comparative Rate Approval</h1>
             <p className="text-xs text-slate-400">
               {indent.serial_no_formatted || indent.mrs_number}
               {vendors.length > 0 && <span className="ml-2 text-indigo-500 font-semibold">{vendors.length} vendor{vendors.length !== 1 ? 's' : ''} quoted</span>}

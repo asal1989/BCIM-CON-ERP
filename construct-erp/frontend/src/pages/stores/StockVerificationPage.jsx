@@ -249,7 +249,7 @@ function ItemsForm({ verificationId, projectId, onDone }) {
               const physical = getPhysical(row);
               return (
                 <tr key={row.inventory_id} className="hover:bg-slate-50/60">
-                  <td className="px-3 py-2 font-medium text-slate-800">{row.material_name}</td>
+                  <td className="px-3 py-2 font-medium text-black">{row.material_name}</td>
                   <td className="px-3 py-2 text-center text-slate-500">{row.unit}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">{num(row.book_stock)}</td>
                   <td className="px-3 py-2">
@@ -352,13 +352,13 @@ export default function StockVerificationPage() {
         <div className="flex items-center gap-3 px-5 py-3 border-b">
           <button
             onClick={() => { setView('list'); setActiveId(null); }}
-            className="text-[12px] text-slate-500 hover:text-slate-800 flex items-center gap-1"
+            className="text-[12px] text-slate-500 hover:text-black flex items-center gap-1"
           >
             <X size={13} /> Close
           </button>
           <div className="h-4 w-px bg-slate-200" />
           <ClipboardList size={15} className="text-teal-600" />
-          <span className="text-[13px] font-semibold text-slate-800">
+          <span className="text-[13px] font-semibold text-black">
             Stock Verification — {sv?.project_name} &middot; {sv?.verification_date ? dayjs(sv.verification_date).format('DD-MM-YYYY') : ''}
           </span>
           <span className={clsx(
@@ -385,7 +385,7 @@ export default function StockVerificationPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <CheckCircle2 size={20} className="text-teal-600" />
-          <h1 className="text-[17px] font-bold text-slate-800">Stock Verification</h1>
+          <h1 className="text-[17px] font-bold text-black">Stock Verification</h1>
         </div>
         <button
           onClick={() => setView('new')}
@@ -438,7 +438,7 @@ export default function StockVerificationPage() {
             <tbody className="divide-y divide-slate-50">
               {verifications.map(sv => (
                 <tr key={sv.id} className="hover:bg-slate-50/60">
-                  <td className="px-4 py-3 font-medium text-slate-800">
+                  <td className="px-4 py-3 font-medium text-black">
                     {dayjs(sv.verification_date).format('DD-MM-YYYY')}
                   </td>
                   <td className="px-4 py-3 text-slate-700">{sv.project_name}</td>
@@ -488,7 +488,7 @@ export default function StockVerificationPage() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-80">
             <div className="flex items-center gap-2.5 mb-3">
               <AlertTriangle size={18} className="text-red-500" />
-              <span className="font-semibold text-slate-800">Delete verification?</span>
+              <span className="font-semibold text-black">Delete verification?</span>
             </div>
             <p className="text-[12px] text-slate-500 mb-4">This will permanently delete the verification and all recorded counts.</p>
             <div className="flex gap-2 justify-end">

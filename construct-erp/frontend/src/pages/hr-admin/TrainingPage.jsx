@@ -163,7 +163,7 @@ export default function TrainingPage() {
                     <BookOpen size={18} className="text-purple-600"/>
                   </div>
                   <div>
-                    <div className="font-semibold text-sm text-slate-800">{p.title}</div>
+                    <div className="font-semibold text-sm text-black">{p.title}</div>
                     <div className="text-[11px] text-slate-500">{dayjs(p.start_date).format('DD-MM-YYYY')} – {dayjs(p.end_date).format('DD-MM-YYYY')} · {p.trainer_name||'Internal'} {p.venue?`· ${p.venue}`:''}</div>
                     <div className="flex gap-3 mt-1 text-[10px] text-slate-400">
                       <span><Users size={10} className="inline mr-0.5"/>{p.participant_count||0} registered · {p.attended_count||0} attended</span>

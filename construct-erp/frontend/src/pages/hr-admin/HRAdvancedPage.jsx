@@ -332,7 +332,7 @@ function PayrollComplianceTab({ employees }) {
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           {['pf_enabled', 'esi_enabled', 'pt_enabled', 'lwf_enabled'].map((key) => (
-            <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-800">
+            <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-black">
               <input type="checkbox" checked={actualSettings[key] !== false} onChange={(e) => setSettings({ ...settings, [key]: e.target.checked })} />
               {key.replace('_enabled', '').toUpperCase()}
             </label>

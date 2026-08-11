@@ -120,7 +120,7 @@ export default function AssetCategoriesPage() {
                   <Tag className="w-4 h-4 text-indigo-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800">{root.name}</p>
+                  <p className="font-semibold text-black">{root.name}</p>
                   {root.description && <p className="text-xs text-slate-400 truncate">{root.description}</p>}
                 </div>
                 <div className="hidden md:flex items-center gap-5 text-xs text-slate-500 flex-shrink-0">

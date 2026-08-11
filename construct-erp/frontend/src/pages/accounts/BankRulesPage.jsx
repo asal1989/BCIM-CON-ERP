@@ -19,7 +19,7 @@ export default function BankRulesPage() {
               <Cog className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Bank Rules</h1>
+              <h1 className="text-lg font-semibold text-black">Bank Rules</h1>
               <p className="text-xs text-slate-400">Auto-categorise bank transactions based on conditions</p>
             </div>
           </div>
@@ -37,7 +37,7 @@ export default function BankRulesPage() {
           <div key={rule.id} className="bg-white border border-slate-200 rounded-md p-4 flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-semibold text-slate-800">{rule.name}</span>
+                <span className="text-sm font-semibold text-black">{rule.name}</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${rule.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                   {rule.active ? 'Active' : 'Inactive'}
                 </span>

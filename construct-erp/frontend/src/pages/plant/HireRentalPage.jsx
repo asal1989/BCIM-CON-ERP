@@ -140,7 +140,7 @@ function InvoiceTable({ invoices, isLoading, actions }) {
               <td className="px-3 py-2.5 text-xs text-slate-500">{inv.invoice_date ? dayjs(inv.invoice_date).format('DD MMM YY') : '—'}</td>
               <td className="px-3 py-2.5 text-xs text-slate-700">{fmt(inv.gross_amount)}</td>
               <td className="px-3 py-2.5 text-xs font-semibold text-blue-700">{inv.certified_amount > 0 ? fmt(inv.certified_amount) : '—'}</td>
-              <td className="px-3 py-2.5 text-xs font-bold text-slate-800">{fmt(inv.total_amount)}</td>
+              <td className="px-3 py-2.5 text-xs font-bold text-black">{fmt(inv.total_amount)}</td>
               <td className="px-3 py-2.5"><span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase', STATUS_BADGE[inv.status])}>{inv.status}</span></td>
               <td className="px-3 py-2.5">{actions ? actions(inv) : null}</td>
             </tr>
@@ -178,7 +178,7 @@ function InvoiceFormModal({ qc, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="font-bold text-slate-800 text-sm">New Vendor Invoice</h2>
+          <h2 className="font-bold text-black text-sm">New Vendor Invoice</h2>
           <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -274,7 +274,7 @@ function CertifyModal({ id, qc, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100">
-          <div><h2 className="font-bold text-slate-800 text-sm">QS Certification — {inv.invoice_no || inv.order_no}</h2>
+          <div><h2 className="font-bold text-black text-sm">QS Certification — {inv.invoice_no || inv.order_no}</h2>
             <p className="text-[11px] text-slate-400">{inv.vendor_name} · {inv.equipment_desc}</p></div>
           <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
         </div>
@@ -359,7 +359,7 @@ function PayModal({ inv, qc, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100">
-          <h2 className="font-bold text-slate-800 text-sm">Record Payment — {inv.invoice_no || inv.order_no}</h2>
+          <h2 className="font-bold text-black text-sm">Record Payment — {inv.invoice_no || inv.order_no}</h2>
           <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-3">

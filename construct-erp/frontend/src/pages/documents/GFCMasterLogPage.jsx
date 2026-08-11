@@ -389,7 +389,7 @@ function FilesModal({ drawing, onClose }) {
               <div key={f.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 {extIcon(f.file_name)}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{f.file_name}</p>
+                  <p className="text-sm font-medium text-black truncate">{f.file_name}</p>
                   <p className="text-[11px] text-slate-400">{fmtSize(f.file_size)} · {dayjs(f.uploaded_at).format('DD MMM YYYY')} · {f.uploaded_by_name || '—'}</p>
                 </div>
                 <button onClick={() => openFile(f.id, f.file_name)} title="View / Download"
@@ -598,7 +598,7 @@ export default function GFCMasterLogPage() {
             <div className={clsx('inline-flex items-center justify-center w-8 h-8 rounded-lg mb-2', iconBg)}>
               <Icon className="w-4 h-4" />
             </div>
-            <div className="text-xl font-bold font-mono text-slate-800">{value}</div>
+            <div className="text-xl font-bold font-mono text-black">{value}</div>
             <div className="text-xs text-slate-500 font-medium mt-0.5">{label}</div>
           </div>
         ))}
@@ -659,7 +659,7 @@ export default function GFCMasterLogPage() {
                     <span className="text-xs font-bold font-mono text-indigo-700">{d.drawing_number}</span>
                   </td>
                   <td className="px-4 py-3 max-w-[220px]">
-                    <p className="text-xs font-medium text-slate-800 truncate" title={d.title}>{d.title}</p>
+                    <p className="text-xs font-medium text-black truncate" title={d.title}>{d.title}</p>
                     {d.remarks && <p className="text-[10px] text-slate-400 truncate" title={d.remarks}>{d.remarks}</p>}
                     {Number(d.file_count) > 0 && (
                       <button onClick={() => setModal({ type: 'files', drawing: d })}

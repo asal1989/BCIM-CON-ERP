@@ -119,7 +119,7 @@ function Kpi({ label, value, icon: Icon, tone }) {
 }
 
 function Tab({ active, onClick, children }) {
-  return <button onClick={onClick} className={`rounded-md px-4 py-2 text-sm font-bold ${active ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-800'}`}>{children}</button>;
+  return <button onClick={onClick} className={`rounded-md px-4 py-2 text-sm font-bold ${active ? 'bg-slate-950 text-white' : 'bg-slate-100 text-black'}`}>{children}</button>;
 }
 
 function AlertsTable({ rows }) {
@@ -153,7 +153,7 @@ function Table({ headers, children }) {
 }
 
 function Td({ children, strong, danger }) {
-  return <td className={`px-3 py-3 align-top ${strong ? 'font-bold text-slate-950' : 'font-semibold text-slate-800'} ${danger ? 'text-red-700' : ''}`}>{children}</td>;
+  return <td className={`px-3 py-3 align-top ${strong ? 'font-bold text-slate-950' : 'font-semibold text-black'} ${danger ? 'text-red-700' : ''}`}>{children}</td>;
 }
 
 function TransferModal({ assets, projects, onClose, onDone }) {
@@ -197,9 +197,9 @@ function Modal({ title, children, onClose, onSubmit, submit }) {
 }
 
 function Select({ label, value, onChange, options, optional }) {
-  return <label className="text-sm font-bold text-slate-800">{label}<select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold"><option value="">{optional ? 'Optional' : 'Select'}</option>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
+  return <label className="text-sm font-bold text-black">{label}<select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold"><option value="">{optional ? 'Optional' : 'Select'}</option>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
 }
 
 function Input({ label, value, onChange, type = 'text' }) {
-  return <label className="text-sm font-bold text-slate-800">{label}<input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold" /></label>;
+  return <label className="text-sm font-bold text-black">{label}<input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold" /></label>;
 }

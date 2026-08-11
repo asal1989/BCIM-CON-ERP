@@ -360,7 +360,7 @@ function FinRow({ label, value, color, bold, accent }) {
   return (
     <div>
       <div className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-1">{label}</div>
-      <div className={clsx('font-mono text-sm', color || 'text-slate-800', bold && 'font-bold text-base', accent && (parseFloat(String(value).replace(/[^\d.-]/g, '')) < 0 ? 'text-red-500' : 'text-emerald-600'))}>
+      <div className={clsx('font-mono text-sm', color || 'text-black', bold && 'font-bold text-base', accent && (parseFloat(String(value).replace(/[^\d.-]/g, '')) < 0 ? 'text-red-500' : 'text-emerald-600'))}>
         {value}
       </div>
     </div>

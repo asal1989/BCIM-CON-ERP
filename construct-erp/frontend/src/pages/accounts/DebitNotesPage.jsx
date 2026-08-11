@@ -201,7 +201,7 @@ function DNForm({ onClose }) {
             <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center">
               <ArrowUpRight className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-sm font-semibold text-slate-800">New Debit Note</p>
+            <p className="text-sm font-semibold text-black">New Debit Note</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
@@ -271,7 +271,7 @@ function DNForm({ onClose }) {
                     className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b border-slate-50 last:border-0 transition-colors">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <span className="text-xs font-semibold text-slate-800">{b.inv_number || '—'}</span>
+                        <span className="text-xs font-semibold text-black">{b.inv_number || '—'}</span>
                         <span className="ml-2 text-[10px] text-slate-400 font-mono">{b.sl_number}</span>
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-shrink-0">
@@ -467,7 +467,7 @@ function DNDetail({ dn, onClose }) {
               <ArrowUpRight className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">{dn.dn_number}</p>
+              <p className="text-sm font-semibold text-black">{dn.dn_number}</p>
               <p className="text-xs text-slate-400">{dn.vendor_name} · {dayjs(dn.dn_date).format('DD MMM YYYY')}</p>
             </div>
             <StatusBadge status={dn.status} />
@@ -487,7 +487,7 @@ function DNDetail({ dn, onClose }) {
             ].map(([label, value]) => (
               <div key={label} className="bg-slate-50 border border-slate-200 rounded-md p-3">
                 <p className="text-xs text-slate-400 mb-0.5">{label}</p>
-                <p className="text-sm font-medium text-slate-800">{value}</p>
+                <p className="text-sm font-medium text-black">{value}</p>
               </div>
             ))}
           </div>
@@ -509,7 +509,7 @@ function DNDetail({ dn, onClose }) {
               <tbody className="divide-y divide-slate-50">
                 {dn.items.map((it, i) => (
                   <tr key={i}>
-                    <td className="px-3 py-2 font-medium text-slate-800">{it.material_name}</td>
+                    <td className="px-3 py-2 font-medium text-black">{it.material_name}</td>
                     <td className="px-3 py-2 text-slate-500">{it.unit}</td>
                     <td className="px-3 py-2 text-right font-mono">{Number(it.quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                     <td className="px-3 py-2 text-right font-mono">{inr(it.rate)}</td>
@@ -523,7 +523,7 @@ function DNDetail({ dn, onClose }) {
           <div className="bg-white border border-slate-200 rounded-md p-4 grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-[10px] text-slate-400 mb-0.5">Basic Amount</p>
-              <p className="text-sm font-semibold text-slate-800">{inr(dn.basic_amount)}</p>
+              <p className="text-sm font-semibold text-black">{inr(dn.basic_amount)}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400 mb-0.5">Total GST</p>
@@ -595,7 +595,7 @@ export default function DebitNotesPage() {
               <ArrowUpRight className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Debit Notes</h1>
+              <h1 className="text-lg font-semibold text-black">Debit Notes</h1>
               <p className="text-xs text-slate-400">Debit notes raised against vendors</p>
             </div>
           </div>
@@ -609,7 +609,7 @@ export default function DebitNotesPage() {
       <div className="px-6 py-5 grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Total (filtered)</div>
-          <div className="text-2xl font-semibold text-slate-800 mt-1">₹ {inr(totalAmt)}</div>
+          <div className="text-2xl font-semibold text-black mt-1">₹ {inr(totalAmt)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Pending</div>
@@ -664,10 +664,10 @@ export default function DebitNotesPage() {
                   <tr key={row.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setViewRecord(row)}>
                     <td className="px-4 py-2.5 font-mono text-xs font-semibold text-blue-700">{row.dn_number}</td>
                     <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(row.dn_date).format('DD MMM YYYY')}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{row.vendor_name}</td>
+                    <td className="px-4 py-2.5 font-medium text-black">{row.vendor_name}</td>
                     <td className="px-4 py-2.5 text-slate-500 text-xs">{row.project_name || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">{row.invoice_number || '—'}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">₹ {inr(row.total_amount)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-black">₹ {inr(row.total_amount)}</td>
                     <td className="px-4 py-2.5"><StatusBadge status={row.status} /></td>
                     <td className="px-4 py-2.5"><ChevronRight className="w-4 h-4 text-slate-300" /></td>
                   </tr>

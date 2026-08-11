@@ -172,7 +172,7 @@ export default function RFQPage() {
     return (
       <div className="p-8 min-h-screen bg-[#f4f6f9] flex items-center justify-center">
         <div className="bg-white border border-red-100 rounded-xl p-8 text-center">
-          <p className="text-sm font-medium text-slate-800">MRS not found</p>
+          <p className="text-sm font-medium text-black">MRS not found</p>
           <button onClick={() => navigate('/procurement/rfqs')} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">
             Back to RFQ List
           </button>
@@ -238,7 +238,7 @@ export default function RFQPage() {
           <section className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 mb-4">
               <ClipboardList className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-medium text-slate-800">RFQ Details</h2>
+              <h2 className="text-sm font-medium text-black">RFQ Details</h2>
             </div>
 
             <div className="space-y-4">
@@ -296,7 +296,7 @@ export default function RFQPage() {
           <section className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 mb-4">
               <Package className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-medium text-slate-800">MRS Materials</h2>
+              <h2 className="text-sm font-medium text-black">MRS Materials</h2>
             </div>
             <div className="space-y-2 max-h-72 overflow-auto pr-1">
               {(indent.items || [])
@@ -326,7 +326,7 @@ export default function RFQPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-500" />
-                <h2 className="text-sm font-medium text-slate-800">Select Vendors</h2>
+                <h2 className="text-sm font-medium text-black">Select Vendors</h2>
               </div>
               <p className="text-xs text-slate-900 font-medium mt-1">{selected.size} selected for RFQ</p>
               {selectedWithoutEmail.length > 0 && (
@@ -502,7 +502,7 @@ function RFQSettingsModal({ settings, onChange, onClose, onSave, isSaving }) {
             <span className="text-xs font-medium text-slate-700">Default Terms</span>
             <textarea rows={5} value={settings.default_terms || ''} onChange={e => set('default_terms', e.target.value)} className="mt-1.5 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm resize-y" />
           </label>
-          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-800">
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-black">
             <input type="checkbox" checked={Boolean(settings.attach_item_table)} onChange={e => set('attach_item_table', e.target.checked)} />
             Include MR item table in RFQ email
           </label>

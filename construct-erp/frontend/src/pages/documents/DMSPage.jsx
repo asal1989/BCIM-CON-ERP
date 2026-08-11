@@ -638,7 +638,7 @@ function DocumentCard({ doc, onOpen, onDownload, onShare, onArchive }) {
         {doc.doc_number && <span className="font-mono text-[10px] text-indigo-500 truncate">{doc.doc_number}</span>}
         {doc.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
       </div>
-      <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2 mb-1 min-h-[2.5em]">{doc.doc_title || doc.file_name}</p>
+      <p className="text-sm font-semibold text-black leading-snug line-clamp-2 mb-1 min-h-[2.5em]">{doc.doc_title || doc.file_name}</p>
       <p className="text-[11px] text-slate-400 truncate mb-3">{doc.project_name || 'No project'} · Rev {doc.revision || 'A'}</p>
       <div className="mt-auto flex items-center justify-between">
         <span className={clsx('text-[10px] px-2 py-0.5 rounded-full border font-semibold', cfg.color)}>{cfg.label}</span>
@@ -922,7 +922,7 @@ export default function DMSPage() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-medium text-slate-800 max-w-[200px] truncate">{d.doc_title || d.file_name}</span>
+                <span className="text-xs font-medium text-black max-w-[200px] truncate">{d.doc_title || d.file_name}</span>
                 {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
               </div>
               <div className="text-[10px] text-slate-400 truncate">{d.doc_number || d.file_name}</div>
@@ -1031,12 +1031,12 @@ export default function DMSPage() {
           {/* Storage + by-type */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><HardDrive className="w-4 h-4 text-indigo-500" /> Storage Utilization</h3>
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2"><HardDrive className="w-4 h-4 text-indigo-500" /> Storage Utilization</h3>
               <div className="text-3xl font-bold text-indigo-600">{fmtSize(s.total_size_bytes)}</div>
               <div className="text-xs text-slate-400 mt-1">across {s.total} documents · {s.doc_types} types · {s.projects} projects</div>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm lg:col-span-2">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Documents by Type</h3>
+              <h3 className="text-sm font-semibold text-black mb-3">Documents by Type</h3>
               <div className="space-y-2">
                 {(dash.by_type||[]).slice(0,6).map(t=>{
                   const pct = s.total ? Math.round((t.c/s.total)*100) : 0;
@@ -1059,7 +1059,7 @@ export default function DMSPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Expiring */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-500" /> Expiring Documents</h3>
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-500" /> Expiring Documents</h3>
               {(dash.expiring_docs||[]).length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">None expiring</p> : (
                 <div className="space-y-1.5">
                   {dash.expiring_docs.map(d=>(
@@ -1075,7 +1075,7 @@ export default function DMSPage() {
             </div>
             {/* Recent activity */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> Recent Activity</h3>
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> Recent Activity</h3>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {(dash.recent_activity||[]).map((a,i)=>(
                   <div key={i} className="flex items-center gap-2 text-xs py-1">
@@ -1106,7 +1106,7 @@ export default function DMSPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="w-4 h-4 text-indigo-500" />
                     <span className="font-mono text-xs text-indigo-600">{ap.doc_number}</span>
-                    <span className="text-sm font-medium text-slate-800">{ap.doc_title}</span>
+                    <span className="text-sm font-medium text-black">{ap.doc_title}</span>
                     <span className="text-xs text-slate-400 capitalize">{titleCase(ap.doc_type)}</span>
                   </div>
                   <div className="text-xs text-slate-500">{titleCase(ap.approval_type)} · {dayjs(ap.created_at).format('DD/MM/YYYY')}</div>
@@ -1419,7 +1419,7 @@ export default function DMSPage() {
             {/* Bottom widgets: status overview, upload trend, recent activities */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-6">
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Document Status Overview</h3>
+                <h3 className="text-sm font-semibold text-black mb-3">Document Status Overview</h3>
                 {statusChartData.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-10">No data yet</p>
                 ) : (
@@ -1444,7 +1444,7 @@ export default function DMSPage() {
               </div>
 
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Document Trend (Uploads, last 14 days)</h3>
+                <h3 className="text-sm font-semibold text-black mb-3">Document Trend (Uploads, last 14 days)</h3>
                 <div className="h-[200px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendChartData}>
@@ -1459,7 +1459,7 @@ export default function DMSPage() {
               </div>
 
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> Recent Activities</h3>
+                <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> Recent Activities</h3>
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
                   {(dash?.recent_activity||[]).length === 0 ? <p className="text-xs text-slate-400 text-center py-10">No activity yet</p> :
                     dash.recent_activity.map((a,i)=>(
@@ -1629,7 +1629,7 @@ function SubmitReviewModal({ doc, onClose }) {
               <label key={user.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer">
                 <input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleUser(user.id)} />
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-800 truncate">{user.name || user.email}</div>
+                  <div className="text-sm font-medium text-black truncate">{user.name || user.email}</div>
                   <div className="text-[11px] text-slate-400 truncate">{user.email} {user.role ? `- ${titleCase(user.role)}` : ''}</div>
                 </div>
               </label>

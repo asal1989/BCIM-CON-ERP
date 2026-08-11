@@ -156,7 +156,7 @@ export default function CommandPalette({ isOpen, onClose, navGroups, recentPages
             value={query}
             onChange={e => { setQuery(e.target.value); setActive(0); }}
             placeholder="Search modules, vendors, POs, employees…"
-            className="flex-1 bg-transparent border-none outline-none text-sm text-slate-800 placeholder:text-slate-400"
+            className="flex-1 bg-transparent border-none outline-none text-sm text-black placeholder:text-slate-400"
           />
           {query && (
             <button
@@ -229,7 +229,7 @@ export default function CommandPalette({ isOpen, onClose, navGroups, recentPages
                         </span>
 
                         <div className="flex-1 min-w-0">
-                          <div className={`text-sm font-medium truncate ${isActive ? 'text-blue-900' : 'text-slate-800'}`}>
+                          <div className={`text-sm font-medium truncate ${isActive ? 'text-blue-900' : 'text-black'}`}>
                             {item.label}
                           </div>
                           {item.sub && (
@@ -266,7 +266,7 @@ export default function CommandPalette({ isOpen, onClose, navGroups, recentPages
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-medium ${isActive ? 'text-blue-900' : 'text-slate-800'}`}>
+                        <div className={`text-sm font-medium ${isActive ? 'text-blue-900' : 'text-black'}`}>
                           {item.label}
                         </div>
                         <div className="text-xs text-slate-400">{item.group}</div>

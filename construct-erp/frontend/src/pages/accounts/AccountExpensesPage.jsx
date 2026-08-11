@@ -47,7 +47,7 @@ export default function AccountExpensesPage() {
             <Wallet className="w-4 h-4 text-orange-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Expenses</h1>
+            <h1 className="text-lg font-semibold text-black">Expenses</h1>
             <p className="text-xs text-slate-400">Petty cash expenses · JV auto-posted on approval</p>
           </div>
         </div>
@@ -91,12 +91,12 @@ export default function AccountExpensesPage() {
                     <tr key={r.id} className="hover:bg-slate-50">
                       <td className="px-4 py-2.5 font-mono text-xs text-slate-500 whitespace-nowrap">{r.voucher_number}</td>
                       <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{fmt(r.expense_date)}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-800 max-w-[180px] truncate">{r.description}</td>
+                      <td className="px-4 py-2.5 font-medium text-black max-w-[180px] truncate">{r.description}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500">{r.category_name || '—'}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 max-w-[120px] truncate">{r.vendor_name || '—'}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 max-w-[120px] truncate">{r.project_name || '—'}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500">{r.payment_mode || '—'}</td>
-                      <td className="px-4 py-2.5 font-mono font-semibold text-slate-800 text-right whitespace-nowrap">{inr(r.amount)}</td>
+                      <td className="px-4 py-2.5 font-mono font-semibold text-black text-right whitespace-nowrap">{inr(r.amount)}</td>
                       <td className="px-4 py-2.5">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[r.status] || 'bg-slate-100 text-slate-500'}`}>
                           <Icon className="w-3 h-3" /> {r.status}
@@ -112,7 +112,7 @@ export default function AccountExpensesPage() {
                     <td colSpan={7} className="px-4 py-2.5 text-sm font-semibold text-slate-700">
                       Total ({rows.length} expenses)
                     </td>
-                    <td className="px-4 py-2.5 font-mono font-bold text-slate-800 text-right">{inr(total)}</td>
+                    <td className="px-4 py-2.5 font-mono font-bold text-black text-right">{inr(total)}</td>
                     <td />
                   </tr>
                 </tfoot>

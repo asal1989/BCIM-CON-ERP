@@ -20,7 +20,7 @@ const fmt = d => d ? dayjs(d).format('DD MMM YYYY') : '—';
 const today = dayjs().format('DD MMM YYYY');
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KPICard({ label, value, count, color = 'text-slate-800', icon: Icon, iconBg, to }) {
+function KPICard({ label, value, count, color = 'text-black', icon: Icon, iconBg, to }) {
   const body = (
     <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow h-full">
       <div className="flex items-start justify-between mb-3">
@@ -45,7 +45,7 @@ function AgingBar({ label, value, total, color }) {
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="font-medium text-slate-600">{label}</span>
-        <span className="font-medium text-slate-800">{inrFmt(value)}</span>
+        <span className="font-medium text-black">{inrFmt(value)}</span>
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${w}%` }} />
@@ -254,7 +254,7 @@ export default function FinanceHubPage() {
                         <div className="text-slate-900 font-medium text-[10px] truncate max-w-[160px]">{inv.vendor_name}</div>
                       </td>
                       <td className="px-4 py-2.5 text-slate-900 font-medium whitespace-nowrap">{fmt(inv.invoice_date)}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-slate-800">{inrFmt(inv.total_amount)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-black">{inrFmt(inv.total_amount)}</td>
                       <td className="px-4 py-2.5 text-center">
                         <button onClick={() => navigate(`/finance/payment-run`)}
                           className="text-[10px] font-medium text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors">
@@ -294,7 +294,7 @@ export default function FinanceHubPage() {
                       <div className="text-[10px] text-slate-400">{fmt(p.payment_date)} · {p.project_name || 'General'}</div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-[11px] font-medium text-slate-800">{inrFmt(p.net_amount ?? p.amount)}</div>
+                      <div className="text-[11px] font-medium text-black">{inrFmt(p.net_amount ?? p.amount)}</div>
                       <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${MODE_COLORS[p.payment_mode] || 'bg-slate-100 text-slate-500'}`}>
                         {p.payment_mode?.replace('_', ' ') || 'other'}
                       </span>

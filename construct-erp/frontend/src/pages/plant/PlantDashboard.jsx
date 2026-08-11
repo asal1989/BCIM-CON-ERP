@@ -27,7 +27,7 @@ function SectionTitle({ icon: Icon, title, subtitle, action }) {
           <Icon className="w-4 h-4 text-teal-600" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
           {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function PlantDashboard() {
                       <q.icon className="h-4 w-4 text-teal-600" />
                     </span>
                     <div>
-                      <div className="text-xs font-semibold text-slate-800">{q.label}</div>
+                      <div className="text-xs font-semibold text-black">{q.label}</div>
                       <div className="text-[11px] text-slate-400">{q.desc}</div>
                     </div>
                   </Link>
@@ -322,7 +322,7 @@ export default function PlantDashboard() {
                           <FileWarning className="h-3.5 w-3.5" />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-medium text-slate-800">{d.equipment_code} · {d.equipment_name}</div>
+                          <div className="truncate text-xs font-medium text-black">{d.equipment_code} · {d.equipment_name}</div>
                           <div className="truncate text-[11px] text-slate-400">{d.document_type || 'Document'}</div>
                         </div>
                         <span className={`shrink-0 text-[11px] font-semibold ${d.expiry_status === 'expired' ? 'text-red-600' : 'text-amber-600'}`}>

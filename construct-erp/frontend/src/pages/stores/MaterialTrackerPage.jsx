@@ -112,7 +112,7 @@ function LoadForm({ entryId, materialType, defaultRate, editLoad, onClose, onSav
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-800">{isEdit ? 'Edit Load Entry' : 'Add Load Entry'}</h3>
+          <h3 className="text-sm font-semibold text-black">{isEdit ? 'Edit Load Entry' : 'Add Load Entry'}</h3>
           <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center">
             <X size={14} className="text-slate-500" />
           </button>
@@ -263,7 +263,7 @@ function RegisterPOForm({ materialType, projects, onClose, onSaved }) {
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-800 capitalize">Add {materialType === 'concrete' ? 'RMC' : 'Steel'} PO to Tracker</h3>
+          <h3 className="text-sm font-semibold text-black capitalize">Add {materialType === 'concrete' ? 'RMC' : 'Steel'} PO to Tracker</h3>
           <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center"><X size={14} className="text-slate-500" /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -409,7 +409,7 @@ function SyncModal({ materialType, projectId, onClose, onSynced }) {
           {step === 'done' && result && (
             <div className="text-center space-y-3 py-4">
               <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto"><Zap size={26} className="text-emerald-600" /></div>
-              <div className="font-semibold text-slate-800">Import complete!</div>
+              <div className="font-semibold text-black">Import complete!</div>
               {(() => {
                 const extras = (result.ghost_cleaned > 0 ? 1 : 0) + (result.ign_removed > 0 ? 1 : 0) + (result.stale_removed > 0 ? 1 : 0);
                 return (
@@ -703,7 +703,7 @@ function TrackerTab({ materialType, projectId, projects, canWrite }) {
                       return (
                         <tr key={l.load_id} className={clsx('border-b border-slate-100 hover:bg-blue-50/40 transition-colors', isEven ? 'bg-white' : 'bg-slate-50/40')}>
                           <td className="px-2.5 py-2 text-slate-400">{idx + 1}</td>
-                          <td className="px-2.5 py-2 whitespace-nowrap font-medium text-slate-800">{fmt(l.received_date)}</td>
+                          <td className="px-2.5 py-2 whitespace-nowrap font-medium text-black">{fmt(l.received_date)}</td>
                           <td className="px-2.5 py-2 font-mono font-semibold text-blue-700 whitespace-nowrap">{l.po_number}</td>
                           <td className="px-2.5 py-2 max-w-[140px] truncate text-slate-600">{l.vendor_name || '—'}</td>
                           {isConcrete && <td className="px-2.5 py-2 text-emerald-700 font-semibold whitespace-nowrap">{l.grade || '—'}</td>}
@@ -711,7 +711,7 @@ function TrackerTab({ materialType, projectId, projects, canWrite }) {
                           <td className="px-2.5 py-2 text-slate-700">{l.invoice_no || '—'}</td>
                           <td className="px-2.5 py-2 text-slate-500">{l.ign_no || '—'}</td>
                           <td className="px-2.5 py-2 text-slate-500">{l.grs_no || '—'}</td>
-                          <td className="px-2.5 py-2 text-right font-mono font-bold text-slate-800">{n3(l.invoice_qty)}</td>
+                          <td className="px-2.5 py-2 text-right font-mono font-bold text-black">{n3(l.invoice_qty)}</td>
                           <td className="px-2.5 py-2 text-right font-mono text-slate-600">{l.weighbridge_qty ? n3(l.weighbridge_qty) : '—'}</td>
                           <td className={clsx('px-2.5 py-2 text-right font-mono font-semibold',
                             diff < -0.001 ? 'text-red-600' : diff > 0.001 ? 'text-emerald-600' : 'text-slate-400')}>
@@ -720,7 +720,7 @@ function TrackerTab({ materialType, projectId, projects, canWrite }) {
                           <td className="px-2.5 py-2 text-right text-slate-600">{l.rate ? n2(l.rate) : '—'}</td>
                           <td className="px-2.5 py-2 text-right text-slate-500">{l.gst_rate || 0}%</td>
                           <td className="px-2.5 py-2 text-right text-slate-500">{l.gst_amount ? `₹${inr(l.gst_amount)}` : '—'}</td>
-                          <td className="px-2.5 py-2 text-right font-semibold text-slate-800">₹{inr(l.grand_total)}</td>
+                          <td className="px-2.5 py-2 text-right font-semibold text-black">₹{inr(l.grand_total)}</td>
                           {!isConcrete && DIA_COLS.map(k => (
                             <td key={k} className={clsx('px-2.5 py-2 text-right font-mono',
                               parseFloat(l[k]) > 0 ? 'text-orange-700 font-semibold' : 'text-slate-300')}>
@@ -862,7 +862,7 @@ function TrackerTab({ materialType, projectId, projects, canWrite }) {
         <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-800">Select PO for this Load</h3>
+              <h3 className="text-sm font-semibold text-black">Select PO for this Load</h3>
               <button onClick={() => setShowPOPicker(false)} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center">
                 <X size={14} className="text-slate-500" />
               </button>
@@ -930,9 +930,9 @@ export default function MaterialTrackerPage() {
         breadcrumbs={[{ label: 'Stores' }, { label: 'Material Tracker' }]}
         actions={
           <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="h-9 pl-3 pr-8 text-xs rounded-xl border border-slate-200 bg-white/20 text-white focus:outline-none focus:bg-white focus:text-slate-800 focus:border-blue-400">
-            <option value="" className="text-slate-800">All Projects</option>
-            {projects.map(p => <option key={p.id} value={p.id} className="text-slate-800">{p.name}</option>)}
+            className="h-9 pl-3 pr-8 text-xs rounded-xl border border-slate-200 bg-white/20 text-white focus:outline-none focus:bg-white focus:text-black focus:border-blue-400">
+            <option value="" className="text-black">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id} className="text-black">{p.name}</option>)}
           </select>
         }
       />

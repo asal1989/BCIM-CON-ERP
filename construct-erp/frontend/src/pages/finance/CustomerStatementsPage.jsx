@@ -61,7 +61,7 @@ export default function CustomerStatementsPage() {
               <FileSignature className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Customer Statements</h1>
+              <h1 className="text-lg font-semibold text-black">Customer Statements</h1>
               <p className="text-xs text-slate-400">Project-wise receivables, RA bills and collections</p>
             </div>
           </div>
@@ -102,7 +102,7 @@ export default function CustomerStatementsPage() {
         </select>
         {(search || selectedProject || status) && (
           <button onClick={() => { setSearch(''); setSelectedProject(''); setStatus(''); }}
-            className="px-3 py-2 text-sm text-slate-500 hover:text-slate-800">
+            className="px-3 py-2 text-sm text-slate-500 hover:text-black">
             Clear filters
           </button>
         )}
@@ -132,7 +132,7 @@ export default function CustomerStatementsPage() {
                     return (
                       <tr key={b.id} className="hover:bg-slate-50">
                         <td className="px-4 py-2.5">
-                          <div className="text-slate-800">{b.project_name || '—'}</div>
+                          <div className="text-black">{b.project_name || '—'}</div>
                           <div className="text-[11px] text-slate-400">{b.contractor_name || 'Contractor'}</div>
                         </td>
                         <td className="px-4 py-2.5 font-mono text-xs font-semibold text-blue-700">{b.bill_number || `RA-${b.id.slice(0, 8)}`}</td>

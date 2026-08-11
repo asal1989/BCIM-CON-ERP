@@ -199,7 +199,7 @@ export default function LetterGenerationPage() {
               <div key={t.id} className="bg-white rounded-xl border border-slate-200 px-4 py-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="font-semibold text-sm text-slate-800">{t.name}</div>
+                    <div className="font-semibold text-sm text-black">{t.name}</div>
                     <div className="text-[10px] text-slate-400 mt-0.5 capitalize">{t.type.replace(/_/g,' ')} {t.is_default && '· Default'}</div>
                   </div>
                   <button onClick={()=>{setEditTmpl(t);setShowTmplForm(true);}} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center">

@@ -260,7 +260,7 @@ export default function MRPPage() {
                     return (
                       <tr key={m.id} className={clsx('border-b last:border-0 hover:bg-slate-50', isShort && 'bg-red-50/50')}>
                         <td className="py-2 px-3">
-                          <div className="font-medium text-xs text-slate-800">{m.material_name}</div>
+                          <div className="font-medium text-xs text-black">{m.material_name}</div>
                           {m.material_code && <div className="text-[10px] text-slate-400 font-mono">{m.material_code}</div>}
                           {m.specification && <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{m.specification}</div>}
                         </td>

@@ -56,7 +56,7 @@ export default function TDSCompliancePage() {
               <FileBarChart className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">TDS Compliance</h1>
+              <h1 className="text-lg font-semibold text-black">TDS Compliance</h1>
               <p className="text-xs text-slate-400">{fyLabel} — TDS deducted from your payments, grouped into 26Q / 24Q returns</p>
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function TDSCompliancePage() {
           ].map(({ label, value, sub }) => (
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3">
               <p className="text-xs text-slate-500 mb-1">{label}</p>
-              <p className="text-base font-bold text-slate-800">{value}</p>
+              <p className="text-base font-bold text-black">{value}</p>
               <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
             </div>
           ))}
@@ -116,10 +116,10 @@ export default function TDSCompliancePage() {
                   <tbody className="divide-y divide-slate-50">
                     {deposits.map(d => (
                       <tr key={d.month_key} className={`hover:bg-slate-50 ${!d.has_activity ? 'opacity-50' : ''}`}>
-                        <td className="px-4 py-2.5 font-medium text-slate-800">{d.month}</td>
+                        <td className="px-4 py-2.5 font-medium text-black">{d.month}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{d.amount_26q ? inr(d.amount_26q) : '—'}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{d.amount_24q ? inr(d.amount_24q) : '—'}</td>
-                        <td className="px-4 py-2.5 font-mono font-semibold text-slate-800">{d.total ? inr(d.total) : '—'}</td>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-black">{d.total ? inr(d.total) : '—'}</td>
                         <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{d.due_date ? dayjs(d.due_date).format('DD MMM YYYY') : '—'}</td>
                         <td className="px-4 py-2.5"><DuePill dueDate={d.due_date} hasActivity={d.has_activity} /></td>
                       </tr>
@@ -128,9 +128,9 @@ export default function TDSCompliancePage() {
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                       <td className="px-4 py-2.5 text-sm text-slate-700">Total</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_26q)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_24q)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_tds)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_26q)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_24q)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_tds)}</td>
                       <td colSpan={2} />
                     </tr>
                   </tfoot>
@@ -185,7 +185,7 @@ export default function TDSCompliancePage() {
                     {TDS_SECTIONS.map(s => (
                       <tr key={s.section} className="hover:bg-slate-50">
                         <td className="px-4 py-2.5"><span className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-mono">{s.section}</span></td>
-                        <td className="px-4 py-2.5 font-medium text-slate-800">{s.nature}</td>
+                        <td className="px-4 py-2.5 font-medium text-black">{s.nature}</td>
                         <td className="px-4 py-2.5 text-slate-700 font-mono text-xs">{s.rate}</td>
                         <td className="px-4 py-2.5 text-slate-500 text-xs">{s.threshold}</td>
                       </tr>

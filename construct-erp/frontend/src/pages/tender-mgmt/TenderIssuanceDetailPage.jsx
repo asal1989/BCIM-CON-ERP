@@ -447,9 +447,9 @@ export default function TenderIssuanceDetailPage() {
                           <>
                             <td className="px-4 py-2.5 text-slate-400">{idx + 1}</td>
                             <td className="px-4 py-2.5 font-mono text-slate-900 text-xs">{item.item_code || '—'}</td>
-                            <td className="px-4 py-2.5 text-slate-800">{item.description}</td>
+                            <td className="px-4 py-2.5 text-black">{item.description}</td>
                             <td className="px-4 py-2.5 text-slate-600">{item.unit}</td>
-                            <td className="px-4 py-2.5 text-right text-slate-800">{parseFloat(item.quantity || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2.5 text-right text-black">{parseFloat(item.quantity || 0).toLocaleString('en-IN')}</td>
                             {!['awarded','cancelled'].includes(tender.status) && (
                               <td className="px-4 py-2.5">
                                 <div className="flex gap-1 justify-end">
@@ -472,7 +472,7 @@ export default function TenderIssuanceDetailPage() {
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-medium text-slate-800">Add Scope Item</h3>
+                    <h3 className="font-medium text-black">Add Scope Item</h3>
                     <button onClick={() => setShowAddScope(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="space-y-3">
@@ -533,7 +533,7 @@ export default function TenderIssuanceDetailPage() {
                     {tender.invited_vendors.map(v => (
                       <tr key={v.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800">{v.vendor_name}</div>
+                          <div className="font-medium text-black">{v.vendor_name}</div>
                           <div className="text-xs text-slate-400">{v.vendor_code}</div>
                         </td>
                         <td className="px-4 py-3 text-slate-600">{v.contact_person || '—'}</td>
@@ -565,7 +565,7 @@ export default function TenderIssuanceDetailPage() {
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-                    <h3 className="font-medium text-slate-800">Invite Vendors</h3>
+                    <h3 className="font-medium text-black">Invite Vendors</h3>
                     <button onClick={() => { setShowAddVendor(false); setSelectedVids([]); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="p-4 border-b border-slate-100">
@@ -586,7 +586,7 @@ export default function TenderIssuanceDetailPage() {
                             {sel && <CheckCircle2 className="w-3 h-3 text-white" />}
                           </div>
                           <div>
-                            <div className="font-medium text-slate-800">{v.name}</div>
+                            <div className="font-medium text-black">{v.name}</div>
                             <div className="text-xs text-slate-400">{v.vendor_code} · {v.contact_person}</div>
                           </div>
                         </button>
@@ -651,7 +651,7 @@ export default function TenderIssuanceDetailPage() {
                           <div className="flex items-center gap-2">
                             {b.is_winner && <Award className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
                             <div>
-                              <div className="font-medium text-slate-800">{b.vendor_name}</div>
+                              <div className="font-medium text-black">{b.vendor_name}</div>
                               {b.submission_date && <div className="text-xs text-slate-400">{dayjs(b.submission_date).format('DD MMM YY')}</div>}
                             </div>
                           </div>
@@ -659,7 +659,7 @@ export default function TenderIssuanceDetailPage() {
                         <td className="px-4 py-3 font-mono text-slate-900 text-xs">{b.bid_reference || '—'}</td>
                         <td className="px-4 py-3 text-right text-slate-700">{fmtL(b.bid_amount)}</td>
                         <td className="px-4 py-3 text-right text-slate-500">{b.discount_pct || 0}%</td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-800">{fmtL(b.final_amount)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-black">{fmtL(b.final_amount)}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{b.technical_score ?? '—'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{b.financial_score ?? '—'}</td>
                         <td className="px-4 py-3">
@@ -682,7 +682,7 @@ export default function TenderIssuanceDetailPage() {
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-                    <h3 className="font-medium text-slate-800">Record Vendor Bid</h3>
+                    <h3 className="font-medium text-black">Record Vendor Bid</h3>
                     <button onClick={() => setShowAddBid(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-5 space-y-3">
@@ -795,7 +795,7 @@ export default function TenderIssuanceDetailPage() {
                             {b.vendor_name}
                             {b.is_winner && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">AWARDED</span>}
                           </td>
-                          <td className="px-4 py-3 text-right font-medium text-slate-800">{fmtL(b.final_amount)}</td>
+                          <td className="px-4 py-3 text-right font-medium text-black">{fmtL(b.final_amount)}</td>
                           <td className={`px-4 py-3 text-right font-medium ${b.is_l1 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {b.is_l1 ? '—' : `+${b.premium_over_l1_pct}%`}
                           </td>
@@ -831,7 +831,7 @@ export default function TenderIssuanceDetailPage() {
                         {compData.scope_items.map(si => (
                           <tr key={si.id} className="hover:bg-slate-50">
                             <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{si.item_code || '—'}</td>
-                            <td className="px-4 py-2.5 text-slate-800">{si.description}</td>
+                            <td className="px-4 py-2.5 text-black">{si.description}</td>
                             <td className="px-4 py-2.5 text-slate-500">{si.unit}</td>
                             <td className="px-4 py-2.5 text-right text-slate-600">{parseFloat(si.quantity || 0).toLocaleString('en-IN')}</td>
                             {compData.bids.map(b => {
@@ -840,7 +840,7 @@ export default function TenderIssuanceDetailPage() {
                                 <td key={b.id} className="px-4 py-2.5 text-right">
                                   {cell?.unit_rate != null
                                     ? <div>
-                                        <div className="font-medium text-slate-800">{fmtL(cell.unit_rate)}</div>
+                                        <div className="font-medium text-black">{fmtL(cell.unit_rate)}</div>
                                         <div className="text-xs text-slate-400">{fmtL(cell.amount)}</div>
                                       </div>
                                     : <span className="text-slate-300">—</span>
@@ -854,7 +854,7 @@ export default function TenderIssuanceDetailPage() {
                         <tr className="bg-slate-50 font-semibold">
                           <td colSpan={4} className="px-4 py-3 text-right text-slate-600">Final Bid Total</td>
                           {compData.bids.map(b => (
-                            <td key={b.id} className={`px-4 py-3 text-right ${b.is_winner ? 'text-emerald-700' : 'text-slate-800'}`}>
+                            <td key={b.id} className={`px-4 py-3 text-right ${b.is_winner ? 'text-emerald-700' : 'text-black'}`}>
                               {fmtL(b.final_amount || b.bid_amount)}
                             </td>
                           ))}
@@ -905,7 +905,7 @@ export default function TenderIssuanceDetailPage() {
                 <label key={b.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${awardBidId === b.id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <input type="radio" name="award_bid" value={b.id} checked={awardBidId === b.id} onChange={() => setAwardBidId(b.id)} className="accent-emerald-600" />
                   <div className="flex-1">
-                    <div className="font-medium text-slate-800">{b.vendor_name}</div>
+                    <div className="font-medium text-black">{b.vendor_name}</div>
                     <div className="text-sm text-slate-600">{fmtL(b.final_amount || b.bid_amount)}</div>
                   </div>
                 </label>

@@ -207,7 +207,7 @@ export default function BillTrackerCashFlowPage() {
           value={summary.total_billed}
           sub={`${summary.total_bills || 0} bills`}
           icon={IndianRupee}
-          accent={{ stripe: 'bg-slate-400', border: 'border-slate-100', text: 'text-slate-800', iconBg: 'bg-slate-100', icon: 'text-slate-600' }}
+          accent={{ stripe: 'bg-slate-400', border: 'border-slate-100', text: 'text-black', iconBg: 'bg-slate-100', icon: 'text-slate-600' }}
         />
         <KPICard
           label="Paid"
@@ -299,7 +299,7 @@ export default function BillTrackerCashFlowPage() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">Monthly Billing Breakdown</h2>
+                <h2 className="text-sm font-semibold text-black">Monthly Billing Breakdown</h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">Stacked by payment status per month</p>
               </div>
               <div className="flex items-center gap-4 text-[11px] font-medium">
@@ -332,7 +332,7 @@ export default function BillTrackerCashFlowPage() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">Month-wise Detail</h2>
+                <h2 className="text-sm font-semibold text-black">Month-wise Detail</h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">{rowsWithCumulative.length} months · scroll right for all columns</p>
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-500">
@@ -374,7 +374,7 @@ export default function BillTrackerCashFlowPage() {
                       <tr key={i} className={`border-b border-slate-50 hover:bg-slate-50/70 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
                         {/* Month */}
                         <td className="px-5 py-3">
-                          <span className="font-semibold text-slate-800">{r.month_label}</span>
+                          <span className="font-semibold text-black">{r.month_label}</span>
                         </td>
                         {/* Bills */}
                         <td className="px-4 py-3 text-center">
@@ -384,7 +384,7 @@ export default function BillTrackerCashFlowPage() {
                         </td>
                         {/* Total Billed */}
                         <td className="px-4 py-3 text-right">
-                          <span className="font-semibold text-slate-800 tabular-nums">₹{inr(r.total_billed)}</span>
+                          <span className="font-semibold text-black tabular-nums">₹{inr(r.total_billed)}</span>
                         </td>
                         {/* Paid */}
                         <td className="px-4 py-3 text-right">

@@ -2346,7 +2346,7 @@ export default function ReportsPage() {
                     'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 relative group max-xl:w-auto max-xl:min-w-[140px]',
                     active
                       ? clsx(c.bg, 'shadow-sm')
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                      : 'text-slate-500 hover:text-black hover:bg-slate-50'
                   )}
                 >
                   {/* Left accent bar for active */}
@@ -2858,7 +2858,7 @@ export function ReportGenerator({ report }) {
                 onClick={() => setViewMode('dashboard')}
                 className={clsx(
                   'flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-semibold transition-all',
-                  viewMode === 'dashboard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                  viewMode === 'dashboard' ? 'bg-white shadow-sm text-black' : 'text-slate-400 hover:text-slate-600'
                 )}
               >
                 <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
@@ -2867,7 +2867,7 @@ export function ReportGenerator({ report }) {
                 onClick={() => setViewMode('table')}
                 className={clsx(
                   'flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-semibold transition-all',
-                  viewMode === 'table' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                  viewMode === 'table' ? 'bg-white shadow-sm text-black' : 'text-slate-400 hover:text-slate-600'
                 )}
               >
                 <Table2 className="w-3.5 h-3.5" /> Table
@@ -2953,7 +2953,7 @@ export function ReportGenerator({ report }) {
                   <Icon className={clsx('w-4 h-4', c.icon)} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{report.title}</p>
+                  <p className="text-sm font-semibold text-black">{report.title}</p>
                   <p className="text-[11px] text-slate-400">
                     {rows.length} record{rows.length !== 1 ? 's' : ''}
                     {hasDateFilter && ` · ${new Date(fromDate).toLocaleDateString('en-IN')} – ${new Date(toDate).toLocaleDateString('en-IN')}`}
@@ -2965,7 +2965,7 @@ export function ReportGenerator({ report }) {
                 {report.columns.filter(col => col.type === 'amount' && totals[col.key] !== undefined).slice(0, 3).map(col => (
                   <div key={col.key} className="px-3.5 py-2 rounded-lg bg-white border border-slate-200 shadow-sm">
                     <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block leading-none mb-1">{col.label}</span>
-                    <span className="text-[13px] font-bold text-slate-800 tabular-nums leading-none">
+                    <span className="text-[13px] font-bold text-black tabular-nums leading-none">
                       ₹{Number(totals[col.key]).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -2980,12 +2980,12 @@ export function ReportGenerator({ report }) {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Records</p>
-                    <p className="mt-1 text-xl font-bold text-slate-800 tabular-nums">{rows.length}</p>
+                    <p className="mt-1 text-xl font-bold text-black tabular-nums">{rows.length}</p>
                   </div>
                   {report.columns.filter(col => col.type === 'amount' && totals[col.key] !== undefined).slice(0, 3).map(col => (
                     <div key={col.key} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">{col.label}</p>
-                      <p className="mt-1 text-xl font-bold text-slate-800 tabular-nums">
+                      <p className="mt-1 text-xl font-bold text-black tabular-nums">
                         ₹{Number(totals[col.key]).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </p>
                     </div>

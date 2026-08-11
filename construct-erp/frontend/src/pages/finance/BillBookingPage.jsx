@@ -14,7 +14,7 @@ import dayjs from 'dayjs';
 
 const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const LABEL = 'block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
-const INPUT = 'w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all';
+const INPUT = 'w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-black outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all';
 
 const TRACKER_STATUS = {
   pending:        { label: 'Pending',        cls: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -363,7 +363,7 @@ function TrackerInvoicePanel({ ign, bills, onOpen, onPayables }) {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-[10px] uppercase tracking-wide text-slate-400">Total</p>
-                  <p className="text-lg font-bold font-mono text-slate-800">₹{inr(b.total_amount)}</p>
+                  <p className="text-lg font-bold font-mono text-black">₹{inr(b.total_amount)}</p>
                 </div>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
@@ -428,13 +428,13 @@ function ManualBookingPanel({ selectedIgn, items, setItem, totals, tdsPercent, s
             {items.map((it, idx) => (
               <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-800">{it.material_name}</div>
+                  <div className="font-medium text-black">{it.material_name}</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">{it.unit}</div>
                 </td>
                 <td className="px-3 py-3 text-center font-mono text-slate-500">{it.quantity_on_ign}</td>
                 <td className="px-3 py-3 text-center">
                   <input type="number" min="0"
-                    className="w-20 px-2 py-1.5 text-center bg-white border border-slate-200 rounded-lg focus:border-indigo-400 outline-none font-mono text-slate-800"
+                    className="w-20 px-2 py-1.5 text-center bg-white border border-slate-200 rounded-lg focus:border-indigo-400 outline-none font-mono text-black"
                     value={it.quantity_invoiced}
                     onChange={e => setItem(idx, { quantity_invoiced: e.target.value })} />
                 </td>
@@ -450,7 +450,7 @@ function ManualBookingPanel({ selectedIgn, items, setItem, totals, tdsPercent, s
                     value={it.tax_percent}
                     onChange={e => setItem(idx, { tax_percent: e.target.value })} />
                 </td>
-                <td className="px-4 py-3 text-right font-mono font-semibold text-slate-800">
+                <td className="px-4 py-3 text-right font-mono font-semibold text-black">
                   ₹{inr((Number(it.quantity_invoiced) || 0) * (Number(it.rate_invoiced) || 0))}
                 </td>
               </tr>
@@ -470,11 +470,11 @@ function ManualBookingPanel({ selectedIgn, items, setItem, totals, tdsPercent, s
         <div className="w-full max-w-sm space-y-3">
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500">Taxable Subtotal</span>
-            <span className="font-mono font-medium text-slate-800">₹{inr(totals.subtotal)}</span>
+            <span className="font-mono font-medium text-black">₹{inr(totals.subtotal)}</span>
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500">GST</span>
-            <span className="font-mono font-medium text-slate-800">₹{inr(totals.tax)}</span>
+            <span className="font-mono font-medium text-black">₹{inr(totals.tax)}</span>
           </div>
           <div className="flex justify-between items-center text-sm">
             <span className="text-amber-600">TDS Deduction (%)</span>

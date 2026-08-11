@@ -176,7 +176,7 @@ export default function FnFSettlementPage() {
                 const color = STATUS_COLORS[r.status]||'slate';
                 return (
                   <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">{r.full_name} <span className="text-slate-400">({r.emp_code})</span></td>
+                    <td className="px-4 py-3 font-medium text-black">{r.full_name} <span className="text-slate-400">({r.emp_code})</span></td>
                     <td className="px-4 py-3">{dayjs(r.last_working_day).format('DD-MM-YYYY')}</td>
                     <td className="px-4 py-3 capitalize">{r.exit_reason?.replace(/_/g,' ')}</td>
                     <td className="px-4 py-3 text-green-700 font-medium">₹{inr(r.gross_earnings)}</td>

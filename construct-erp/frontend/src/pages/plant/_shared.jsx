@@ -16,7 +16,7 @@ export const ddmmyyyy = (v) => (v ? dayjs(v).format('DD/MM/YYYY') : '—');
 
 /* ── Tailwind input class ───────────────────────────────────── */
 export const inputCls =
-  'w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 transition';
+  'w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm text-black outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 transition';
 
 /* ── Status badge ───────────────────────────────────────────── */
 export const STATUS_BADGE = {
@@ -106,7 +106,7 @@ export function SearchBar({ value, onChange, placeholder }) {
     <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
       <Search className="h-4 w-4 shrink-0 text-gray-400" />
       <input
-        className="flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-gray-400"
+        className="flex-1 bg-transparent text-sm text-black outline-none placeholder:text-gray-400"
         placeholder={placeholder || 'Search…'}
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -84,7 +84,7 @@ function UploadModal({ subs, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
-          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <h2 className="font-bold text-black text-sm flex items-center gap-2">
             <Upload className="w-4 h-4 text-indigo-600" /> Upload Document
           </h2>
           <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
@@ -226,7 +226,7 @@ export default function SCDocuments() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <h1 className="text-lg font-bold text-black flex items-center gap-2">
             <FolderOpen className="w-5 h-5 text-indigo-600" /> Subcontractor Documents
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">Method statements, ITPs, certificates and correspondence</p>
@@ -322,7 +322,7 @@ export default function SCDocuments() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1 pr-7">
-                    <p className="font-semibold text-slate-800 text-sm truncate group-hover:text-indigo-700">
+                    <p className="font-semibold text-black text-sm truncate group-hover:text-indigo-700">
                       {d.doc_title || d.file_name}
                     </p>
                     <p className="text-[11px] text-slate-400 truncate">{d.file_name}</p>

@@ -118,7 +118,7 @@ export default function NCRPage() {
             <AlertOctagon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">Non-Conformance Reports (NCR)</h1>
+            <h1 className="text-lg font-medium text-black">Non-Conformance Reports (NCR)</h1>
             <p className="text-xs text-slate-500">Non-Conformance Tracking — RCA &amp; CAR Lifecycle</p>
           </div>
         </div>

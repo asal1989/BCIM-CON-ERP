@@ -37,7 +37,7 @@ function BankModal({ initial, onClose }) {
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-md border border-slate-200 shadow-xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-800">{isEdit ? 'Edit Bank Account' : 'New Bank Account'}</p>
+          <p className="text-sm font-semibold text-black">{isEdit ? 'Edit Bank Account' : 'New Bank Account'}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -119,7 +119,7 @@ export default function BankAccountsPage() {
               <Landmark className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Bank Accounts</h1>
+              <h1 className="text-lg font-semibold text-black">Bank Accounts</h1>
               <p className="text-xs text-slate-400">Company bank accounts used for payments &amp; reconciliation</p>
             </div>
           </div>
@@ -153,12 +153,12 @@ export default function BankAccountsPage() {
                     <button onClick={() => { if (window.confirm('Remove this bank account?')) deleteMut.mutate(b.id); }} className="text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-slate-800">{b.account_name}</div>
+                <div className="text-sm font-semibold text-black">{b.account_name}</div>
                 <div className="text-xs text-slate-400 mt-0.5">{b.bank_name}{b.branch ? ` · ${b.branch}` : ''}</div>
                 <div className="text-xs text-slate-400 mt-0.5 font-mono">{b.account_number || '—'} {b.ifsc_code ? `· ${b.ifsc_code}` : ''}</div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] uppercase tracking-wider text-slate-400">{b.account_type}</span>
-                  <span className="text-sm font-semibold text-slate-800">{inr(b.opening_balance)}</span>
+                  <span className="text-sm font-semibold text-black">{inr(b.opening_balance)}</span>
                 </div>
               </div>
             ))}

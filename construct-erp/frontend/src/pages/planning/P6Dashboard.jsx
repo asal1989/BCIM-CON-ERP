@@ -144,7 +144,7 @@ export default function P6Dashboard() {
           {/* EVM Financials */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b bg-slate-50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800">Earned Value Metrics</h2>
+              <h2 className="text-sm font-semibold text-black">Earned Value Metrics</h2>
               <span className="text-xs text-slate-400">BAC = {fmtC(evm?.bac)}</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 divide-x">
@@ -158,7 +158,7 @@ export default function P6Dashboard() {
                 { label:'VAC',           value: fmtC(evm?.vac), sub:'Variance at Completion', neg: evm?.vac < 0 },
               ].map(item => (
                 <div key={item.label} className="p-4 text-center">
-                  <div className={`text-sm font-bold ${item.neg ? 'text-red-600' : 'text-slate-800'}`}>{item.value}</div>
+                  <div className={`text-sm font-bold ${item.neg ? 'text-red-600' : 'text-black'}`}>{item.value}</div>
                   <div className="text-[10px] font-medium text-slate-500 mt-0.5 uppercase">{item.label}</div>
                   <div className="text-[10px] text-slate-400 mt-0.5">{item.sub}</div>
                 </div>
@@ -169,7 +169,7 @@ export default function P6Dashboard() {
           {/* EVM History Chart + Activity Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">EVM Trend (PV · EV · AC)</h3>
+              <h3 className="text-sm font-semibold text-black mb-4">EVM Trend (PV · EV · AC)</h3>
               {dash.evm_history?.length ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={dash.evm_history} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -193,7 +193,7 @@ export default function P6Dashboard() {
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Activity Status</h3>
+              <h3 className="text-sm font-semibold text-black mb-4">Activity Status</h3>
               {acts && (
                 <div className="space-y-3">
                   {Object.entries(acts.breakdown || {}).map(([status, count], i) => {
@@ -231,7 +231,7 @@ export default function P6Dashboard() {
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b bg-slate-50 flex items-center gap-2">
                 <Flag className="w-4 h-4 text-indigo-500" />
-                <h3 className="text-sm font-semibold text-slate-800">
+                <h3 className="text-sm font-semibold text-black">
                   Upcoming Milestones {mils?.overdue > 0 && (
                     <span className="ml-2 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">
                       {mils.overdue} overdue
@@ -245,7 +245,7 @@ export default function P6Dashboard() {
                   return (
                     <div key={m.id} className="px-4 py-3 flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-medium text-slate-800 truncate max-w-[160px]">{m.milestone_name}</div>
+                        <div className="text-xs font-medium text-black truncate max-w-[160px]">{m.milestone_name}</div>
                         <div className="text-[10px] text-slate-400">{m.milestone_code}</div>
                       </div>
                       <div className={clsx('text-xs font-semibold',
@@ -263,7 +263,7 @@ export default function P6Dashboard() {
 
             {/* Risk */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-orange-500" /> Risk Summary
               </h3>
               {dash.risks && (
@@ -289,7 +289,7 @@ export default function P6Dashboard() {
 
             {/* MRP */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2">
                 <Package className="w-4 h-4 text-blue-500" /> Material Status
               </h3>
               <div className="text-center py-4">

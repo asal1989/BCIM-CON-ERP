@@ -127,7 +127,7 @@ export default function PlanningDashboard() {
               <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Flag className="w-4 h-4 text-indigo-600" />
-                  <h2 className="text-sm font-medium text-slate-800">Upcoming Milestones</h2>
+                  <h2 className="text-sm font-medium text-black">Upcoming Milestones</h2>
                 </div>
                 <Link to="/planning/milestones" className="text-xs text-indigo-600 hover:underline">View all →</Link>
               </div>
@@ -204,7 +204,7 @@ export default function PlanningDashboard() {
               {/* Latest S-Curve Snapshot */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-slate-800">Latest Progress</h3>
+                  <h3 className="text-sm font-medium text-black">Latest Progress</h3>
                   <Link to="/planning/progress" className="text-xs text-indigo-600 hover:underline">S-Curve →</Link>
                 </div>
                 {sc ? (

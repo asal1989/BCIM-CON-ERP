@@ -120,7 +120,7 @@ function EntryFilesModal({ wo, entry, onClose }) {
                 <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition group">
                   <span className="text-lg flex-shrink-0">{fileIcon(f.file_type)}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{f.file_name}</p>
+                    <p className="text-sm font-semibold text-black truncate">{f.file_name}</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {f.file_size ? `${(f.file_size / 1024).toFixed(0)} KB` : ''}
                       {f.onedrive_web_url && <span className="ml-2 text-sky-500 font-medium">• OneDrive</span>}
@@ -745,7 +745,7 @@ function DayLogModal({ wo, equipmentGroups, onClose, latestStockByItem = {} }) {
               )}
               {kmTotal != null && (
                 <span className="text-[11px] font-semibold text-slate-500">
-                  Distance <span className="text-slate-800 font-bold ml-1">{kmTotal.toFixed(0)} km</span>
+                  Distance <span className="text-black font-bold ml-1">{kmTotal.toFixed(0)} km</span>
                 </span>
               )}
               {dieselUsed != null && (
@@ -951,7 +951,7 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                         i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
                         {i === 0 && (
                           <td rowSpan={grouped[d].length}
-                            className="px-2.5 py-2 font-bold text-slate-800 border-r border-slate-100 align-top whitespace-nowrap">
+                            className="px-2.5 py-2 font-bold text-black border-r border-slate-100 align-top whitespace-nowrap">
                             {dayjs(d).format('DD MMM YY')}
                             <div className="text-[9px] font-normal text-slate-400">{dayjs(d).format('dddd')}</div>
                           </td>

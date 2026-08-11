@@ -25,7 +25,7 @@ function RequestRow({ req, onApprove, onReject, isPending }) {
           <User size={14} className="text-slate-500" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-800">{req.employee_name || '—'}</p>
+          <p className="text-sm font-semibold text-black">{req.employee_name || '—'}</p>
           {req.employee_code && <p className="text-xs text-slate-400">{req.employee_code}</p>}
           <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
             <span className="flex items-center gap-1">
@@ -100,7 +100,7 @@ export default function AttendanceRegularizationPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-black flex items-center gap-2">
             <ClipboardList size={20} className="text-indigo-500" /> Attendance Regularization
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">Review and approve employee punch correction requests</p>

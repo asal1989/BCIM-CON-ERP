@@ -54,7 +54,7 @@ function KpiCard({ icon: Icon, iconColor, bg, label, value, sub, delta, deltaUp,
       </div>
       <div>
         <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-        <p className="text-[28px] font-black text-slate-800 leading-none tabular-nums">{value ?? '—'}</p>
+        <p className="text-[28px] font-black text-black leading-none tabular-nums">{value ?? '—'}</p>
         {sub && <p className="text-[11px] text-slate-400 mt-1.5">{sub}</p>}
       </div>
     </div>
@@ -129,7 +129,7 @@ function RegularizeModal({ rec, onClose, onDone }) {
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
           <Avatar name={rec.employee_name} size={40}/>
           <div>
-            <p className="text-[13px] font-bold text-slate-800">{rec.employee_name}</p>
+            <p className="text-[13px] font-bold text-black">{rec.employee_name}</p>
             <p className="text-[11px] text-slate-500">{rec.employee_code || '—'} · {rec.department_name || '—'}</p>
           </div>
           <div className="ml-auto text-right">
@@ -154,7 +154,7 @@ function RegularizeModal({ rec, onClose, onDone }) {
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Corrected In-Time</label>
             <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[14px] font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-[14px] font-bold text-black focus:outline-none focus:ring-2 focus:ring-blue-400"/>
           </div>
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Status</label>
@@ -420,7 +420,7 @@ export default function AttendanceDashboardPage() {
                     : <CheckCircle2  size={16} style={{ color:'#16a34a' }}/>}
                 </div>
                 <div>
-                  <p className="text-[13px] font-black text-slate-800">
+                  <p className="text-[13px] font-black text-black">
                     {lateToday.length > 0
                       ? `${lateToday.length} Late Arrival${lateToday.length>1?'s':''} Today`
                       : lateTotalRaw > 0
@@ -488,7 +488,7 @@ export default function AttendanceDashboardPage() {
                             <div className="flex items-center gap-2.5">
                               <Avatar name={r.employee_name} size={30}/>
                               <div>
-                                <p className="text-[12px] font-bold text-slate-800">{r.employee_name}</p>
+                                <p className="text-[12px] font-bold text-black">{r.employee_name}</p>
                                 <p className="text-[10px] text-slate-400">{r.employee_code || '—'}</p>
                               </div>
                             </div>

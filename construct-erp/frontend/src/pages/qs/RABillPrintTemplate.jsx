@@ -359,7 +359,7 @@ const DeductionsPage = ({ data }) => {
                 const dColor = sign === 'pos' ? 'text-amber-700' : sign === 'neg' ? 'text-emerald-700' : 'text-slate-400';
                 return (
                   <tr key={row.label} className={idx % 2 === 0 ? 'bg-red-50/30' : 'bg-red-50/10'}>
-                    <td className="px-3 py-2 border-r border-slate-200 font-semibold text-slate-800">{row.label}</td>
+                    <td className="px-3 py-2 border-r border-slate-200 font-semibold text-black">{row.label}</td>
                     <td className="px-3 py-2 border-r border-slate-200 text-right font-mono text-slate-500">—</td>
                     <td className={`px-3 py-2 border-r border-blue-100 text-right font-mono font-semibold ${QS_CELL}`}>
                       {qsVal > 0 ? `(${money(qsVal)})` : '—'}
@@ -483,7 +483,7 @@ const MeasurementPage = ({ data }) => {
           <div key={si} className="mb-5">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-1 h-4 rounded-sm bg-slate-600" />
-              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-800">
+              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-black">
                 {si + 1}. &nbsp;{sheet.title || `Sheet ${si + 1}`}
               </div>
               {sheet.cumulative_qty != null && (
@@ -514,7 +514,7 @@ const MeasurementPage = ({ data }) => {
                   {(sheet.rows || []).map((row, ri) => (
                     <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                       <td className="px-2 py-1.5 border-r border-slate-200 text-center font-mono text-slate-500">{row.sl || ri + 1}</td>
-                      <td className="px-2 py-1.5 border-r border-slate-200 font-semibold text-slate-800">{row.description || '---'}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-200 font-semibold text-black">{row.description || '---'}</td>
                       <td className="px-2 py-1.5 border-r border-slate-200 text-center font-mono">{row.nos ?? '—'}</td>
                       <td className="px-2 py-1.5 border-r border-slate-200 text-right font-mono">{row.l != null ? Number(row.l).toFixed(3) : '—'}</td>
                       <td className="px-2 py-1.5 border-r border-slate-200 text-right font-mono">{row.b != null ? Number(row.b).toFixed(3) : '—'}</td>
@@ -531,7 +531,7 @@ const MeasurementPage = ({ data }) => {
                 <tfoot>
                   <tr className="bg-slate-100 border-t-2 border-slate-300">
                     <td colSpan={sheet.show_levels ? (sheet.show_pour_card ? 10 : 9) : (sheet.show_pour_card ? 8 : 7)}
-                        className="px-3 py-2 text-right font-bold text-[9px] text-slate-800 uppercase tracking-[0.16em]">
+                        className="px-3 py-2 text-right font-bold text-[9px] text-black uppercase tracking-[0.16em]">
                       Cumulative / Present Bill Quantity
                     </td>
                     <td className="px-2 py-2 text-right font-mono font-bold text-[10px] text-slate-900">

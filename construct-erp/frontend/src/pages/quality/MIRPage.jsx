@@ -161,7 +161,7 @@ export default function MIRPage() {
             <PackageCheck className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">Material Inspection Requests</h1>
+            <h1 className="text-xl font-semibold text-black">Material Inspection Requests</h1>
             <p className="text-xs text-slate-500">MIR Register — Pending → Inspect → Approve / Reject</p>
           </div>
         </div>
@@ -234,7 +234,7 @@ export default function MIRPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800 text-sm">{mir.material_name}</p>
+                    <p className="font-medium text-black text-sm">{mir.material_name}</p>
                     {mir.traceability_ref && <p className="text-xs text-slate-400">Batch: {mir.traceability_ref}</p>}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{mir.vendor_name || mir.vendor_name_resolved || '—'}</td>
@@ -401,7 +401,7 @@ export default function MIRPage() {
                     ].map(({ label, value }) => (
                       <div key={label} className="bg-slate-50 rounded-lg p-3">
                         <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{label}</p>
-                        <div className="text-sm font-semibold text-slate-800 mt-0.5">{value}</div>
+                        <div className="text-sm font-semibold text-black mt-0.5">{value}</div>
                       </div>
                     ))}
                   </div>

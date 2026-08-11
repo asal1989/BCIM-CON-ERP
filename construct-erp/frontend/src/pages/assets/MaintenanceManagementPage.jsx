@@ -234,7 +234,7 @@ export default function MaintenanceManagementPage() {
                         <span className={PRIO_BADGE[wo.priority]||'badge badge-gray'}>{titleCase(wo.priority)}</span>
                         <span className={STATUS_COLOR[wo.status]||'badge badge-gray'}>{titleCase(wo.status)}</span>
                       </div>
-                      <p className="text-sm font-semibold text-slate-800">
+                      <p className="text-sm font-semibold text-black">
                         <span className="text-indigo-600">{wo.asset_code}</span>
                         <span className="text-slate-400 mx-1.5">—</span>
                         {wo.asset_name}

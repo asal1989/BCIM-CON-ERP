@@ -162,7 +162,7 @@ function SectionCard({ icon: Icon, title, subtitle, badge, right, children }) {
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-slate-800 tracking-tight truncate">{title}</h3>
+              <h3 className="text-sm font-semibold text-black tracking-tight truncate">{title}</h3>
               {badge}
             </div>
             {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{subtitle}</p>}
@@ -183,7 +183,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   // input, label and table cell in this form picks it up automatically
   // without touching Edit Bill or Record Advance.
   const FIELD_HL = 'border-slate-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 shadow-sm';
-  const F = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-300 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 shadow-sm';
+  const F = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-black placeholder:text-slate-300 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 shadow-sm';
   function Lbl({ children, req }) {
     return <label className="block text-[10.5px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{children}{req && <span className="text-red-500 ml-0.5">*</span>}</label>;
   }
@@ -1165,7 +1165,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 border-t border-slate-100 text-xs">
                         <span className="text-slate-500">Basic: <b className="text-slate-700">{basic !== 0 ? `Rs ${inr(basic)}` : '—'}</b></span>
                         <span className="text-slate-500">GST: <b className="text-slate-700">{gst !== 0 ? `Rs ${inr(gst)}` : '—'}</b></span>
-                        <span className="ml-auto text-slate-500">Line Total: <b className="text-sm text-slate-800">{total !== 0 ? `Rs ${inr(total)}` : '—'}</b></span>
+                        <span className="ml-auto text-slate-500">Line Total: <b className="text-sm text-black">{total !== 0 ? `Rs ${inr(total)}` : '—'}</b></span>
                       </div>
                     </div>
                   );
@@ -1350,25 +1350,25 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 mb-5" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
                 <div>
                   <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Vendor</div>
-                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.vendor_name ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.vendor_name ? 'text-black' : 'text-slate-400 italic font-normal')}>
                     {form.vendor_name || 'Not selected'}
                   </div>
                 </div>
                 <div>
                   <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">PO / WO Reference</div>
-                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.po_number ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.po_number ? 'text-black' : 'text-slate-400 italic font-normal')}>
                     {form.po_number || '—'}
                   </div>
                 </div>
                 <div>
                   <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Invoice Number</div>
-                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_number ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_number ? 'text-black' : 'text-slate-400 italic font-normal')}>
                     {form.inv_number || 'Not entered'}
                   </div>
                 </div>
                 <div>
                   <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Invoice Date</div>
-                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_date ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_date ? 'text-black' : 'text-slate-400 italic font-normal')}>
                     {form.inv_date ? dayjs(form.inv_date).format('DD MMM YYYY') : '—'}
                   </div>
                 </div>
@@ -1388,13 +1388,13 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                     const { total } = calcItemRow(it, form.tax_mode);
                     return (
                       <tr key={i} className="border-b border-slate-100">
-                        <td className="py-1.5 text-slate-800">
+                        <td className="py-1.5 text-black">
                           {it.item_name}
                           {it.unit && <div className="text-[10px] text-slate-400">{it.unit}</div>}
                         </td>
                         <td className="py-1.5 text-right text-slate-600">{it.quantity || 0}</td>
                         <td className="py-1.5 text-right text-slate-600">₹{inr(it.rate || 0)}</td>
-                        <td className="py-1.5 text-right font-semibold text-slate-800">₹{inr(total)}</td>
+                        <td className="py-1.5 text-right font-semibold text-black">₹{inr(total)}</td>
                       </tr>
                     );
                   }) : (
@@ -1405,19 +1405,19 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
 
               <div className="ml-auto w-[230px] mt-2.5" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
                 <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
-                  <span>Basic Amount</span><span className="font-semibold text-slate-800">₹{inr(effectBasic)}</span>
+                  <span>Basic Amount</span><span className="font-semibold text-black">₹{inr(effectBasic)}</span>
                 </div>
                 <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
-                  <span>GST</span><span className="font-semibold text-slate-800">₹{inr(totalGST)}</span>
+                  <span>GST</span><span className="font-semibold text-black">₹{inr(totalGST)}</span>
                 </div>
                 {(transportAmt > 0 || otherAmt > 0) && (
                   <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
-                    <span>Extra Charges</span><span className="font-semibold text-slate-800">₹{inr(transportAmt + transportGST + otherAmt)}</span>
+                    <span>Extra Charges</span><span className="font-semibold text-black">₹{inr(transportAmt + transportGST + otherAmt)}</span>
                   </div>
                 )}
                 {tcsAmt > 0 && (
                   <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
-                    <span>TCS ({form.tcs_pct}%)</span><span className="font-semibold text-slate-800">₹{inr(tcsAmt)}</span>
+                    <span>TCS ({form.tcs_pct}%)</span><span className="font-semibold text-black">₹{inr(tcsAmt)}</span>
                   </div>
                 )}
                 {creditVal > 0 && (
@@ -1563,7 +1563,7 @@ function UntaggedItemsModal({ projectId, onClose }) {
                       <input type="checkbox" checked={!!selected[g.description]}
                         onChange={e => setSelected(prev => ({ ...prev, [g.description]: e.target.checked }))} />
                     </td>
-                    <td className="py-1.5 pr-2 text-slate-800">{g.description}<span className="text-slate-400 ml-1">({g.item_count})</span></td>
+                    <td className="py-1.5 pr-2 text-black">{g.description}<span className="text-slate-400 ml-1">({g.item_count})</span></td>
                     <td className="py-1.5 pr-2 text-xs text-slate-500 font-mono">{(g.bill_numbers || []).join(', ')}</td>
                     <td className="py-1.5 pr-2 text-right font-medium">₹{Number(g.total_basic || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="py-1.5 pr-2">
@@ -1712,7 +1712,7 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
                         <input type="checkbox" checked={!!selected[b.id]}
                           onChange={e => setSelected(prev => ({ ...prev, [b.id]: e.target.checked }))} />
                       </td>
-                      <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
+                      <td className="py-1.5 pr-2 text-black font-mono text-xs">{b.sl_number}</td>
                       <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
                       <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
                       <td className="py-1.5 pr-2 text-xs text-slate-500 capitalize">{String(b.workflow_status || '').replace(/_/g, ' ')}</td>
@@ -1846,7 +1846,7 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
                         <input type="checkbox" checked={!!selected[b.id]}
                           onChange={e => setSelected(prev => ({ ...prev, [b.id]: e.target.checked }))} />
                       </td>
-                      <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
+                      <td className="py-1.5 pr-2 text-black font-mono text-xs">{b.sl_number}</td>
                       <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
                       <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
                       <td className="py-1.5 pr-2 text-xs text-slate-500 capitalize">{String(b.workflow_status || '').replace(/_/g, ' ')}</td>
@@ -1929,7 +1929,7 @@ function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
           <div className="flex items-start gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl">
             <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium flex-shrink-0">1</div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-slate-800">Download the template</p>
+              <p className="text-sm font-medium text-black">Download the template</p>
               <p className="text-xs text-slate-900 font-medium mt-0.5">Fill it with your bills data and save as .xlsx</p>
               <button onClick={downloadTemplate}
                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50 transition-all">
@@ -1982,7 +1982,7 @@ function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
           {/* Result */}
           {result && (
             <div className={`rounded-xl p-4 border text-sm ${result.errors?.length ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
-              <div className="flex items-center gap-2 font-medium mb-2 text-slate-800">
+              <div className="flex items-center gap-2 font-medium mb-2 text-black">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 Import Complete
               </div>
@@ -2106,7 +2106,7 @@ function LineItemEditRow({ billId, item, boqItems }) {
         </select>
       </td>
       <td className="px-2 py-1.5 w-24 text-right text-xs text-slate-600">{inr(basic)}</td>
-      <td className="px-2 py-1.5 w-28 text-right text-xs font-semibold text-slate-800">{inr(total)}</td>
+      <td className="px-2 py-1.5 w-28 text-right text-xs font-semibold text-black">{inr(total)}</td>
       <td className="px-2 py-1.5 w-20 text-center">
         <div className="flex items-center gap-1 justify-center">
           <button type="button" onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}
@@ -2759,7 +2759,7 @@ function EditBillModal({ bill, projects, onClose }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
               <div className="text-center bg-white rounded-lg p-2.5 border border-blue-100">
                 <p className="text-xs text-slate-900 font-medium mb-0.5">Basic Amount</p>
-                <p className="font-medium text-slate-800">Rs {inrFmt(basicAmt)}</p>
+                <p className="font-medium text-black">Rs {inrFmt(basicAmt)}</p>
               </div>
               {hasLineItems ? (<>
                 <div className="text-center bg-white rounded-lg p-2.5 border border-blue-100">
@@ -3018,7 +3018,7 @@ function RecordAdvanceModal({ onClose, projects, vendors, defaultProjectId }) {
               <div className="absolute top-full left-0 right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
                 {filteredVendors.slice(0, 20).map(v => (
                   <button key={v.id} type="button" onMouseDown={() => handleVendorSelect(v)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors">
-                    <span className="font-medium text-slate-800">{v.name}</span>
+                    <span className="font-medium text-black">{v.name}</span>
                     {v.vendor_type && <span className="ml-2 text-xs text-slate-400">{v.vendor_type.replace(/_/g,' ')}</span>}
                   </button>
                 ))}
@@ -3583,11 +3583,11 @@ export default function BillTrackerBillsPage() {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <p className="text-xs text-slate-500">Basic Amount</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">{inrCr(totalBasicValue)}</p>
+              <p className="text-sm font-semibold text-black mt-0.5">{inrCr(totalBasicValue)}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">Total GST</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">{inrCr(totalGstValue)}</p>
+              <p className="text-sm font-semibold text-black mt-0.5">{inrCr(totalGstValue)}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">Total (incl. GST)</p>
@@ -3600,7 +3600,7 @@ export default function BillTrackerBillsPage() {
         <div className="bg-white rounded-xl px-4 py-3 flex flex-wrap gap-3 items-center shadow-sm" style={{ border: `1px solid ${BORDER}` }}>
           <div className="flex items-center gap-2 flex-1 min-w-[200px] rounded-lg px-3 py-1.5 bg-slate-50" style={{ border: `1px solid ${BORDER}` }}>
             <Search className="w-4 h-4 text-slate-900 font-medium flex-shrink-0" />
-            <input className="flex-1 text-sm outline-none bg-transparent placeholder-slate-400 text-slate-800"
+            <input className="flex-1 text-sm outline-none bg-transparent placeholder-slate-400 text-black"
               placeholder="Search bills, vendors..."
               value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch('')} className="text-slate-900 font-medium hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
@@ -3669,7 +3669,7 @@ export default function BillTrackerBillsPage() {
             <FileText className="w-4 h-4 text-emerald-600" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">
+            <h3 className="text-sm font-semibold text-black">
               {isLoading ? 'Loading…' : `${sorted.length} Bill${sorted.length !== 1 ? 's' : ''}`}
             </h3>
             <p className="text-xs text-slate-500">
@@ -4033,7 +4033,7 @@ export default function BillTrackerBillsPage() {
                 <Building2 className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <p className="font-semibold text-slate-800">Move to Another Project</p>
+                <p className="font-semibold text-black">Move to Another Project</p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {moveTarget.inv_number || moveTarget.sl_number} · {moveTarget.vendor_name}
                 </p>
@@ -4044,7 +4044,7 @@ export default function BillTrackerBillsPage() {
               <select
                 value={moveProjectId}
                 onChange={e => setMoveProjectId(e.target.value)}
-                className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-black outline-none focus:ring-2 focus:ring-indigo-300"
               >
                 <option value="">— Choose project —</option>
                 {projects.filter(p => p.id !== moveTarget.project_id).map(p => (
@@ -4084,7 +4084,7 @@ export default function BillTrackerBillsPage() {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-medium text-slate-800">Delete Bill?</p>
+                <p className="font-medium text-black">Delete Bill?</p>
                 <p className="text-xs text-slate-900 font-medium mt-0.5">
                   SL #{deleteTarget.sl_number} - {deleteTarget.vendor_name} - Inv {deleteTarget.inv_number}
                 </p>

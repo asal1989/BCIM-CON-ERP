@@ -255,7 +255,7 @@ export default function QAQCReportsPage() {
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">QA/QC Reports</h1>
+            <h1 className="text-lg font-medium text-black">QA/QC Reports</h1>
             <p className="text-xs text-slate-500">Generate and export quality assurance reports</p>
           </div>
         </div>
@@ -388,7 +388,7 @@ export default function QAQCReportsPage() {
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               <div>
-                <p className="text-sm font-medium text-slate-800">{generatedReport.title}</p>
+                <p className="text-sm font-medium text-black">{generatedReport.title}</p>
                 <p className="text-xs text-slate-400">Generated {new Date().toLocaleString('en-IN')}</p>
               </div>
             </div>
@@ -415,7 +415,7 @@ export default function QAQCReportsPage() {
               {Object.entries(generatedReport.summary).map(([key, value]) => (
                 <div key={key} className="bg-[#f8f9fc] border border-[#e2e6ec] rounded-lg p-3 text-center">
                   <p className="text-[10px] text-slate-900 font-medium uppercase tracking-wide mb-1">{key.replace(/([A-Z])/g,' $1').trim()}</p>
-                  <p className="text-xl font-medium text-slate-800">{value}</p>
+                  <p className="text-xl font-medium text-black">{value}</p>
                 </div>
               ))}
             </div>

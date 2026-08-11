@@ -302,7 +302,7 @@ function CraneCard({ crane, projects, onEdit, onDelete }) {
                         <div className="flex items-center gap-2 min-w-0">
                           <FileText size={12} className="text-slate-400 flex-shrink-0" />
                           <div className="min-w-0">
-                            <span className="font-semibold text-slate-800">{d.doc_type}</span>
+                            <span className="font-semibold text-black">{d.doc_type}</span>
                             {d.doc_number && <span className="text-slate-500 ml-2">#{d.doc_number}</span>}
                             {d.issued_by && <span className="text-slate-400 ml-2">by {d.issued_by}</span>}
                           </div>
@@ -361,7 +361,7 @@ function Spec({ label, value }) {
   return (
     <div>
       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
-      <p className="text-slate-800 font-medium mt-0.5">{value}</p>
+      <p className="text-black font-medium mt-0.5">{value}</p>
     </div>
   );
 }

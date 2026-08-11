@@ -24,7 +24,7 @@ export default function DeliveryChallansPage() {
               <Truck className="w-4 h-4 text-teal-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Delivery Challans</h1>
+              <h1 className="text-lg font-semibold text-black">Delivery Challans</h1>
               <p className="text-xs text-slate-400">Documents accompanying goods dispatched to customers</p>
             </div>
           </div>
@@ -56,7 +56,7 @@ export default function DeliveryChallansPage() {
               {rows.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50 cursor-pointer">
                   <td className="px-4 py-2.5 font-mono text-xs text-blue-700">{r.ref}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.customer}</td>
+                  <td className="px-4 py-2.5 font-medium text-black">{r.customer}</td>
                   <td className="px-4 py-2.5 text-slate-500 text-xs">{r.project}</td>
                   <td className="px-4 py-2.5 text-slate-600">{r.items} items</td>
                   <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(r.date).format('DD MMM YYYY')}</td>

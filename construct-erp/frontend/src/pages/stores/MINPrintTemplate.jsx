@@ -55,7 +55,7 @@ export default function MINPrintTemplate({ min }) {
           </div>
           <div>
              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Site Activity / Location</span>
-             <p className="text-base font-bold text-slate-800 uppercase leading-snug">{min.activity_name || 'GENERAL MAINTENANCE / UNSPECIFIED'}</p>
+             <p className="text-base font-bold text-black uppercase leading-snug">{min.activity_name || 'GENERAL MAINTENANCE / UNSPECIFIED'}</p>
           </div>
         </div>
         <div className="space-y-4">
@@ -71,7 +71,7 @@ export default function MINPrintTemplate({ min }) {
           </div>
           <div>
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Issued To / Receiver</span>
-            <p className="text-base font-medium uppercase text-slate-800">{min.issued_to || 'SITE TEAM'}</p>
+            <p className="text-base font-medium uppercase text-black">{min.issued_to || 'SITE TEAM'}</p>
             <p className="text-xs font-bold text-slate-500 uppercase mt-0.5 tracking-tight">Agency / Context: {min.contractor_name || 'LOCAL / INTERNAL WORK'}</p>
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function MINPrintTemplate({ min }) {
             {(min.items || []).map((it, idx) => (
               <tr key={idx} className="page-break-inside-avoid">
                 <td className="p-3 text-xs font-mono text-slate-400">{idx + 1}</td>
-                <td className="p-3 text-sm font-medium uppercase text-slate-800">{it.material_name}</td>
+                <td className="p-3 text-sm font-medium uppercase text-black">{it.material_name}</td>
                 <td className="p-3 text-center text-sm font-mono text-slate-500">{it.quantity_requested}</td>
                 <td className="p-3 text-center text-sm font-medium font-mono">{it.quantity_issued}</td>
                 <td className="p-3 text-[10px] font-bold uppercase text-slate-500">{it.unit}</td>

@@ -109,7 +109,7 @@ export default function TenderIssuancePage() {
             <Gavel className="w-5 h-5 text-cyan-700" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">Tender Issuance</h1>
+            <h1 className="text-lg font-medium text-black">Tender Issuance</h1>
             <p className="text-xs text-slate-500">Issue & manage tenders for work packages</p>
           </div>
         </div>
@@ -150,7 +150,7 @@ export default function TenderIssuancePage() {
             </div>
             <div>
               <p className="text-xs text-slate-900 font-medium uppercase tracking-wide">Total Estimated</p>
-              <p className="text-lg font-medium text-slate-800">{fmtCr(stats.total_estimated)}</p>
+              <p className="text-lg font-medium text-black">{fmtCr(stats.total_estimated)}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
@@ -284,7 +284,7 @@ export default function TenderIssuancePage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h2 className="text-base font-medium text-slate-800">Issue New Tender</h2>
+              <h2 className="text-base font-medium text-black">Issue New Tender</h2>
               <button onClick={() => setShowNew(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
                 <X className="w-4 h-4 text-slate-500" />
               </button>

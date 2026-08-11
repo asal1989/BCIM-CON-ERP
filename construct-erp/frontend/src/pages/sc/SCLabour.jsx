@@ -235,7 +235,7 @@ function CreateNMRModal({ wos, onClose }) {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Attendance Preview for Period</p>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { l: 'Period (days)', v: days, color: 'text-slate-800' },
+                { l: 'Period (days)', v: days, color: 'text-black' },
                 { l: 'Workers found', v: preview?.workers ?? '…', color: 'text-blue-700' },
                 { l: 'Attendance records', v: preview?.att ?? '…', color: 'text-emerald-700' },
               ].map(({ l, v, color }) => (
@@ -656,7 +656,7 @@ function NMRDrawer({ nmrId, onClose }) {
                         {woSummary.map((r, i) => (
                           <tr key={i} className={clsx('border-t border-slate-100', i % 2 ? 'bg-slate-50/40' : 'bg-white')}>
                             <td className="px-3 py-2 text-slate-400">{i+1}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-800">{r.description}</td>
+                            <td className="px-3 py-2 font-semibold text-black">{r.description}</td>
                             <td className="px-3 py-2">
                               <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide',
                                 r.basis === 'overtime'  ? 'bg-amber-100 text-amber-700'
@@ -737,7 +737,7 @@ function NMRDrawer({ nmrId, onClose }) {
                             {g.rows.map((w, i) => (
                               <tr key={w.id || w.worker_id || i} className={clsx('border-t border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30')}>
                                 <td className="px-3 py-2 sticky left-0 z-10 bg-inherit">
-                                  <p className="font-semibold text-slate-800 whitespace-nowrap">{w.worker_name}</p>
+                                  <p className="font-semibold text-black whitespace-nowrap">{w.worker_name}</p>
                                   <p className="text-[10px] font-mono text-slate-400">{w.worker_code}</p>
                                 </td>
                                 <td className="px-2 py-2 whitespace-nowrap">
@@ -806,7 +806,7 @@ function NMRDrawer({ nmrId, onClose }) {
                           <td className="px-3 py-2.5 sticky left-0 bg-slate-100" colSpan={2}>GRAND TOTAL</td>
                           {dates.map(d => <td key={d} />)}
                           <td className="px-2 py-2.5 text-center text-indigo-700 text-sm tabular-nums border-l border-slate-300">{grand.mandays.toFixed(2)}</td>
-                          <td className="px-2 py-2.5 text-right text-slate-800 tabular-nums">{fmt(grand.dayWages)}</td>
+                          <td className="px-2 py-2.5 text-right text-black tabular-nums">{fmt(grand.dayWages)}</td>
                           <td className="px-2 py-2.5 text-center text-amber-700 text-sm tabular-nums border-l border-slate-300">{grand.otHours.toFixed(1)}</td>
                           <td className="px-2 py-2.5 text-right text-amber-700 tabular-nums">{fmt(grand.otWages)}</td>
                           {hasIncentive && (
@@ -1023,7 +1023,7 @@ function EsslSyncModal({ onClose }) {
                   {(preview.preview||[]).map((r,i)=>(
                     <tr key={i} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30',!r.mapped&&'opacity-50')}>
                       <td className="px-3 py-2 font-mono text-slate-600">{r.emp_code}</td>
-                      <td className="px-3 py-2 font-semibold text-slate-800">
+                      <td className="px-3 py-2 font-semibold text-black">
                         {r.worker_name}
                         {!r.mapped && <span className="ml-1 text-[9px] bg-red-100 text-red-600 px-1 rounded">NOT MAPPED</span>}
                       </td>
@@ -1051,7 +1051,7 @@ function EsslSyncModal({ onClose }) {
             </p>
             <div className="grid grid-cols-4 gap-3">
               {[
-                ['ESSL Records', result.essl_records_found, 'text-slate-800'],
+                ['ESSL Records', result.essl_records_found, 'text-black'],
                 ['New Created',  result.created,            'text-emerald-700'],
                 ['Updated',      result.updated,            'text-blue-700'],
                 ['Skipped',      result.skipped,            'text-slate-500'],
@@ -1271,7 +1271,7 @@ export default function SCLabour() {
           {TABS.map(({ k, label, icon: Icon }) => (
             <button key={k} onClick={() => setTab(k)}
               className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
-                tab === k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50')}
+                tab === k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-black hover:bg-slate-50')}
               style={tab === k ? { background: `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` } : {}}>
               <Icon className="w-4 h-4" /> {label}
             </button>
@@ -1340,7 +1340,7 @@ export default function SCLabour() {
                   ) : filteredWorkers.map((w,i)=>(
                     <tr key={w.id} className={clsx('border-b border-slate-50 hover:bg-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
                       <td className="px-4 py-3 font-mono text-xs font-bold text-blue-600">{w.worker_code}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{w.worker_name}</td>
+                      <td className="px-4 py-3 font-semibold text-black">{w.worker_name}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{w.sc_name||'—'}</td>
                       <td className="px-4 py-3"><span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{w.skill_type}</span></td>
                       <td className="px-4 py-3 font-semibold text-slate-700">₹{Number(w.daily_rate||0).toLocaleString()}</td>
@@ -1397,7 +1397,7 @@ export default function SCLabour() {
                     </td></tr>
                   ) : attendance.map((a,i)=>(
                     <tr key={a.id} className={clsx('border-b border-slate-50', i%2===0?'bg-white':'bg-slate-50/30')}>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{a.worker_name}</td>
+                      <td className="px-4 py-3 font-semibold text-black">{a.worker_name}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{a.sc_name||'—'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{a.skill_type}</td>
                       <td className="px-4 py-3">
@@ -1466,7 +1466,7 @@ export default function SCLabour() {
                               <p className="font-semibold text-slate-700">{dayjs(n.period_from).format('DD MMM')} – {dayjs(n.period_to).format('DD MMM YYYY')}</p>
                               <p className="text-slate-400">{dayjs(n.period_to).diff(dayjs(n.period_from),'day')+1} days</p>
                             </td>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-800">{n.sc_name}</td>
+                            <td className="px-4 py-3 text-xs font-semibold text-black">{n.sc_name}</td>
                             <td className="px-4 py-3 text-xs text-slate-500">{n.project_name}</td>
                             <td className="px-4 py-3 text-center font-bold text-blue-700">{n.total_workers}</td>
                             <td className="px-4 py-3 text-center font-bold text-indigo-700">{n.total_mandays}</td>

@@ -47,7 +47,7 @@ export default function InvoicesPage() {
               <Receipt className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Invoices</h1>
+              <h1 className="text-lg font-semibold text-black">Invoices</h1>
               <p className="text-xs text-slate-400">Client RA Bills — create &amp; manage in QS &amp; Billing</p>
             </div>
           </div>
@@ -64,11 +64,11 @@ export default function InvoicesPage() {
       <div className="px-6 py-5 grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Total Invoices</div>
-          <div className="text-2xl font-semibold text-slate-800 mt-1">{filtered.length}</div>
+          <div className="text-2xl font-semibold text-black mt-1">{filtered.length}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Net Payable (filtered)</div>
-          <div className="text-2xl font-semibold text-slate-800 mt-1">{inr(totalNet)}</div>
+          <div className="text-2xl font-semibold text-black mt-1">{inr(totalNet)}</div>
         </div>
       </div>
 
@@ -107,7 +107,7 @@ export default function InvoicesPage() {
                     <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(r.bill_date).format('DD MMM YYYY')}</td>
                     <td className="px-4 py-2.5 text-slate-600">{r.project_name}</td>
                     <td className="px-4 py-2.5 text-right font-mono">{inr(r.gross_amount)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{inr(r.net_payable)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-black">{inr(r.net_payable)}</td>
                     <td className="px-4 py-2.5">
                       <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium border capitalize', STATUS_CLS[r.status] || STATUS_CLS.submitted)}>
                         {r.status?.replace(/_/g, ' ')}

@@ -144,7 +144,7 @@ function VendorTable({ vendors, docLabel }) {
         {vendors.map((v, i) => (
           <tr key={v.vendor_id || i} className="hover:bg-slate-50">
             <td className="py-2.5 pr-3">
-              <div className="font-medium text-slate-800">{(v.vendor_name || '').toUpperCase()}</div>
+              <div className="font-medium text-black">{(v.vendor_name || '').toUpperCase()}</div>
               <div className="text-slate-400 font-mono">{v.vendor_code}</div>
             </td>
             <td className="py-2.5 pr-3"><VendorTypeBadge type={v.vendor_type} /></td>
@@ -646,7 +646,7 @@ export default function VendorList() {
 
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
             <div>
-              <h2 className="text-lg font-semibold text-slate-800">{editVendor ? 'Edit Vendor' : 'Register Vendor'}</h2>
+              <h2 className="text-lg font-semibold text-black">{editVendor ? 'Edit Vendor' : 'Register Vendor'}</h2>
               <p className="text-xs text-slate-400 mt-0.5">{editVendor ? `Editing: ${editVendor.name}` : 'Add a new vendor to the master ledger'}</p>
             </div>
             <button onClick={closeForm} className="w-9 h-9 flex items-center justify-center rounded-md border border-slate-300 text-slate-500 hover:bg-slate-50 transition-colors">
@@ -827,7 +827,7 @@ function Detail({ label, value, mono }) {
   return (
     <div>
       <div className="text-[10px] text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</div>
-      <div className={clsx('text-xs text-slate-800', mono && 'font-mono')}>{value || '—'}</div>
+      <div className={clsx('text-xs text-black', mono && 'font-mono')}>{value || '—'}</div>
     </div>
   );
 }

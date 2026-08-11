@@ -422,7 +422,7 @@ function QuantityDialog({ title, subtitle, items, qtyField, onConfirm, onClose, 
           {items.map(it => (
             <div key={it.id} className="flex items-center justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
               <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-800">{it.material_name}</p>
+                <p className="text-sm font-semibold text-black">{it.material_name}</p>
                 <p className="text-xs text-slate-400">
                   Requested: {it.requested_qty} {it.unit}
                   {it.approved_qty != null && ` · Approved: ${it.approved_qty}`}
@@ -614,7 +614,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
                 <MapPin size={10} className="text-rose-400" /> From
               </p>
-              <p className="font-bold text-slate-800 text-sm">{d.from_project_name || '—'}</p>
+              <p className="font-bold text-black text-sm">{d.from_project_name || '—'}</p>
               {d.from_location && <p className="text-xs text-slate-500 mt-0.5">{d.from_location}</p>}
             </div>
             <div className="flex flex-col items-center gap-1">
@@ -626,7 +626,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
                 <MapPin size={10} className="text-teal-500" /> To
               </p>
-              <p className="font-bold text-slate-800 text-sm">{d.to_project_name || '—'}</p>
+              <p className="font-bold text-black text-sm">{d.to_project_name || '—'}</p>
               {d.to_location && <p className="text-xs text-slate-500 mt-0.5">{d.to_location}</p>}
             </div>
           </div>
@@ -651,7 +651,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
           ].map(([l, v]) => (
             <div key={l} className="bg-white border border-slate-200 rounded-lg p-3">
               <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">{l}</p>
-              <p className="font-semibold text-slate-800 mt-0.5">{v}</p>
+              <p className="font-semibold text-black mt-0.5">{v}</p>
             </div>
           ))}
         </div>
@@ -682,7 +682,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
                 {items.map((it, i) => (
                   <tr key={it.id || i} className="hover:bg-slate-50/50">
                     <td className="px-4 py-2.5 text-slate-400">{i+1}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-800">{it.material_name}</td>
+                    <td className="px-4 py-2.5 font-semibold text-black">{it.material_name}</td>
                     <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{it.material_code || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{it.unit}</td>
                     <td className="px-4 py-2.5 text-right font-semibold">{it.requested_qty}</td>
@@ -690,7 +690,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
                     <td className="px-4 py-2.5 text-right text-orange-700">{it.issued_qty ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right text-emerald-700">{it.received_qty ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right text-slate-600">{it.rate > 0 ? fmt(it.rate) : '—'}</td>
-                    <td className="px-4 py-2.5 text-right font-bold text-slate-800">{it.amount > 0 ? fmt(it.amount) : '—'}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-black">{it.amount > 0 ? fmt(it.amount) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -933,14 +933,14 @@ export default function MaterialTransferPage() {
                         <span className={clsx('px-2 py-0.5 rounded-full text-xs font-semibold', tt.color)}>{tt.label}</span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-semibold text-slate-800 text-xs">{t.from_project_name || '—'}</p>
+                        <p className="font-semibold text-black text-xs">{t.from_project_name || '—'}</p>
                         {t.from_location && <p className="text-[10px] text-slate-400 mt-0.5">{t.from_location}</p>}
                       </td>
                       <td className="px-2 py-3.5">
                         <ArrowRight size={14} className="text-slate-300" />
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-semibold text-slate-800 text-xs">{t.to_project_name || '—'}</p>
+                        <p className="font-semibold text-black text-xs">{t.to_project_name || '—'}</p>
                         {t.to_location && <p className="text-[10px] text-slate-400 mt-0.5">{t.to_location}</p>}
                       </td>
                       <td className="px-4 py-3.5 text-center">
@@ -948,7 +948,7 @@ export default function MaterialTransferPage() {
                           {t.item_count}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-right font-semibold text-slate-800">
+                      <td className="px-4 py-3.5 text-right font-semibold text-black">
                         {t.total_amount > 0 ? fmt(t.total_amount) : '—'}
                       </td>
                       <td className="px-4 py-3.5">

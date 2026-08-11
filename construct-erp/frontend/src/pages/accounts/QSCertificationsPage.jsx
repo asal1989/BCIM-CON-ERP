@@ -56,8 +56,8 @@ function CertItems({ id }) {
               <td className="py-1.5 text-slate-500">{it.unit || '—'}</td>
               <td className="py-1.5 text-right font-mono text-slate-600">{Number(it.order_qty || 0).toLocaleString('en-IN')}</td>
               <td className="py-1.5 text-right font-mono text-slate-600">{inr(it.order_rate)}</td>
-              <td className="py-1.5 text-right font-mono font-semibold text-slate-800">{Number(it.qs_pres_qty || 0).toLocaleString('en-IN')}</td>
-              <td className="py-1.5 text-right font-mono font-semibold text-slate-800">{inr(it.amount)}</td>
+              <td className="py-1.5 text-right font-mono font-semibold text-black">{Number(it.qs_pres_qty || 0).toLocaleString('en-IN')}</td>
+              <td className="py-1.5 text-right font-mono font-semibold text-black">{inr(it.amount)}</td>
               <td className="py-1.5 text-slate-400 font-mono">{it.source_inv_number || '—'}</td>
             </tr>
           ))}
@@ -98,7 +98,7 @@ function PaymentModal({ cert, onClose }) {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <h3 className="font-semibold text-slate-800">Record Payment</h3>
+            <h3 className="font-semibold text-black">Record Payment</h3>
             <p className="text-xs text-slate-400">{cert.pc_number || cert.cert_number} · {cert.vendor_name}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
@@ -106,7 +106,7 @@ function PaymentModal({ cert, onClose }) {
         <div className="px-5 py-4 space-y-3">
           <div className="flex justify-between text-xs bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
             <span className="text-slate-500">Balance due</span>
-            <span className="font-mono font-semibold text-slate-800">₹ {inr(bal(cert))}</span>
+            <span className="font-mono font-semibold text-black">₹ {inr(bal(cert))}</span>
           </div>
           <div>
             <label className="text-xs text-slate-500">Amount paid (₹)</label>
@@ -193,7 +193,7 @@ export default function QSCertificationsPage() {
               <BadgeCheck className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">QS Certifications</h1>
+              <h1 className="text-lg font-semibold text-black">QS Certifications</h1>
               <p className="text-xs text-slate-400">Vendor payment certificates certified by QS — view certified items &amp; record payment</p>
             </div>
           </div>
@@ -204,11 +204,11 @@ export default function QSCertificationsPage() {
       <div className="px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Certificates</div>
-          <div className="text-2xl font-semibold text-slate-800 mt-1">{kpi.count}</div>
+          <div className="text-2xl font-semibold text-black mt-1">{kpi.count}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Certified Value</div>
-          <div className="text-2xl font-semibold text-slate-800 mt-1">₹ {inr(kpi.certified)}</div>
+          <div className="text-2xl font-semibold text-black mt-1">₹ {inr(kpi.certified)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <div className="text-xs text-slate-400">Balance Due</div>
@@ -272,7 +272,7 @@ export default function QSCertificationsPage() {
                       <td className="px-4 py-2.5 text-slate-500">{r.project_name || '—'}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{inr(r.net_payable)}</td>
                       <td className="px-4 py-2.5 text-right font-mono text-amber-600">{inr(r.tds_amount)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{inr(bal(r))}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-black">{inr(bal(r))}</td>
                       <td className="px-4 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_CLS[r.status] || STATUS_CLS.draft}`}>
                           {STATUS_LABEL[r.status] || r.status}

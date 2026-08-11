@@ -157,7 +157,7 @@ export default function SCPayments() {
     <div className="p-6 md:p-8 min-h-screen bg-slate-50">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2"><CreditCard className="w-6 h-6 text-teal-600" />Payment Tracking</h1>
+          <h1 className="text-xl font-semibold text-black flex items-center gap-2"><CreditCard className="w-6 h-6 text-teal-600" />Payment Tracking</h1>
           <p className="text-sm text-slate-500 mt-0.5">Approved bills pending and completed payments</p>
         </div>
         <div className="flex gap-2">
@@ -198,7 +198,7 @@ export default function SCPayments() {
                         <td className="px-4 py-3 text-xs text-slate-500">{new Date(b.bill_date).toLocaleDateString('en-IN')}</td>
                         <td className="px-4 py-3 font-mono text-xs">{b.wo_number}</td>
                         <td className="px-4 py-3 text-xs">{b.sc_name}</td>
-                        <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(b.net_payable)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-black">{fmt(b.net_payable)}</td>
                         <td className="px-4 py-3 text-right font-bold text-emerald-600">{fmt(b.paid_amount)}</td>
                         <td className="px-4 py-3 text-right font-bold text-red-500">{fmt(balance)}</td>
                         <td className="px-4 py-3">

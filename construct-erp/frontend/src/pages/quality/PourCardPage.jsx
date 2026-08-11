@@ -119,7 +119,7 @@ export default function PourCardPage() {
             <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">Pour Card Management</h1>
+            <h1 className="text-xl font-semibold text-black">Pour Card Management</h1>
             <p className="text-xs text-slate-500">Pre/Post-Pour Checklists · Cube Tests · Auto-NCR on failure</p>
           </div>
         </div>
@@ -196,7 +196,7 @@ export default function PourCardPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-800 max-w-[200px]">
+                  <td className="px-4 py-3 font-medium text-black max-w-[200px]">
                     <span className="truncate block" title={pc.pour_description}>{pc.pour_description}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500 capitalize">{pc.pour_type?.replace('_',' ')}</td>

@@ -147,7 +147,7 @@ export default function WorkerList() {
                           {w.name.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-medium text-slate-800">{w.name}</div>
+                          <div className="font-medium text-black">{w.name}</div>
                           <div className="text-xs text-slate-400 font-mono">{w.worker_code}</div>
                         </div>
                       </div>
@@ -162,7 +162,7 @@ export default function WorkerList() {
                       <div className="text-xs text-slate-400">{w.contractor_name || 'Direct'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-slate-800">₹{w.daily_rate}</span>
+                      <span className="font-medium text-black">₹{w.daily_rate}</span>
                       <span className="text-xs text-slate-400">/day</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 font-mono">
@@ -259,7 +259,7 @@ export default function WorkerList() {
   );
 }
 
-const inputCls = 'w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all';
+const inputCls = 'w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-black outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all';
 
 function FormField({ label, children }) {
   return (
@@ -278,7 +278,7 @@ function SummaryCard({ label, value, icon: Icon, iconColor, bg }) {
       </div>
       <div>
         <div className="text-xs text-slate-500 font-medium">{label}</div>
-        <div className="text-xl font-bold text-slate-800 leading-tight">{value}</div>
+        <div className="text-xl font-bold text-black leading-tight">{value}</div>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
-function KPICard({ label, value, sub, color = 'text-slate-800' }) {
+function KPICard({ label, value, sub, color = 'text-black' }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
       <p className="text-xs font-medium text-slate-900 font-medium uppercase tracking-wide mb-1">{label}</p>
@@ -106,7 +106,7 @@ export default function BillTrackerDeductionRegisterPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <KPICard label="Gross Billed"       value={summary.total_gross}      color="text-slate-800" />
+        <KPICard label="Gross Billed"       value={summary.total_gross}      color="text-black" />
         <KPICard label="Retention Held"     value={summary.total_retention}  color="text-amber-600" />
         <KPICard label="Advance Recovered"  value={summary.total_advance}    color="text-orange-600" />
         <KPICard label="TDS Deducted"       value={summary.total_tds}        color="text-red-600" />
@@ -176,7 +176,7 @@ export default function BillTrackerDeductionRegisterPage() {
                       <td className="px-4 py-2.5 font-mono font-medium text-indigo-700 whitespace-nowrap">{r.wo_number || '—'}</td>
                       <td className="px-4 py-2.5 font-medium text-slate-900 font-medium max-w-[180px] truncate" title={(r.vendor_name || '').toUpperCase()}>{(r.vendor_name || '').toUpperCase()}</td>
                       <td className="px-4 py-2.5 text-center text-slate-500">{r.bill_count}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-slate-800">₹{inr(r.gross_billed)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-black">₹{inr(r.gross_billed)}</td>
                       <td className="px-4 py-2.5 text-right text-amber-700 font-medium bg-amber-50/40">
                         {parseFloat(r.retention_held) > 0 ? `₹${inr(r.retention_held)}` : '—'}
                       </td>

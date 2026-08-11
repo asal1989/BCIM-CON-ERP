@@ -54,7 +54,7 @@ function SectionTitle({ icon: Icon, title, subtitle, action }) {
           <Icon className="w-4 h-4 text-emerald-600" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
           {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
         </div>
       </div>
@@ -326,7 +326,7 @@ export default function QSDashboardPage() {
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0 last:pb-0">
                   <span className="text-xs text-slate-500">{label}</span>
-                  <span className="text-sm font-bold text-slate-800">{value}</span>
+                  <span className="text-sm font-bold text-black">{value}</span>
                 </div>
               ))}
             </div>
@@ -343,10 +343,10 @@ export default function QSDashboardPage() {
             <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${contractVal > 0 ? Math.min(100, (certifiedVal / contractVal) * 100) : 0}%`, background: '#10B981' }} />
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3">
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-300" /><span className="text-[11px] text-slate-500">Contract: <b className="text-slate-800">{fmt(contractVal)}</b></span></div>
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#BFDBFE' }} /><span className="text-[11px] text-slate-500">Billed: <b className="text-slate-800">{fmt(billedToDate)}</b></span></div>
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span className="text-[11px] text-slate-500">Certified: <b className="text-slate-800">{fmt(certifiedVal)}</b></span></div>
-            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /><span className="text-[11px] text-slate-500">Balance to Complete: <b className="text-slate-800">{fmt(balanceToComplete)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-300" /><span className="text-[11px] text-slate-500">Contract: <b className="text-black">{fmt(contractVal)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#BFDBFE' }} /><span className="text-[11px] text-slate-500">Billed: <b className="text-black">{fmt(billedToDate)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span className="text-[11px] text-slate-500">Certified: <b className="text-black">{fmt(certifiedVal)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /><span className="text-[11px] text-slate-500">Balance to Complete: <b className="text-black">{fmt(balanceToComplete)}</b></span></div>
           </div>
         </div>
 
@@ -422,7 +422,7 @@ export default function QSDashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-[10px] text-slate-400">{fmt(d.amount)}</span>
-                      <span className="text-xs font-bold text-slate-800 w-4 text-right">{d.count}</span>
+                      <span className="text-xs font-bold text-black w-4 text-right">{d.count}</span>
                     </div>
                   </div>
                 ))}
@@ -532,7 +532,7 @@ export default function QSDashboardPage() {
                           <span className="text-xs text-slate-500">{bill.bill_date ? dayjs(bill.bill_date).format('DD MMM YY') : '—'}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-semibold text-slate-800">{fmt(gross)}</span>
+                          <span className="text-xs font-semibold text-black">{fmt(gross)}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold text-emerald-600">{fmt(rcvd)}</span>
@@ -578,11 +578,11 @@ export default function QSDashboardPage() {
                 {variations.slice(0, 5).map(v => (
                   <div key={v.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{v.vo_number || v.description?.slice(0,40) || 'Variation'}</p>
+                      <p className="text-xs font-semibold text-black truncate">{v.vo_number || v.description?.slice(0,40) || 'Variation'}</p>
                       <p className="text-[10px] text-slate-400">{v.project_name || '—'}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      <span className="text-xs font-bold text-slate-800">{fmt(v.total_variation_amount)}</span>
+                      <span className="text-xs font-bold text-black">{fmt(v.total_variation_amount)}</span>
                       <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase',
                         v.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
                         {v.status || 'pending'}
@@ -608,7 +608,7 @@ export default function QSDashboardPage() {
                 {retentions.slice(0, 5).map(r => (
                   <div key={r.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{r.contractor_name || r.project_name || 'Retention'}</p>
+                      <p className="text-xs font-semibold text-black truncate">{r.contractor_name || r.project_name || 'Retention'}</p>
                       <p className="text-[10px] text-slate-400">{r.project_name || '—'}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">

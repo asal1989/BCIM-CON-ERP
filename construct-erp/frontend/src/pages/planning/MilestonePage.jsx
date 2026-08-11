@@ -113,7 +113,7 @@ export default function MilestonePage() {
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2">
               <Flag className="w-4 h-4 text-indigo-600" />
-              <h2 className="text-sm font-medium text-slate-800">Milestone Timeline</h2>
+              <h2 className="text-sm font-medium text-black">Milestone Timeline</h2>
             </div>
 
             <div className="divide-y divide-slate-50">
@@ -149,7 +149,7 @@ export default function MilestonePage() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-800">{m.milestone_name}</span>
+                        <span className="text-sm font-medium text-black">{m.milestone_name}</span>
                         <span className="text-xs text-slate-900 font-medium font-mono">{m.milestone_code}</span>
                         {m.affects_payment_release && (
                           <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-bold">PAYMENT GATE</span>
@@ -217,7 +217,7 @@ function AchieveModal({ milestone: m, canAchieve, onClose, onAchieve, isPending 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-slate-900 font-medium mb-1">Target Date</div>
-              <div className="font-medium text-slate-800">{dayjs(m.target_date).format('DD MMM YYYY')}</div>
+              <div className="font-medium text-black">{dayjs(m.target_date).format('DD MMM YYYY')}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-slate-900 font-medium mb-1">Type</div>

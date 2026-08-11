@@ -123,7 +123,7 @@ function Kpi3DCard({ icon: Icon, value, label, sub, iconBg, iconText, active, on
           style={{ transform: 'translateZ(24px)' }}>
           <Icon className={clsx('w-4.5 h-4.5', iconText)} style={{ transform: 'translateZ(4px)' }} />
         </div>
-        <div className="text-2xl font-bold text-slate-800 leading-tight" style={{ transform: 'translateZ(18px)' }}>{value}</div>
+        <div className="text-2xl font-bold text-black leading-tight" style={{ transform: 'translateZ(18px)' }}>{value}</div>
         <div className="text-xs text-slate-400 mt-0.5" style={{ transform: 'translateZ(10px)' }}>{label}</div>
         {sub && <div className="text-[11px] text-slate-400 mt-1 truncate" style={{ transform: 'translateZ(10px)' }}>{sub}</div>}
       </motion.div>
@@ -182,7 +182,7 @@ function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <h3 className="text-sm font-medium text-slate-800">Digital Signature</h3>
+            <h3 className="text-sm font-medium text-black">Digital Signature</h3>
             <p className="text-xs text-slate-500 mt-0.5">{signerRole} — {signerName}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
@@ -915,7 +915,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                       <input type="number" className={clsx(Z_INP, 'text-center !px-1')} value={it.gst_rate} onChange={e => setItem(i, 'gst_rate', e.target.value)} />
                       <div className="text-right font-mono text-xs text-slate-600">{c.taxable ? inr(c.taxable) : '—'}</div>
                       <div className="text-right font-mono text-xs text-amber-600">{c.gstAmt ? inr(c.gstAmt) : '—'}</div>
-                      <div className="text-right font-mono text-xs font-semibold text-slate-800">{c.total ? inr(c.total) : '—'}</div>
+                      <div className="text-right font-mono text-xs font-semibold text-black">{c.total ? inr(c.total) : '—'}</div>
                       <button onClick={() => removeItem(i)} disabled={items.length === 1}
                         className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 transition-all">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1040,7 +1040,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                 ['Freight', form.freight_mode || '—'],
                 ['Transport', form.transport_mode || '—'],
               ].map(([l, v]) => (
-                <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-slate-800 truncate">{v}</p></div>
+                <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-black truncate">{v}</p></div>
               ))}
             </div>
           </div>
@@ -1060,7 +1060,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                     return (
                       <tr key={idx} className="border-t border-slate-100">
                         <td className="px-3 py-2 font-mono text-slate-400">{idx + 1}</td>
-                        <td className="px-3 py-2 font-medium text-slate-800">{it.material_name}</td>
+                        <td className="px-3 py-2 font-medium text-black">{it.material_name}</td>
                         <td className="px-3 py-2 text-right font-mono">{it.quantity} {it.unit}</td>
                         <td className="px-3 py-2 text-right font-mono">{inr(parseFloat(it.rate) || 0)}</td>
                         <td className="px-3 py-2 text-right font-mono">{inr(c.taxable)}</td>
@@ -1430,7 +1430,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             ].map(([label, value]) => (
               <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">{label}</p>
-                <p className="text-sm font-medium text-slate-800">{value}</p>
+                <p className="text-sm font-medium text-black">{value}</p>
               </div>
             ))}
           </div>
@@ -1468,7 +1468,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="px-3 py-2.5 text-slate-400 font-mono">{i + 1}</td>
-                        <td className="px-3 py-2.5 font-medium text-slate-800">
+                        <td className="px-3 py-2.5 font-medium text-black">
                           {it.material_name}
                           {it.make_model && <div className="text-xs text-indigo-600 font-medium">{it.make_model}</div>}
                           {it.hsn_code && <div className="text-slate-400 text-xs">HSN: {it.hsn_code}</div>}
@@ -1479,11 +1479,11 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                         <td className="px-3 py-2.5 font-medium text-indigo-600">{parseFloat(it.quantity)}</td>
                         <td className="px-3 py-2.5 text-slate-600">{inr(it.rate)}</td>
                         {isTaxInclusive ? (
-                          <td className="px-3 py-2.5 font-medium text-slate-800">{inr(total)}</td>
+                          <td className="px-3 py-2.5 font-medium text-black">{inr(total)}</td>
                         ) : (<>
-                          <td className="px-3 py-2.5 font-medium text-slate-800">{inr(basic)}</td>
+                          <td className="px-3 py-2.5 font-medium text-black">{inr(basic)}</td>
                           <td className="px-3 py-2.5 text-amber-600">{inr(gst)}</td>
-                          <td className="px-3 py-2.5 font-medium text-slate-800">{inr(total)}</td>
+                          <td className="px-3 py-2.5 font-medium text-black">{inr(total)}</td>
                         </>)}
                       </tr>
                     );
@@ -1562,7 +1562,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             {billsSummary.count > 0 && (
               <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
                 {[
-                  { label: 'Total Billed',  value: inr(billsSummary.total_billed),   color: 'text-slate-800' },
+                  { label: 'Total Billed',  value: inr(billsSummary.total_billed),   color: 'text-black' },
                   { label: 'Approved',      value: inr(billsSummary.total_approved), color: 'text-emerald-600' },
                   { label: 'Pending',       value: inr(billsSummary.total_pending),  color: 'text-amber-600' },
                 ].map((k, i) => (
@@ -1595,14 +1595,14 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                       return (
                         <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-3 py-2.5 text-slate-400 font-mono">{b.sl_number}</td>
-                          <td className="px-3 py-2.5 font-medium text-slate-800">
+                          <td className="px-3 py-2.5 font-medium text-black">
                             {b.inv_number || '—'}
                             {b.work_desc && <div className="text-slate-400 truncate max-w-[140px]">{b.work_desc}</div>}
                           </td>
                           <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                             {b.inv_date ? dayjs(b.inv_date).format('DD-MM-YYYY') : '—'}
                           </td>
-                          <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{inr(b.total_amount)}</td>
+                          <td className="px-3 py-2.5 font-medium text-black whitespace-nowrap">{inr(b.total_amount)}</td>
                           <td className="px-3 py-2.5">
                             <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium border', st.cls)}>
                               {st.label}
@@ -2500,7 +2500,7 @@ export default function POPage() {
           <div className="flex items-center gap-2 text-xs text-slate-400 font-medium mb-1">
             <ShoppingCart className="w-3.5 h-3.5" /> Procurement
           </div>
-          <h1 className="text-xl font-semibold text-slate-800">Purchase Orders</h1>
+          <h1 className="text-xl font-semibold text-black">Purchase Orders</h1>
           <p className="text-sm text-slate-400 mt-0.5">4-stage authorization workflow</p>
         </div>
         <div className="flex items-center gap-2">

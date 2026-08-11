@@ -28,7 +28,7 @@ function AgingTable({ rows, buckets, total, dateLabel, nameLabel, amountLabel })
         {AGE_BUCKETS.map(b => (
           <div key={b} className="bg-white border border-slate-200 rounded-md p-4">
             <div className="text-xs text-slate-400">{AGE_LABELS[b]}</div>
-            <div className="text-lg font-semibold text-slate-800 mt-1">{inr(buckets?.[b] || 0)}</div>
+            <div className="text-lg font-semibold text-black mt-1">{inr(buckets?.[b] || 0)}</div>
           </div>
         ))}
       </div>
@@ -47,19 +47,19 @@ function AgingTable({ rows, buckets, total, dateLabel, nameLabel, amountLabel })
             <tbody className="divide-y divide-slate-50">
               {rows.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 text-slate-800">{r.party}<div className="text-[11px] text-slate-400">{r.ref}</div></td>
+                  <td className="px-4 py-2 text-black">{r.party}<div className="text-[11px] text-slate-400">{r.ref}</div></td>
                   <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{dayjs(r.date).format('DD MMM YYYY')}</td>
                   <td className="px-4 py-2 text-slate-600">{r.age_days}</td>
                   <td className="px-4 py-2 text-slate-500 text-xs">{AGE_LABELS[r.bucket]}</td>
-                  <td className="px-4 py-2 text-right font-mono font-semibold text-slate-800">{inr(r.amount)}</td>
+                  <td className="px-4 py-2 text-right font-mono font-semibold text-black">{inr(r.amount)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
-          <span className="text-sm font-semibold text-slate-800">Total Outstanding</span>
-          <span className="text-sm font-mono font-semibold text-slate-800">{inr(total)}</span>
+          <span className="text-sm font-semibold text-black">Total Outstanding</span>
+          <span className="text-sm font-mono font-semibold text-black">{inr(total)}</span>
         </div>
       </div>
     </div>
@@ -292,7 +292,7 @@ function Section({ title, rows, total, totalLabel }) {
             {rows.map(r => (
               <tr key={r.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 text-slate-600 text-xs font-mono">{r.code}</td>
-                <td className="px-4 py-2 text-slate-800">{r.name}</td>
+                <td className="px-4 py-2 text-black">{r.name}</td>
                 <td className="px-4 py-2 text-right font-mono">{inr(Math.abs(Number(r.balance || 0)))}</td>
               </tr>
             ))}
@@ -300,8 +300,8 @@ function Section({ title, rows, total, totalLabel }) {
         </table>
       )}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
-        <span className="text-sm font-semibold text-slate-800">{totalLabel}</span>
-        <span className="text-sm font-mono font-semibold text-slate-800">{inr(Math.abs(total))}</span>
+        <span className="text-sm font-semibold text-black">{totalLabel}</span>
+        <span className="text-sm font-mono font-semibold text-black">{inr(Math.abs(total))}</span>
       </div>
     </div>
   );
@@ -345,7 +345,7 @@ function DayBookView({ entries, from, to, onFrom, onTo }) {
                 <tbody className="divide-y divide-slate-50">
                   {e.lines.map(l => (
                     <tr key={l.id}>
-                      <td className="px-4 py-1.5 text-slate-800">{l.account_code} — {l.account_name}</td>
+                      <td className="px-4 py-1.5 text-black">{l.account_code} — {l.account_name}</td>
                       <td className="px-4 py-1.5 text-slate-500 text-xs">{l.description || '—'}</td>
                       <td className="px-4 py-1.5 text-right font-mono">{Number(l.debit) > 0 ? inr(l.debit) : ''}</td>
                       <td className="px-4 py-1.5 text-right font-mono">{Number(l.credit) > 0 ? inr(l.credit) : ''}</td>
@@ -356,8 +356,8 @@ function DayBookView({ entries, from, to, onFrom, onTo }) {
             </div>
           ))}
           <div className="bg-slate-50 border border-slate-200 rounded-md p-4 flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-800">Total</span>
-            <span className="text-sm font-mono font-semibold text-slate-800">Dr {inr(grandDebit)} &nbsp;|&nbsp; Cr {inr(grandCredit)}</span>
+            <span className="text-sm font-semibold text-black">Total</span>
+            <span className="text-sm font-mono font-semibold text-black">Dr {inr(grandDebit)} &nbsp;|&nbsp; Cr {inr(grandCredit)}</span>
           </div>
         </div>
       )}
@@ -498,7 +498,7 @@ export default function AccountingReportsPage({ initialTab }) {
               <FileBarChart className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Financial Reports</h1>
+              <h1 className="text-lg font-semibold text-black">Financial Reports</h1>
               <p className="text-xs text-slate-400">Trial Balance, Profit &amp; Loss and Balance Sheet from posted journal entries</p>
             </div>
           </div>
@@ -577,8 +577,8 @@ export default function AccountingReportsPage({ initialTab }) {
             <Section title="Expenses" rows={byType.expense} total={totalExpense} totalLabel="Total Expenses" />
             <div className={clsx('rounded-md border p-4 flex items-center justify-between',
               netProfit >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100')}>
-              <span className="text-sm font-semibold text-slate-800">{netProfit >= 0 ? 'Net Profit' : 'Net Loss'}</span>
-              <span className="text-lg font-mono font-bold text-slate-800">{inr(Math.abs(netProfit))}</span>
+              <span className="text-sm font-semibold text-black">{netProfit >= 0 ? 'Net Profit' : 'Net Loss'}</span>
+              <span className="text-lg font-mono font-bold text-black">{inr(Math.abs(netProfit))}</span>
             </div>
           </div>
         ) : (
@@ -593,7 +593,7 @@ export default function AccountingReportsPage({ initialTab }) {
               Math.abs(Math.abs(totalAssets) - (Math.abs(totalLiabilities) + Math.abs(totalEquity) + Math.abs(retainedEarnings))) < 0.01
                 ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100')}>
               <span className="text-sm font-medium text-slate-700">Assets = Liabilities + Equity</span>
-              <span className="text-sm font-mono font-semibold text-slate-800">
+              <span className="text-sm font-mono font-semibold text-black">
                 {inr(Math.abs(totalAssets))} = {inr(Math.abs(totalLiabilities) + Math.abs(totalEquity) + Math.abs(retainedEarnings))}
               </span>
             </div>

@@ -152,7 +152,7 @@ function KpiGrid({ items }) {
       {items.map((k, i) => (
         <div key={i} className="rounded-2xl border border-slate-200 p-3.5 bg-white shadow-sm transition-shadow hover:shadow-md">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{k.label}</p>
-          <p className={clsx('text-lg font-extrabold leading-tight', k.color || 'text-slate-800')}
+          <p className={clsx('text-lg font-extrabold leading-tight', k.color || 'text-black')}
             style={{ fontVariantNumeric: 'tabular-nums' }}>{k.value}</p>
           {k.sub && <p className="text-[10px] text-slate-400 font-medium mt-1">{k.sub}</p>}
         </div>
@@ -552,7 +552,7 @@ export default function BillTrackerReportsPage() {
                       sidebarOpen ? 'px-2.5 py-2 text-xs' : 'px-0 py-2 justify-center',
                       active
                         ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                        : 'text-slate-500 font-medium hover:bg-slate-100 hover:text-slate-800'
+                        : 'text-slate-500 font-medium hover:bg-slate-100 hover:text-black'
                     )}>
                     <Icon className="flex-shrink-0 w-3.5 h-3.5" />
                     {sidebarOpen && <span className="truncate">{item.label}</span>}
@@ -613,7 +613,7 @@ export default function BillTrackerReportsPage() {
             {PRESETS.map(p => (
               <button key={p.key} onClick={() => setPreset(p.key)}
                 className={clsx('h-7 px-2.5 rounded-md text-[11px] font-semibold transition-all',
-                  preset === p.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  preset === p.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-black'
                 )}>{p.label}</button>
             ))}
           </div>

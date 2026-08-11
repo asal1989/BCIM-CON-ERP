@@ -256,7 +256,7 @@ export default function ShiftManagementPage() {
                     <Clock size={18} className="text-blue-600" />
                   </div>
                   <div>
-                    <div className="font-semibold text-sm text-slate-800">{s.name} {s.code && <span className="text-slate-400 font-normal">({s.code})</span>}</div>
+                    <div className="font-semibold text-sm text-black">{s.name} {s.code && <span className="text-slate-400 font-normal">({s.code})</span>}</div>
                     <div className="text-xs text-slate-500">{s.start_time} – {s.end_time} · Break {s.break_minutes}m {s.is_night_shift&&'· Night'}</div>
                   </div>
                 </div>
@@ -289,7 +289,7 @@ export default function ShiftManagementPage() {
               <tbody>
                 {empShifts.map(es=>(
                   <tr key={es.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium text-slate-800">{es.employee_name} <span className="text-slate-400">({es.emp_code})</span></td>
+                    <td className="px-4 py-3 font-medium text-black">{es.employee_name} <span className="text-slate-400">({es.emp_code})</span></td>
                     <td className="px-4 py-3">{es.shift_name}</td>
                     <td className="px-4 py-3 font-mono">{es.start_time}</td>
                     <td className="px-4 py-3 font-mono">{es.end_time}</td>

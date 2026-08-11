@@ -251,7 +251,7 @@ function BillApprovalCard({ bill, stages, onReview }) {
                 {dayjs(bill.bill_date).format('DD MMM YYYY')}
               </span>
             </div>
-            <div className="font-semibold text-slate-800 truncate">{bill.sc_name}</div>
+            <div className="font-semibold text-black truncate">{bill.sc_name}</div>
             <div className="text-xs text-slate-400">{bill.wo_number} · {bill.project_name}</div>
           </div>
           <div className="text-right flex-shrink-0">
@@ -499,7 +499,7 @@ export default function SCBillApproval() {
       {/* ── Page header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-black flex items-center gap-2">
             <ShieldCheck className="w-6 h-6 text-blue-600" />
             Bill Approval Workflow
           </h1>
@@ -530,7 +530,7 @@ export default function SCBillApproval() {
                 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
                 statusFilter === v
                   ? 'bg-white text-blue-700 shadow-sm font-semibold'
-                  : 'text-slate-600 hover:text-slate-800'
+                  : 'text-slate-600 hover:text-black'
               )}>
               {l}
             </button>

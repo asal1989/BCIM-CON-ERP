@@ -392,7 +392,7 @@ function APAgingTab({ projects, projectId, setProjectId }) {
             <p className="text-[9px] font-medium uppercase tracking-widest text-slate-900 font-medium mb-1">
               {b === 'unscheduled' ? 'Unscheduled' : `${b} Days`}
             </p>
-            <p className="text-lg font-medium text-slate-800">{summary[b].count}</p>
+            <p className="text-lg font-medium text-black">{summary[b].count}</p>
             <p className="text-[10px] font-medium text-slate-900 mt-0.5">{lakh(summary[b].balance)}</p>
           </div>
         ))}
@@ -509,7 +509,7 @@ export default function FinanceIntelligencePage() {
             <Building2 className="w-5 h-5 text-slate-500" />
             <span className="text-xs text-slate-900 font-medium font-medium">Finance</span>
           </div>
-          <h1 className="text-xl font-medium text-slate-800">Finance Intelligence</h1>
+          <h1 className="text-xl font-medium text-black">Finance Intelligence</h1>
           <p className="text-sm text-slate-900 font-medium mt-0.5">Vendor ledger · Budget vs actual · Project P&L · AP aging</p>
         </div>
       </div>

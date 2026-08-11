@@ -28,7 +28,7 @@ function Panel({ title, icon: Icon, delay, children }) {
       style={{ boxShadow: '0 1px 3px rgba(15,23,42,.05), 0 6px 20px rgba(15,23,42,.04)' }}>
       <div className="flex items-center gap-2 mb-4">
         <Icon className="w-4 h-4 text-blue-600" />
-        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+        <h3 className="text-sm font-bold text-black">{title}</h3>
       </div>
       {children}
     </motion.div>
@@ -93,7 +93,7 @@ export default function ComplianceAnalytics({ rows }) {
             <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600">
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
               <span className="truncate">{d.name}</span>
-              <span className="ml-auto font-semibold text-slate-800">{d.value}</span>
+              <span className="ml-auto font-semibold text-black">{d.value}</span>
             </div>
           ))}
         </div>
@@ -128,7 +128,7 @@ export default function ComplianceAnalytics({ rows }) {
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{r.name}</p>
+                  <p className="text-sm font-semibold text-black truncate">{r.name}</p>
                   <p className="text-xs text-slate-400">{d === 0 ? 'Due today' : `In ${d} day${d === 1 ? '' : 's'}`} · {r.owner}</p>
                 </div>
               </div>

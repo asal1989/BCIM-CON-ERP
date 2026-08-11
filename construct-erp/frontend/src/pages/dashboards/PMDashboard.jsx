@@ -33,7 +33,7 @@ function SectionTitle({ icon: Icon, title, subtitle, action }) {
           <Icon className="w-4 h-4 text-emerald-600" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
           {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
         </div>
       </div>

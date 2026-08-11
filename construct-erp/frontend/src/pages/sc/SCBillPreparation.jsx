@@ -305,7 +305,7 @@ function NMRBillModal({ wo, onClose }) {
               ].map(([l,v])=>(
                 <div key={l} className="bg-white border border-emerald-100 rounded-xl p-2.5">
                   <p className="text-[9px] font-bold text-slate-400 uppercase">{l}</p>
-                  <p className="text-xs font-semibold text-slate-800">{v}</p>
+                  <p className="text-xs font-semibold text-black">{v}</p>
                 </div>
               ))}
             </div>
@@ -716,7 +716,7 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
                               overBill ? 'bg-red-50' : atLimit ? 'bg-amber-50' : i%2===0 ? 'bg-white' : 'bg-slate-50/30')}>
                               <td className="px-3 py-3 text-slate-400 font-semibold">{i+1}</td>
                               <td className="px-3 py-3 max-w-[180px]">
-                                <p className="font-semibold text-slate-800 leading-tight">{it.description}</p>
+                                <p className="font-semibold text-black leading-tight">{it.description}</p>
                                 {it.item_code && <p className="text-slate-400 text-[9px] mt-0.5 font-mono">{it.item_code}</p>}
                               </td>
                               <td className="px-3 py-3 text-slate-500 whitespace-nowrap">{it.unit || '—'}</td>
@@ -1039,7 +1039,7 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
                   ].filter(Boolean).map(({ label, value, bold, border, deduct, add }) => (
                     <div key={label} className={clsx('flex justify-between items-center py-2',
                       border ? 'border-y border-slate-200 my-1 font-bold' : 'border-b border-slate-50')}>
-                      <span className={clsx('text-sm', bold ? 'font-bold text-slate-800' : deduct ? 'text-red-600' : add ? 'text-indigo-600' : 'text-slate-600')}>{label}</span>
+                      <span className={clsx('text-sm', bold ? 'font-bold text-black' : deduct ? 'text-red-600' : add ? 'text-indigo-600' : 'text-slate-600')}>{label}</span>
                       <span className={clsx('text-sm font-semibold tabular-nums', bold ? 'text-slate-900' : deduct ? 'text-red-600' : add ? 'text-indigo-600' : 'text-slate-700')}>
                         {fmt2(value)}
                       </span>
@@ -1367,7 +1367,7 @@ function BillAttachmentsPanel({ billId }) {
             <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition group">
               <span className="text-lg flex-shrink-0">{fileIcon(f.file_type)}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{f.file_name}</p>
+                <p className="text-sm font-semibold text-black truncate">{f.file_name}</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   {f.file_size ? `${(f.file_size / 1024).toFixed(0)} KB` : ''}
                   {f.onedrive_web_url && <span className="ml-2 text-sky-500 font-medium">• OneDrive</span>}
@@ -1471,10 +1471,10 @@ function BillDetailPage({ billId, onClose }) {
 
   const infoCards = [
     { label: 'WO Number',     value: b.wo_number, Icon: FileText,     mono: true, tint: 'text-indigo-700', bg: 'bg-indigo-50', ic: 'text-indigo-500', accent: 'bg-indigo-500' },
-    { label: 'Bill Date',     value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—', Icon: CalendarDays, tint: 'text-slate-800', bg: 'bg-sky-50', ic: 'text-sky-500', accent: 'bg-sky-500' },
-    { label: 'Bill Type',     value: (b.bill_type||'ra').toUpperCase(), Icon: Layers, tint: 'text-slate-800', bg: 'bg-violet-50', ic: 'text-violet-500', accent: 'bg-violet-500' },
-    { label: 'Subcontractor', value: b.sc_name, Icon: HardHat, tint: 'text-slate-800', bg: 'bg-amber-50', ic: 'text-amber-500', accent: 'bg-amber-500' },
-    { label: 'Invoice No.',   value: b.invoice_number || '—', mono: true, Icon: Receipt, tint: 'text-slate-800', bg: 'bg-rose-50', ic: 'text-rose-500', accent: 'bg-rose-500' },
+    { label: 'Bill Date',     value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—', Icon: CalendarDays, tint: 'text-black', bg: 'bg-sky-50', ic: 'text-sky-500', accent: 'bg-sky-500' },
+    { label: 'Bill Type',     value: (b.bill_type||'ra').toUpperCase(), Icon: Layers, tint: 'text-black', bg: 'bg-violet-50', ic: 'text-violet-500', accent: 'bg-violet-500' },
+    { label: 'Subcontractor', value: b.sc_name, Icon: HardHat, tint: 'text-black', bg: 'bg-amber-50', ic: 'text-amber-500', accent: 'bg-amber-500' },
+    { label: 'Invoice No.',   value: b.invoice_number || '—', mono: true, Icon: Receipt, tint: 'text-black', bg: 'bg-rose-50', ic: 'text-rose-500', accent: 'bg-rose-500' },
   ];
 
   return (
@@ -1626,7 +1626,7 @@ function BillDetailPage({ billId, onClose }) {
                               {group.items.map(it => (
                                 <tr key={it._row} className="hover:bg-slate-50/60 transition-colors">
                                   <td className="px-5 py-3.5 min-w-[180px] border border-slate-200">
-                                    <p className="font-semibold text-slate-800 leading-snug">{it.description || it.wo_item_desc}</p>
+                                    <p className="font-semibold text-black leading-snug">{it.description || it.wo_item_desc}</p>
                                   </td>
                                   {multiBasis && (
                                     <td className="px-3 py-3.5 border border-slate-200">
@@ -1694,7 +1694,7 @@ function BillDetailPage({ billId, onClose }) {
                           <div className={clsx('flex-1 pb-5', i < approvals.length - 1 && 'border-b border-slate-100 mb-1')}>
                             <div className="flex items-start justify-between gap-2 flex-wrap">
                               <div>
-                                <span className="font-bold text-slate-800 capitalize">{a.action}</span>
+                                <span className="font-bold text-black capitalize">{a.action}</span>
                                 <span className="text-slate-500 text-sm ml-2">by {a.actor_name || 'System'}</span>
                                 {a.stage && <span className="text-slate-400 text-sm ml-1 capitalize">({(a.stage||'').replace(/_/g,' ')})</span>}
                               </div>
@@ -1759,7 +1759,7 @@ function BillDetailPage({ billId, onClose }) {
                         && { l: 'Retention Release', v: b.retention_release_amount, c: 'text-emerald-600' },
                     ].filter(Boolean).map(({ l, v, c, bold }, idx) => (
                       <div key={l} className={clsx('flex justify-between items-center py-2.5', idx > 0 && 'border-t border-slate-50')}>
-                        <span className={clsx('text-sm', bold ? 'font-bold text-slate-800' : 'text-slate-500 flex items-center gap-1')}>
+                        <span className={clsx('text-sm', bold ? 'font-bold text-black' : 'text-slate-500 flex items-center gap-1')}>
                           {!bold && <span className="text-emerald-400 font-mono text-xs">+</span>}{l}
                         </span>
                         <span className={clsx('font-bold tabular-nums font-mono whitespace-nowrap', c, bold ? 'text-base' : 'text-sm')}>
@@ -2036,12 +2036,12 @@ export default function SCBillPreparation() {
                           <span className="font-mono text-xs text-slate-600">{b.wo_number}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-xs font-semibold text-slate-800">{b.sc_name}</p>
+                          <p className="text-xs font-semibold text-black">{b.sc_name}</p>
                           <p className="text-[10px] text-slate-400">{b.sc_code}</p>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 max-w-[130px] truncate">{b.project_name}</td>
                         <td className="px-4 py-3 text-right">
-                          <p className="text-xs font-semibold text-slate-800">{fmt(b.gross_amount)}</p>
+                          <p className="text-xs font-semibold text-black">{fmt(b.gross_amount)}</p>
                           <p className="text-[10px] text-slate-400">GST: {fmt(b.gst_amount)}</p>
                         </td>
                         <td className="px-4 py-3 text-right">

@@ -210,7 +210,7 @@ export default function RetentionReleasePage() {
                       </div>
                       <div className="hidden md:block text-right">
                         <p className="text-xs text-slate-500">Total Held</p>
-                        <p className="text-sm font-medium text-slate-800">{fmtL(proj.total_held)}</p>
+                        <p className="text-sm font-medium text-black">{fmtL(proj.total_held)}</p>
                       </div>
                       <div className="hidden md:block text-right">
                         <p className="text-xs text-slate-500">Released</p>
@@ -302,7 +302,7 @@ export default function RetentionReleasePage() {
                         {MILESTONES.find(m => m.value === r.milestone)?.label || r.milestone}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{fmtL(r.release_amount)}</td>
+                    <td className="px-4 py-3 font-medium text-black">{fmtL(r.release_amount)}</td>
                     <td className="px-4 py-3 text-slate-900 font-medium text-xs">{dayjs(r.release_date).format('DD MMM YYYY')}</td>
                     <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-3">
@@ -362,7 +362,7 @@ export default function RetentionReleasePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-100">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-medium text-slate-800">New Retention Release Request</h2>
+              <h2 className="text-base font-medium text-black">New Retention Release Request</h2>
               <button onClick={() => setShowNewModal(false)} className="p-1.5 text-slate-900 font-medium hover:text-slate-900 hover:bg-slate-50 rounded-lg">
                 <X className="w-4 h-4" />
               </button>
@@ -487,7 +487,7 @@ export default function RetentionReleasePage() {
                 <CheckCircle className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h2 className="text-base font-medium text-slate-800">Approve Release</h2>
+                <h2 className="text-base font-medium text-black">Approve Release</h2>
                 <p className="text-xs text-slate-500">This will authorise the payment to be made</p>
               </div>
             </div>
@@ -516,7 +516,7 @@ export default function RetentionReleasePage() {
                 <XCircle className="w-5 h-5 text-red-500" />
               </div>
               <div>
-                <h2 className="text-base font-medium text-slate-800">Reject Request</h2>
+                <h2 className="text-base font-medium text-black">Reject Request</h2>
                 <p className="text-xs text-slate-500">Provide a reason for rejection</p>
               </div>
             </div>
@@ -552,7 +552,7 @@ export default function RetentionReleasePage() {
                 <Banknote className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <h2 className="text-base font-medium text-slate-800">Mark as Released</h2>
+                <h2 className="text-base font-medium text-black">Mark as Released</h2>
                 <p className="text-xs text-slate-500">Record the payment made to the contractor</p>
               </div>
             </div>
@@ -641,7 +641,7 @@ function ProjectRetentionBills({ projectId }) {
             </td>
             <td className="py-1.5 text-slate-700">{fmtL(b.gross_amount)}</td>
             <td className="py-1.5 text-slate-500">{b.retention_percent}%</td>
-            <td className="py-1.5 font-medium text-slate-800">{fmtL(b.retention_amount)}</td>
+            <td className="py-1.5 font-medium text-black">{fmtL(b.retention_amount)}</td>
             <td className="py-1.5">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 b.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'

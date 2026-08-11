@@ -131,7 +131,7 @@ export default function BOQDashboardPage() {
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-bold text-slate-800">Margin by Chapter / Category</p>
+                    <p className="text-sm font-bold text-black">Margin by Chapter / Category</p>
                     <p className="text-xs text-slate-400">Green bars = margin, Orange = SC cost, Blue = client value</p>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
@@ -182,8 +182,8 @@ export default function BOQDashboardPage() {
                       const tc = marginTextColor(p);
                       return (
                         <tr key={i} className={clsx('border-b border-slate-50', i%2===0?'bg-white':'bg-slate-50/30')}>
-                          <td className="px-4 py-3 font-semibold text-slate-800">{ch.chapter_name||'General'}</td>
-                          <td className="px-4 py-3 text-right font-mono text-slate-800">{fmt(ch.client_value)}</td>
+                          <td className="px-4 py-3 font-semibold text-black">{ch.chapter_name||'General'}</td>
+                          <td className="px-4 py-3 text-right font-mono text-black">{fmt(ch.client_value)}</td>
                           <td className="px-4 py-3 text-right font-mono text-orange-700">{fmt(ch.sc_value)}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold" style={{color:tc}}>{fmt(ch.margin)}</td>
                           <td className="px-4 py-3">

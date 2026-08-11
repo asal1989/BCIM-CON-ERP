@@ -10,7 +10,7 @@ import {
   COMPLIANCE_TYPES, PRIORITIES, RENEWAL_FREQUENCIES,
 } from './complianceData';
 
-const inp = 'w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-shadow';
+const inp = 'w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm text-black focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-shadow';
 const lbl = 'text-xs font-semibold text-slate-600 block mb-1.5';
 const err = 'text-[11px] text-red-500 mt-1';
 
@@ -138,7 +138,7 @@ export default function ComplianceForm({ open, onClose, onSave, departments = []
               <div className="md:col-span-3">
                 <label className={lbl}>Description</label>
                 <textarea {...register('description')} rows={3}
-                  className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-y"
+                  className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-black focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-y"
                   placeholder="What this compliance covers, scope, and notes…" />
               </div>
               <div className="md:col-span-3">

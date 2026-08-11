@@ -106,7 +106,7 @@ export default function BulkAttendanceCorrectionPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-black flex items-center gap-2">
           <ShieldAlert size={20} className="text-red-500" /> Bulk Attendance Correction
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">
@@ -208,7 +208,7 @@ export default function BulkAttendanceCorrectionPage() {
                 <label key={e.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer">
                   <input type="checkbox" checked={!!selected[e.id]} onChange={() => toggle(e.id)} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{e.name}</p>
+                    <p className="text-sm font-medium text-black truncate">{e.name}</p>
                     <p className="text-xs text-slate-400">{e.employee_code || '—'} · {e.department_name || 'No department'}{e.project_name ? ` · ${e.project_name}` : ''}</p>
                   </div>
                 </label>
@@ -225,7 +225,7 @@ export default function BulkAttendanceCorrectionPage() {
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                 <ShieldAlert size={18} className="text-red-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-800">Confirm Bulk Correction</h3>
+              <h3 className="text-base font-bold text-black">Confirm Bulk Correction</h3>
             </div>
             <p className="text-sm text-slate-600">
               This will set attendance to <strong>{STATUS_OPTIONS.find(o => o.value === status)?.label}</strong> for{' '}

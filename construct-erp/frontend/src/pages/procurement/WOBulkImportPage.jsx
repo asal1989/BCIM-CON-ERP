@@ -359,7 +359,7 @@ export default function WOBulkImportPage() {
         {step === 'done' && !result && (
           <div className="max-w-xl mx-auto space-y-5">
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-              <h2 className="text-base font-medium text-slate-800">Ready to Import</h2>
+              <h2 className="text-base font-medium text-black">Ready to Import</h2>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
@@ -416,7 +416,7 @@ export default function WOBulkImportPage() {
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                 <div>
-                  <h2 className="text-base font-medium text-slate-800">Import Complete</h2>
+                  <h2 className="text-base font-medium text-black">Import Complete</h2>
                   <p className="text-xs text-slate-500">Work Orders have been saved to the ERP</p>
                 </div>
               </div>

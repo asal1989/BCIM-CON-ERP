@@ -119,7 +119,7 @@ function ExitDrawer({ id, onClose, onChanged }) {
         <div className="sticky top-0 bg-white border-b px-5 py-4 z-10">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="font-bold text-slate-800 text-lg">{req.employee_name}</h3>
+              <h3 className="font-bold text-black text-lg">{req.employee_name}</h3>
               <p className="text-xs text-slate-500">{req.designation_name || '—'} · {req.department_name || '—'} · {req.exit_reason.replace(/_/g, ' ')}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -164,7 +164,7 @@ function ExitDrawer({ id, onClose, onChanged }) {
                 {(req.clearance || []).map(c => (
                   <div key={c.department} className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-2.5">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{c.department}</p>
+                      <p className="text-sm font-semibold text-black">{c.department}</p>
                       {c.cleared_by_name && <p className="text-[11px] text-slate-500">{c.cleared_by_name} · {dayjs(c.cleared_at).format('DD-MM-YYYY')}</p>}
                       {c.remarks && <p className="text-[11px] text-slate-500">{c.remarks}</p>}
                     </div>
@@ -290,7 +290,7 @@ export default function ExitManagementPage() {
             <button key={e.id} onClick={() => setOpenId(e.id)} className="text-left bg-white rounded-xl border border-slate-200 px-5 py-4 hover:shadow-sm hover:border-blue-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-slate-800">{e.employee_name}</p>
+                  <p className="font-semibold text-black">{e.employee_name}</p>
                   <p className="text-[11px] text-slate-500">{e.designation_name || '—'} · {e.department_name || '—'} · {e.exit_reason.replace(/_/g, ' ')}</p>
                 </div>
                 <div className="text-right">

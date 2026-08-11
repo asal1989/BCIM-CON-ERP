@@ -57,7 +57,7 @@ function StaffCard({ emp }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+            <p className="text-sm font-semibold text-black truncate group-hover:text-indigo-600 transition-colors">
               {emp.name}
             </p>
             <p className="text-[11px] text-slate-400 font-mono">{emp.employee_code || '—'}</p>
@@ -115,7 +115,7 @@ function ProjectSection({ project, employees, defaultOpen }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-slate-800">{project.name}</span>
+            <span className="text-sm font-bold text-black">{project.name}</span>
             {project.project_code && (
               <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
                 {project.project_code}
@@ -360,7 +360,7 @@ export default function HRProjectStaffPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-800">Head Office (HO)</span>
+                    <span className="text-sm font-bold text-black">Head Office (HO)</span>
                     <span className="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">
                       {unassigned.length} staff
                     </span>

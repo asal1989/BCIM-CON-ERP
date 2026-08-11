@@ -180,7 +180,7 @@ export default function VendorProjectMappingPage() {
           <div className="relative max-w-md">
             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
-              className="w-full pl-9 pr-8 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 outline-none focus:border-indigo-400 appearance-none"
+              className="w-full pl-9 pr-8 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-black outline-none focus:border-indigo-400 appearance-none"
               value={selectedProjectId}
               onChange={(e) => {
                 setSelectedProjectId(e.target.value);
@@ -212,7 +212,7 @@ export default function VendorProjectMappingPage() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <h2 className="font-semibold text-black flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-green-500" />
                   Assigned Vendors
                 </h2>
@@ -260,7 +260,7 @@ export default function VendorProjectMappingPage() {
                     {filteredMapped.map((v, idx) => (
                       <tr key={v.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                         <td className="px-4 py-2.5">
-                          <div className="font-medium text-slate-800 text-xs leading-tight">{v.name}</div>
+                          <div className="font-medium text-black text-xs leading-tight">{v.name}</div>
                           <div className="text-[10px] text-slate-400">{v.vendor_code || '—'} {v.city ? `· ${v.city}` : ''}</div>
                         </td>
                         <td className="px-3 py-2.5">
@@ -288,7 +288,7 @@ export default function VendorProjectMappingPage() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                <h2 className="font-semibold text-black flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-500" />
                   Available Vendors
                 </h2>
@@ -371,7 +371,7 @@ export default function VendorProjectMappingPage() {
                           />
                         </td>
                         <td className="px-3 py-2.5">
-                          <div className="font-medium text-slate-800 text-xs leading-tight">{v.name}</div>
+                          <div className="font-medium text-black text-xs leading-tight">{v.name}</div>
                           <div className="text-[10px] text-slate-400">{v.vendor_code || '—'} {v.city ? `· ${v.city}` : ''}</div>
                         </td>
                         <td className="px-3 py-2.5">

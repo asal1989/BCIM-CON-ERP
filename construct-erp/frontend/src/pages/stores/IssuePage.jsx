@@ -98,7 +98,7 @@ function MINDetailPanel({ min, onClose, onAuthorize, authLoading, onReceive, rec
                     </td>
                     <td className="px-3 py-2.5 font-mono text-emerald-700 font-medium">{it.quantity_issued ?? it.quantity ?? it.qty_issued ?? '—'}</td>
                     <td className="px-3 py-2.5 font-mono text-slate-600">₹{inr(it.rate)}</td>
-                    <td className="px-3 py-2.5 font-mono font-medium text-slate-800">₹{inr(it.value || it.total_value)}</td>
+                    <td className="px-3 py-2.5 font-mono font-medium text-black">₹{inr(it.value || it.total_value)}</td>
                     <td className="px-3 py-2.5 text-slate-500">{it.remarks || '—'}</td>
                   </tr>
                 ))}
@@ -638,7 +638,7 @@ function MINForm({ onClose, projects, contractors, qc }) {
                         onClick={() => { addItem(i); setInventorySearch(''); }}>
                         <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', dot)} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 truncate">{i.material_name}</p>
+                          <p className="text-sm font-semibold text-black group-hover:text-indigo-700 truncate">{i.material_name}</p>
                           <p className="text-xs text-slate-500 mt-0.5">
                             Available:&nbsp;
                             <span className={clsx('font-bold', c <= 0 ? 'text-red-500' : 'text-indigo-600')}>
@@ -681,7 +681,7 @@ function MINForm({ onClose, projects, contractors, qc }) {
                     {items.map((it, idx) => (
                       <tr key={idx}>
                         <td className="py-2.5 pr-3">
-                          <p className="font-semibold text-slate-800">{it.material_name}</p>
+                          <p className="font-semibold text-black">{it.material_name}</p>
                           <p className="text-xs text-slate-400 mt-0.5">{it.unit} · ₹{Number(it.rate).toLocaleString('en-IN')}/unit</p>
                         </td>
                         <td className="py-2.5 px-2 text-center">

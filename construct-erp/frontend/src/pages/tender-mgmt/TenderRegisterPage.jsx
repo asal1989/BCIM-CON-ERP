@@ -123,7 +123,7 @@ export default function TenderRegisterPage() {
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
           <span className="text-sm text-slate-500">Total Pipeline</span>
-          <span className="text-sm font-medium text-slate-800">{fmtCr(stats.total_pipeline_value)}</span>
+          <span className="text-sm font-medium text-black">{fmtCr(stats.total_pipeline_value)}</span>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
           <span className="text-sm text-slate-500">Won Value</span>

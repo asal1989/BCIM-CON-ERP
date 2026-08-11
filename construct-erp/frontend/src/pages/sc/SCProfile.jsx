@@ -90,7 +90,7 @@ function UploadModal({ scId, defaultCat, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
-          <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <h2 className="font-bold text-black text-sm flex items-center gap-2">
             <Upload className="w-4 h-4 text-blue-600" /> Upload Document
           </h2>
           <button onClick={onClose}><X className="w-4 h-4 text-slate-400" /></button>
@@ -233,7 +233,7 @@ function DocumentsTab({ scId }) {
                     <FileText className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1 pr-6">
-                    <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-700">{doc.doc_title || doc.file_name}</p>
+                    <p className="text-xs font-semibold text-black truncate group-hover:text-blue-700">{doc.doc_title || doc.file_name}</p>
                     <p className="text-[10px] text-slate-400 truncate">{doc.file_name}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <span className="text-[9px] font-bold uppercase text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{ext}</span>
@@ -457,7 +457,7 @@ function LabourTab({ scId }) {
           {workers.map(w => (
             <tr key={w.id} className="hover:bg-slate-50">
               <td className="px-3 py-2.5 font-mono text-slate-500">{w.worker_code}</td>
-              <td className="px-3 py-2.5 font-semibold text-slate-800">{w.worker_name}</td>
+              <td className="px-3 py-2.5 font-semibold text-black">{w.worker_name}</td>
               <td className="px-3 py-2.5 capitalize text-slate-600">{w.skill_type || '—'}</td>
               <td className="px-3 py-2.5">{w.daily_rate ? `₹${w.daily_rate}` : '—'}</td>
               <td className="px-3 py-2.5 text-slate-500">{w.mobile || '—'}</td>
@@ -538,7 +538,7 @@ export default function SCProfile() {
             </div>
             <div>
               <p className="text-[10px] text-slate-400 uppercase font-bold">Total Billed</p>
-              <p className="text-sm font-bold text-slate-800">{fmt(totalBilled)}</p>
+              <p className="text-sm font-bold text-black">{fmt(totalBilled)}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">

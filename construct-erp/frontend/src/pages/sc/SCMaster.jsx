@@ -412,7 +412,7 @@ function ProfileDrawer({ scId, onClose, onEdit }) {
                         <Hash className="w-4 h-4 text-slate-400" />
                         <div>
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">GST Number</p>
-                          <p className="text-xs font-mono font-bold text-slate-800">{sc.gst_number}</p>
+                          <p className="text-xs font-mono font-bold text-black">{sc.gst_number}</p>
                         </div>
                       </div>
                     )}
@@ -421,7 +421,7 @@ function ProfileDrawer({ scId, onClose, onEdit }) {
                         <FileText className="w-4 h-4 text-slate-400" />
                         <div>
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">PAN Number</p>
-                          <p className="text-xs font-mono font-bold text-slate-800">{sc.pan_number}</p>
+                          <p className="text-xs font-mono font-bold text-black">{sc.pan_number}</p>
                         </div>
                       </div>
                     )}
@@ -442,7 +442,7 @@ function ProfileDrawer({ scId, onClose, onEdit }) {
                     ].filter(r => r.v).map(({ l, v }) => (
                       <div key={l} className="flex justify-between items-center">
                         <span className="text-xs text-slate-400">{l}</span>
-                        <span className="text-xs font-semibold text-slate-800 font-mono">{v}</span>
+                        <span className="text-xs font-semibold text-black font-mono">{v}</span>
                       </div>
                     ))}
                   </div>
@@ -470,7 +470,7 @@ function ProfileDrawer({ scId, onClose, onEdit }) {
                           <p className="text-[10px] text-slate-400">{wo.project_name}</p>
                         </div>
                         <div className="flex flex-col items-end gap-1 ml-3 flex-shrink-0">
-                          <span className="text-xs font-bold text-slate-800">{fmt(wo.contract_amount)}</span>
+                          <span className="text-xs font-bold text-black">{fmt(wo.contract_amount)}</span>
                           <span className={clsx('text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase',
                             wo.status === 'active'    ? 'bg-emerald-100 text-emerald-700' :
                             wo.status === 'completed' ? 'bg-teal-100 text-teal-700' :
@@ -581,7 +581,7 @@ export default function SCMaster() {
           ].map(({ k, label, count, dot }) => (
             <button key={k} onClick={() => setType(k)}
               className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap',
-                typeFilter === k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50')}
+                typeFilter === k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-black hover:bg-slate-50')}
               style={typeFilter === k ? { background: dot || `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` } : {}}>
               {dot && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: typeFilter === k ? '#fff' : dot }} />}
               {label} ({count})
@@ -683,7 +683,7 @@ export default function SCMaster() {
 
                         {/* Name */}
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-800 text-sm leading-tight">{s.name}</p>
+                          <p className="font-semibold text-black text-sm leading-tight">{s.name}</p>
                           {(s.city || s.state) && (
                             <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
                               <MapPin className="w-3 h-3" />{[s.city, s.state].filter(Boolean).join(', ')}
@@ -742,7 +742,7 @@ export default function SCMaster() {
 
                         {/* Billed */}
                         <td className="px-4 py-3">
-                          <p className="text-xs font-bold text-slate-800">{fmt(s.total_billed)}</p>
+                          <p className="text-xs font-bold text-black">{fmt(s.total_billed)}</p>
                           {parseFloat(s.total_paid) > 0 && (
                             <p className="text-[10px] text-emerald-600 mt-0.5">Paid: {fmt(s.total_paid)}</p>
                           )}

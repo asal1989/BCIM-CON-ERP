@@ -149,7 +149,7 @@ export default function InventoryAssetPage() {
             <p className="text-sm font-semibold text-slate-600">Fixed assets, tools, P&M, PO references, invoice references and deployment stock.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={exportRows} className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-800 hover:border-blue-300 flex items-center gap-2">
+            <button onClick={exportRows} className="h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm font-bold text-black hover:border-blue-300 flex items-center gap-2">
               <Download className="w-4 h-4" /> Export
             </button>
             <button onClick={() => navigate('/assets')} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 flex items-center gap-2 shadow-sm">
@@ -184,7 +184,7 @@ export default function InventoryAssetPage() {
                   onClick={() => setTab(value)}
                   className={clsx(
                     'px-4 py-2 rounded-md text-sm font-bold transition-all',
-                    tab === value ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-800 hover:bg-white'
+                    tab === value ? 'bg-slate-950 text-white shadow-sm' : 'text-black hover:bg-white'
                   )}
                 >
                   {label}
@@ -248,7 +248,7 @@ function Metric({ icon: Icon, label, value, tone }) {
     blue: 'text-blue-700 bg-blue-50 border-blue-200',
     emerald: 'text-emerald-700 bg-emerald-50 border-emerald-200',
     amber: 'text-amber-700 bg-amber-50 border-amber-200',
-    slate: 'text-slate-800 bg-slate-50 border-slate-200',
+    slate: 'text-black bg-slate-50 border-slate-200',
   };
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
@@ -282,12 +282,12 @@ function AssetStockTable({ rows }) {
                 <div className="font-bold text-slate-950">{asset.asset_name || '-'}</div>
                 <div className="text-xs font-semibold text-slate-500">{[asset.brand, asset.model, asset.serial_number].filter(Boolean).join(' | ') || 'No brand / model / serial'}</div>
               </td>
-              <td className="px-4 py-3 border border-slate-200 font-bold text-slate-800">{assetTypeLabel(asset.asset_type)}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{asset.current_project_name || 'Unassigned'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-bold text-black">{assetTypeLabel(asset.asset_type)}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{asset.current_project_name || 'Unassigned'}</td>
               <td className="px-4 py-3 border border-slate-200"><StatusBadge status={asset.status} /></td>
-              <td className="px-4 py-3 border border-slate-200 font-mono font-bold text-slate-800">{asset.po_number || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-mono font-bold text-slate-800">{asset.invoice_number || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{asset.vendor_name || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-mono font-bold text-black">{asset.po_number || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-mono font-bold text-black">{asset.invoice_number || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{asset.vendor_name || '-'}</td>
               <td className="px-4 py-3 border border-slate-200 text-right font-mono font-bold text-slate-950">{fmtMoney(asset.purchase_value)}</td>
             </tr>
           ))}
@@ -312,14 +312,14 @@ function MovementTable({ rows }) {
         <tbody>
           {rows.map((movement, idx) => (
             <tr key={movement.id || `${movement.asset_code}-${idx}`} className="hover:bg-blue-50/40">
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{movement.movement_date ? dayjs(movement.movement_date).format('DD/MM/YYYY') : '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{movement.movement_date ? dayjs(movement.movement_date).format('DD/MM/YYYY') : '-'}</td>
               <td className="px-4 py-3 border border-slate-200 font-mono font-bold text-blue-700">{movement.asset_code || '-'}</td>
               <td className="px-4 py-3 border border-slate-200 font-bold text-slate-950">{movement.asset_name || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-bold text-slate-800">{movement.movement_type || 'transfer'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{movement.from_project_name || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{movement.to_project_name || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{movement.issued_by_name || '-'}</td>
-              <td className="px-4 py-3 border border-slate-200 font-semibold text-slate-800">{movement.received_by_name || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-bold text-black">{movement.movement_type || 'transfer'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{movement.from_project_name || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{movement.to_project_name || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{movement.issued_by_name || '-'}</td>
+              <td className="px-4 py-3 border border-slate-200 font-semibold text-black">{movement.received_by_name || '-'}</td>
               <td className="px-4 py-3 border border-slate-200">{movement.return_date ? <Badge tone="green">Returned</Badge> : <Badge tone="blue">Open</Badge>}</td>
             </tr>
           ))}
@@ -345,7 +345,7 @@ function Badge({ tone, children }) {
     blue: 'bg-blue-50 text-blue-700 border-blue-200',
     amber: 'bg-amber-50 text-amber-700 border-amber-200',
     red: 'bg-rose-50 text-rose-700 border-rose-200',
-    slate: 'bg-slate-100 text-slate-800 border-slate-200',
+    slate: 'bg-slate-100 text-black border-slate-200',
   };
   return <span className={clsx('inline-flex px-2.5 py-1 rounded-md border text-xs font-bold whitespace-nowrap', styles[tone])}>{children}</span>;
 }

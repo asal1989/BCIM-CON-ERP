@@ -131,7 +131,7 @@ export function SectionCard({ title, subtitle, icon: Icon, children, action, cla
           <div className="flex items-center gap-2.5">
             {Icon && <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center"><Icon className="w-4 h-4 text-indigo-600" /></div>}
             <div>
-              {title && <h3 className="font-semibold text-slate-800 text-sm leading-none">{title}</h3>}
+              {title && <h3 className="font-semibold text-black text-sm leading-none">{title}</h3>}
               {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
             </div>
           </div>
@@ -272,7 +272,7 @@ export function Modal({ title, subtitle, onClose, children, footer, size = 'md' 
         style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-slate-50 to-white sticky top-0">
           <div>
-            <h2 className="font-semibold text-slate-800">{title}</h2>
+            <h2 className="font-semibold text-black">{title}</h2>
             {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
@@ -341,7 +341,7 @@ export function Tabs({ tabs, active, onChange, className = '' }) {
           className={clsx('px-4 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap',
             active === t.key
               ? 'bg-white text-indigo-700 shadow-sm font-semibold'
-              : 'text-slate-500 hover:text-slate-800')}>
+              : 'text-slate-500 hover:text-black')}>
           {t.label}
           {t.count !== undefined && (
             <span className={clsx('ml-1.5 text-xs px-1.5 py-0.5 rounded-full',

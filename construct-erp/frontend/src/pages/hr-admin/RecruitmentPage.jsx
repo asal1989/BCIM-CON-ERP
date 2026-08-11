@@ -155,7 +155,7 @@ function RequisitionsTab() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-mono text-slate-400">{r.requisition_no}</span>
-                  <div className="font-semibold text-slate-800">{r.position}</div>
+                  <div className="font-semibold text-black">{r.position}</div>
                   <Badge color={REQ_STATUS_C[r.status]}>{REQ_STATUS_LABEL[r.status]}</Badge>
                   <Badge color={r.priority === 'urgent' ? 'red' : r.priority === 'high' ? 'amber' : 'slate'}>{r.priority}</Badge>
                 </div>
@@ -271,7 +271,7 @@ function JobOpeningsTab({ jobs, onEdit, onViewCandidates }) {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="font-semibold text-slate-800">{j.title}</div>
+                  <div className="font-semibold text-black">{j.title}</div>
                   <Badge color={color}>{j.status.replace(/_/g, ' ')}</Badge>
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{j.department || '—'} · {j.work_location || '—'} · {j.job_type?.replace(/_/g, ' ')} · {j.vacancies} opening{j.vacancies !== 1 ? 's' : ''}</div>
@@ -594,7 +594,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
         <div className="sticky top-0 bg-white border-b px-5 py-4 z-10">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="font-bold text-slate-800 text-lg">{app.name}</h3>
+              <h3 className="font-bold text-black text-lg">{app.name}</h3>
               <p className="text-xs text-slate-500">{app.current_designation || '—'} · {app.current_company || '—'} · {app.job_title}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -621,7 +621,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
                 {[['Email', app.email], ['Phone', app.phone], ['Experience', `${app.experience_years || 0} yrs`], ['Qualification', app.qualification],
                   ['Current CTC', app.current_ctc], ['Expected CTC', app.expected_ctc], ['Notice Period', `${app.notice_period_days || 0} days`], ['Source', app.source],
                   ['Applied On', app.applied_on ? dayjs(app.applied_on).format('DD-MM-YYYY') : '—']].map(([label, val]) => (
-                  <div key={label}><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-slate-800">{val || '—'}</p></div>
+                  <div key={label}><p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p><p className="text-black">{val || '—'}</p></div>
                 ))}
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Resume</p>
@@ -645,7 +645,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
                   <div key={iv.id} className="border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">Round {iv.round} · <span className="capitalize">{iv.interview_type?.replace(/_/g, ' ')}</span></p>
+                        <p className="text-sm font-semibold text-black">Round {iv.round} · <span className="capitalize">{iv.interview_type?.replace(/_/g, ' ')}</span></p>
                         <p className="text-[11px] text-slate-500">{iv.interviewer_name || '—'} · {iv.scheduled_on ? dayjs(iv.scheduled_on).format('DD-MM-YYYY HH:mm') : 'Not scheduled'}</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -671,7 +671,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
                 {approvals.map(a => (
                   <div key={a.stage} className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{APPROVAL_STAGE_LABEL[a.stage]}</p>
+                      <p className="text-sm font-semibold text-black">{APPROVAL_STAGE_LABEL[a.stage]}</p>
                       {a.approver_name && <p className="text-[11px] text-slate-500">{a.approver_name} · {dayjs(a.approved_at).format('DD-MM-YYYY')}</p>}
                       {a.remarks && <p className="text-[11px] text-slate-500">{a.remarks}</p>}
                     </div>
@@ -699,7 +699,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
                 {offers.map(o => (
                   <div key={o.id} className="border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-slate-800">{o.position || 'Offer'} {o.department ? `· ${o.department}` : ''}</p>
+                      <p className="text-sm font-semibold text-black">{o.position || 'Offer'} {o.department ? `· ${o.department}` : ''}</p>
                       <Badge color={o.status === 'accepted' ? 'green' : o.status === 'declined' ? 'red' : o.status === 'sent' ? 'blue' : 'slate'}>{o.status.replace(/_/g, ' ')}</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-500 mb-2">
@@ -780,7 +780,7 @@ function CandidatesTab({ jobs, filterJobId, setFilterJobId, filterStatus, setFil
           <button key={a.id} onClick={() => onOpen(a.id)} className="text-left bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm hover:border-blue-300">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-semibold text-sm text-slate-800 truncate">{a.name}</div>
+                <div className="font-semibold text-sm text-black truncate">{a.name}</div>
                 <div className="text-[11px] text-slate-500 truncate">{a.current_designation || '—'} · {a.current_company || '—'}</div>
               </div>
               <Badge color={APP_STATUS_C[a.status]}>{a.status.replace(/_/g, ' ')}</Badge>
@@ -810,7 +810,7 @@ function JoiningTrackerTab() {
         <div key={t.id} className="bg-white rounded-xl border border-slate-200 px-5 py-4">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="font-semibold text-slate-800">{t.candidate_name}</p>
+              <p className="font-semibold text-black">{t.candidate_name}</p>
               <p className="text-[11px] text-slate-500">{t.position || '—'} · {t.department || '—'} {t.joining_date ? `· Joining ${dayjs(t.joining_date).format('DD-MM-YYYY')}` : ''}</p>
             </div>
             <div className="text-right">
@@ -937,7 +937,7 @@ function TalentPoolTab({ jobs }) {
           <div key={t.id} className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="font-semibold text-slate-800">{t.name}</div>
+                <div className="font-semibold text-black">{t.name}</div>
                 {t.category && <Badge color="blue">{t.category}</Badge>}
               </div>
               <div className="text-[11px] text-slate-500 mt-0.5">{t.current_company || '—'} · {t.qualification || '—'} · {t.experience_years || 0} yrs exp</div>

@@ -217,7 +217,7 @@ export default function MBAbstract({
                     <td className="px-2 py-1.5 text-center text-slate-900 font-medium text-xs">{rows.length + idx + 1}</td>
                     <td className="px-2 py-1.5 text-left text-xs">
                       <span className="text-[9px] text-amber-600 font-medium block">{v.vo_number}</span>
-                      <span className="text-slate-800">{v.new_item_description || v.boq_description || '—'}</span>
+                      <span className="text-black">{v.new_item_description || v.boq_description || '—'}</span>
                       {v.reason && <span className="text-[9px] text-slate-900 font-medium block">{v.reason}</span>}
                     </td>
                     <td className="px-2 py-1.5 text-center text-slate-900 text-xs">{v.unit}</td>
@@ -316,7 +316,7 @@ export default function MBAbstract({
                 ].map(({ label, val, bold, red, big }) => (
                   <tr key={label} className={`border-b border-slate-100 ${big ? 'bg-[#1F3864] text-white' : ''}`}>
                     <td className={`px-4 py-2 ${bold ? 'font-bold' : ''} ${big ? 'text-white font-bold' : 'text-slate-600'}`}>{label}</td>
-                    <td className={`px-4 py-2 text-right font-mono ${bold ? 'font-bold' : ''} ${red ? 'text-red-600' : ''} ${big ? 'text-white font-medium text-sm' : 'text-slate-800'}`}>
+                    <td className={`px-4 py-2 text-right font-mono ${bold ? 'font-bold' : ''} ${red ? 'text-red-600' : ''} ${big ? 'text-white font-medium text-sm' : 'text-black'}`}>
                       ₹{fmt(Math.abs(val))}
                     </td>
                   </tr>

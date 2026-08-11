@@ -379,7 +379,7 @@ export default function GRSPage() {
                     <Icon className={clsx('w-4 h-4', c.text)} />
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-slate-800 mt-2 tabular-nums">{c.value}</div>
+                <div className="text-2xl font-bold text-black mt-2 tabular-nums">{c.value}</div>
                 <div className="text-[11px] text-slate-400 mt-0.5">{active ? '● Filtering by this' : 'Tap to filter'}</div>
               </button>
             );
@@ -815,21 +815,21 @@ function GRSForm({ onClose, projects, qc, editGrs = null }) {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Project</span>
-                  <span className="font-medium text-slate-800 text-right max-w-[140px] truncate">
+                  <span className="font-medium text-black text-right max-w-[140px] truncate">
                     {projects.find(p => p.id === form.project_id)?.name || '—'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Vehicle</span>
-                  <span className="font-mono font-medium text-slate-800">{form.vehicle_no || '—'}</span>
+                  <span className="font-mono font-medium text-black">{form.vehicle_no || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Security</span>
-                  <span className="font-medium text-slate-800 truncate max-w-[120px]">{form.security_incharge || '—'}</span>
+                  <span className="font-medium text-black truncate max-w-[120px]">{form.security_incharge || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Linked PO</span>
-                  <span className="font-mono font-medium text-slate-800 truncate max-w-[120px]">
+                  <span className="font-mono font-medium text-black truncate max-w-[120px]">
                     {form.po_number || (form.po_id ? 'Linked' : '—')}
                   </span>
                 </div>

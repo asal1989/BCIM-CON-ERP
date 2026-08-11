@@ -406,7 +406,7 @@ export default function TenderDetailPage() {
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                     <span className="text-slate-500">{k}</span>
-                    <span className={`font-medium ${k === 'Submitted' && t.emd_submitted ? 'text-emerald-600' : 'text-slate-800'}`}>{v}</span>
+                    <span className={`font-medium ${k === 'Submitted' && t.emd_submitted ? 'text-emerald-600' : 'text-black'}`}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -471,7 +471,7 @@ export default function TenderDetailPage() {
       {tab === 'cost' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-medium text-slate-800">Cost Estimate</h3>
+            <h3 className="text-base font-medium text-black">Cost Estimate</h3>
             <div className="flex gap-2">
               {costEdit ? (
                 <>
@@ -746,7 +746,7 @@ export default function TenderDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <h2 className="text-base font-medium text-slate-800">
+              <h2 className="text-base font-medium text-black">
                 {NEXT_BTN[transStatus]?.label || `Move to ${transStatus}`}
               </h2>
               <button

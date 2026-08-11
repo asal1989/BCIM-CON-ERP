@@ -104,7 +104,7 @@ export default function SearchableSelect({ value, options = [], onChange, placeh
                     {opt.label.charAt(0).toUpperCase()}
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className={clsx('block font-semibold truncate', isSelected ? 'text-indigo-700' : 'text-slate-800 group-hover:text-indigo-700')}>{opt.label}</span>
+                    <span className={clsx('block font-semibold truncate', isSelected ? 'text-indigo-700' : 'text-black group-hover:text-indigo-700')}>{opt.label}</span>
                     {opt.sublabel && <span className="block text-[11px] text-slate-500 truncate">{opt.sublabel}</span>}
                   </span>
                   {isSelected && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}

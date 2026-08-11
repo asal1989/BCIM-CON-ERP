@@ -27,7 +27,7 @@ function SCurveTooltip({ active, payload, label }) {
         <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
           <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.color }} />
           <span className="text-slate-500">{p.name}:</span>
-          <span className="font-medium text-slate-800">{p.value ?? '—'}%</span>
+          <span className="font-medium text-black">{p.value ?? '—'}%</span>
         </div>
       ))}
     </div>
@@ -182,7 +182,7 @@ export default function ProgressDashboard() {
           {/* S-Curve Chart */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-slate-800">S-Curve Chart</h2>
+              <h2 className="text-sm font-medium text-black">S-Curve Chart</h2>
               <div className="flex items-center gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5"><span className="w-6 border-t-2 border-dashed border-blue-400 inline-block" /> Baseline</span>
                 <span className="flex items-center gap-1.5"><span className="w-6 border-t-2 border-indigo-600 inline-block" /> Actual</span>
@@ -233,7 +233,7 @@ export default function ProgressDashboard() {
           {/* Activity Progress Table */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-slate-800">Activity Progress</h2>
+              <h2 className="text-sm font-medium text-black">Activity Progress</h2>
               <span className="text-xs text-slate-400">{latestByActivity.length} activities</span>
             </div>
             {latestByActivity.length === 0 ? (
@@ -268,7 +268,7 @@ export default function ProgressDashboard() {
                           <td className="px-4 py-3 text-xs text-slate-600">
                             {planned != null ? `${planned}%` : '—'}
                           </td>
-                          <td className="px-4 py-3 text-xs font-medium text-slate-800">
+                          <td className="px-4 py-3 text-xs font-medium text-black">
                             {actual != null ? `${actual}%` : '—'}
                           </td>
                           <td className="px-4 py-3">
@@ -505,7 +505,7 @@ function Modal({ title, onClose, children }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-medium text-slate-800">{title}</h2>
+          <h2 className="text-sm font-medium text-black">{title}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
             <X className="w-4 h-4 text-slate-500" />
           </button>

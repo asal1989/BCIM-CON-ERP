@@ -63,7 +63,7 @@ export function FlatKPI({ label, value, sub, icon: Icon, color = 'blue', loading
       </div>
       {loading
         ? <div className="h-7 w-16 bg-slate-100 rounded animate-pulse mb-1" />
-        : <div className="text-2xl font-semibold text-slate-800 leading-tight truncate">{value ?? '—'}</div>
+        : <div className="text-2xl font-semibold text-black leading-tight truncate">{value ?? '—'}</div>
       }
       <div className="text-xs text-slate-400 mt-0.5 truncate">{label}</div>
       {sub && <div className="text-[11px] text-slate-400 mt-1 truncate">{sub}</div>}

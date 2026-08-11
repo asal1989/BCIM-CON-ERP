@@ -48,7 +48,7 @@ function ProfileForm({ onClose }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center"><ScrollText className="w-4 h-4 text-blue-600" /></div>
-            <p className="text-sm font-semibold text-slate-800">New Recurring Invoice Profile</p>
+            <p className="text-sm font-semibold text-black">New Recurring Invoice Profile</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
@@ -99,7 +99,7 @@ function HistoryModal({ profile, onClose }) {
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4 overflow-auto">
       <div className="bg-white w-full max-w-md rounded-md border border-slate-200 shadow-xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-800">Generated — {profile.profile_name}</p>
+          <p className="text-sm font-semibold text-black">Generated — {profile.profile_name}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
@@ -108,7 +108,7 @@ function HistoryModal({ profile, onClose }) {
           : log.map(l => (
             <div key={l.id} className="flex items-center justify-between px-3 py-2 border border-slate-100 rounded-md">
               <div>
-                <p className="text-sm font-mono font-semibold text-slate-800">{l.invoice_no}</p>
+                <p className="text-sm font-mono font-semibold text-black">{l.invoice_no}</p>
                 <p className="text-xs text-slate-400">{dayjs(l.invoice_date).format('DD MMM YYYY')}</p>
               </div>
               <p className="text-sm font-mono font-semibold text-emerald-700">{inr(l.total_amount)}</p>
@@ -149,7 +149,7 @@ export default function RecurringInvoicesPage() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center"><ScrollText className="w-4 h-4 text-blue-600" /></div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Recurring Invoices</h1>
+              <h1 className="text-lg font-semibold text-black">Recurring Invoices</h1>
               <p className="text-xs text-slate-400">Profiles that generate client invoices on a schedule — click Generate Now when due</p>
             </div>
           </div>
@@ -170,14 +170,14 @@ export default function RecurringInvoicesPage() {
             <div key={r.id} className="bg-white border border-slate-200 rounded-md p-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-sm font-semibold text-slate-800">{r.profile_name}</p>
+                  <p className="text-sm font-semibold text-black">{r.profile_name}</p>
                   <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-medium', r.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600')}>{r.status}</span>
                   {isDue && r.status === 'active' && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-rose-50 text-rose-600">Due</span>}
                 </div>
                 <p className="text-xs text-slate-500">{r.client_name} · {FREQ_LABEL[r.frequency]} · Next: {r.next_run_date ? dayjs(r.next_run_date).format('DD MMM YYYY') : '—'} · Generated {r.generated_count || 0}× ({inr(r.generated_total)})</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-mono font-semibold text-slate-800">{inr(r.basic_amount)}</span>
+                <span className="text-sm font-mono font-semibold text-black">{inr(r.basic_amount)}</span>
                 <button onClick={() => setHistoryFor(r)} title="History" className="p-1.5 rounded border border-slate-200 text-slate-500 hover:bg-slate-50"><History className="w-3.5 h-3.5" /></button>
                 {r.status === 'active' && (
                   <button onClick={() => generateMut.mutate(r.id)} disabled={generateMut.isPending} title="Generate Now"

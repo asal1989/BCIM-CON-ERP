@@ -207,7 +207,7 @@ export default function AttendancePage() {
                           {w.name.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-medium text-slate-800">{w.name}</div>
+                          <div className="font-medium text-black">{w.name}</div>
                           <div className="text-xs text-slate-400">{w.gang_name || 'No gang'}</div>
                         </div>
                       </div>

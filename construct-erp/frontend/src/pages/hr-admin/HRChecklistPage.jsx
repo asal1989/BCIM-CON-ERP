@@ -46,7 +46,7 @@ function SectionCard({ icon: Icon, title, color = 'indigo', count, badge, childr
         <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center print:hidden', c.bg)}>
           <Icon className={clsx('w-4 h-4', c.icon)} />
         </div>
-        <span className="font-semibold text-slate-800 text-sm flex-1">{title}</span>
+        <span className="font-semibold text-black text-sm flex-1">{title}</span>
         {count !== undefined && (
           <span className={clsx('text-xs font-bold px-2 py-0.5 rounded-full', c.bg, c.icon)}>{count}</span>
         )}
@@ -86,7 +86,7 @@ function CheckRow({ status, label, sub, action, onClick, rightLabel }) {
 
       <div className="flex-1 min-w-0">
         <p className={clsx('font-medium truncate',
-          status === 'done' ? 'text-slate-400 line-through print:no-underline print:text-slate-600' : 'text-slate-800'
+          status === 'done' ? 'text-slate-400 line-through print:no-underline print:text-slate-600' : 'text-black'
         )}>{label}</p>
         {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
       </div>
@@ -892,7 +892,7 @@ export default function HRChecklistPage() {
                   className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors print:hidden">
                   <Icon className="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{label}</p>
+                    <p className="text-sm font-medium text-black">{label}</p>
                     <p className="text-xs text-slate-400">{sub}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />

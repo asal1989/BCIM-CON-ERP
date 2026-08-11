@@ -244,7 +244,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
                       <div className="text-xs text-slate-500 mt-0.5">{b.inv_number ? `Inv: ${b.inv_number}` : 'No inv number'}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-semibold text-slate-800">₹{inr(b.total_amount)}</div>
+                      <div className="text-sm font-semibold text-black">₹{inr(b.total_amount)}</div>
                       <div className="text-xs text-slate-500 capitalize">{b.workflow_status}</div>
                     </div>
                   </div>
@@ -486,7 +486,7 @@ export default function IGNPage() {
                     <Icon className={clsx('w-4 h-4', c.text)} />
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-slate-800 mt-2 tabular-nums">{c.value}</div>
+                <div className="text-2xl font-bold text-black mt-2 tabular-nums">{c.value}</div>
                 <div className="text-[11px] text-slate-400 mt-0.5">{active ? '● Filtering by this' : 'Tap to filter'}</div>
               </button>
             );
@@ -1135,17 +1135,17 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-500">Issues / Problems</label>
                 <textarea value={form.issues_notes} onChange={e => setField('issues_notes', e.target.value)} placeholder="Document any issues…" rows={2}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-black placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-500">General Remarks</label>
                 <textarea value={form.remarks} onChange={e => setField('remarks', e.target.value)} placeholder="General notes…" rows={2}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-black placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-500">Inspection Notes</label>
                 <textarea value={form.inspection_notes} onChange={e => setField('inspection_notes', e.target.value)} placeholder="Quality inspection observations…" rows={2}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-black placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-none" />
               </div>
             </div>
           </div>
@@ -1353,7 +1353,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                     {calc.tc > 0 && <div className="flex justify-between"><span className="text-slate-600">Transport + GST</span><span>₹{inr(calc.tc + calc.tgst)}</span></div>}
                     {calc.oc > 0 && <div className="flex justify-between"><span className="text-slate-600">Other Charges</span><span>₹{inr(calc.oc)}</span></div>}
                     {calc.tcs > 0 && <div className="flex justify-between"><span className="text-slate-600">TCS ({b.tcs_pct}%)</span><span>₹{inr(calc.tcs)}</span></div>}
-                    <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
+                    <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-black">
                       <span>Grand Total</span><span>₹{inr(calc.total)}</span>
                     </div>
                   </div>
@@ -1380,31 +1380,31 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Project</span>
-                  <span className="font-medium text-slate-800 text-right max-w-[160px] truncate">
+                  <span className="font-medium text-black text-right max-w-[160px] truncate">
                     {projects.find(p => p.id === form.project_id)?.name || '—'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Vendor</span>
-                  <span className="font-medium text-slate-800 text-right max-w-[160px] truncate">
+                  <span className="font-medium text-black text-right max-w-[160px] truncate">
                     {vendors.find(v => v.id === form.vendor_id)?.name || form.supplier_name || '—'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Vehicle</span>
-                  <span className="font-mono font-medium text-slate-800">{form.vehicle_no || '—'}</span>
+                  <span className="font-mono font-medium text-black">{form.vehicle_no || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">DC No.</span>
-                  <span className="font-mono font-medium text-slate-800">{form.dc_number || '—'}</span>
+                  <span className="font-mono font-medium text-black">{form.dc_number || '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Linked PO</span>
-                  <span className="font-mono font-medium text-slate-800 truncate max-w-[120px]">{form.po_number || (form.po_id ? 'Linked' : '—')}</span>
+                  <span className="font-mono font-medium text-black truncate max-w-[120px]">{form.po_number || (form.po_id ? 'Linked' : '—')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Linked GRS</span>
-                  <span className="font-mono font-medium text-slate-800 truncate max-w-[120px]">{form.grs_number || (form.grs_id ? 'Linked' : '—')}</span>
+                  <span className="font-mono font-medium text-black truncate max-w-[120px]">{form.grs_number || (form.grs_id ? 'Linked' : '—')}</span>
                 </div>
               </div>
             </div>
@@ -1565,7 +1565,7 @@ function ReceiveForm({ ignId, onClose, projects, qc }) {
           <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
             <Truck size={18} className="text-slate-600" />
             <div>
-              <div className="text-sm font-medium text-slate-800">Gate entry by {ign.security_incharge || 'Security'}</div>
+              <div className="text-sm font-medium text-black">Gate entry by {ign.security_incharge || 'Security'}</div>
               <div className="text-xs text-slate-500">Vehicle: {ign.vehicle_no || '—'} · {ign.gate_received_at ? dayjs(ign.gate_received_at).format('DD-MM-YYYY HH:mm') : ''} · {ign.project_name}</div>
             </div>
           </div>

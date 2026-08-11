@@ -104,7 +104,7 @@ function InstanceRow({ item, onAction }) {
             <button onClick={() => onAction(item.id, 'approved')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">
               Approve
             </button>
-            <button onClick={() => onAction(item.id, 'rejected')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-800 hover:bg-slate-50">
+            <button onClick={() => onAction(item.id, 'rejected')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-black hover:bg-slate-50">
               Reject
             </button>
           </div>

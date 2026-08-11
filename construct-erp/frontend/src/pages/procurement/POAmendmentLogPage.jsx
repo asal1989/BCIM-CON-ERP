@@ -1073,7 +1073,7 @@ export default function POAmendmentLogPage() {
               ].map(([k, v]) => (
                 <div key={k} className="flex gap-2">
                   <span className="text-slate-900 font-medium w-28 shrink-0">{k}</span>
-                  <span className="font-medium text-slate-800">{v}</span>
+                  <span className="font-medium text-black">{v}</span>
                 </div>
               ))}
             </div>

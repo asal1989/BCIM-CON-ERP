@@ -30,7 +30,7 @@ function SectionTitle({ icon: Icon, title, subtitle, action }) {
           <Icon className="w-4 h-4 text-emerald-600" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
           {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
         </div>
       </div>
@@ -110,7 +110,7 @@ function PCPaymentModal({ pc, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <p className="text-sm font-medium text-slate-800">Record PC Payment</p>
+            <p className="text-sm font-medium text-black">Record PC Payment</p>
             <p className="text-xs text-slate-900 font-medium mt-0.5 font-mono">{pc.pc_number}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-900 font-medium hover:bg-slate-100">
@@ -528,7 +528,7 @@ export default function AccountsDashboard() {
           {agingBuckets.map(b => (
             <div key={b.bucket} className="flex-1 min-w-[100px] bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
               <div className={`h-1.5 rounded-full mb-2 ${AGING_COLOR[b.bucket] || 'bg-slate-400'}`} />
-              <p className="text-lg font-bold text-slate-800">{b.count}</p>
+              <p className="text-lg font-bold text-black">{b.count}</p>
               <p className="text-[11px] text-slate-400">{b.bucket} days</p>
               <p className="text-[11px] text-slate-400">{inrFmt(b.total)}</p>
             </div>

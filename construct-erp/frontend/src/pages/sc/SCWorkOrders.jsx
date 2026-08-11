@@ -59,7 +59,7 @@ function WOFinalAccountModal({ wo, onClose }) {
   const bills = data?.bills || [];
   const w = data?.wo || wo;
 
-  const row = (label, value, color='text-slate-800', border=false) => (
+  const row = (label, value, color='text-black', border=false) => (
     <tr className={border ? 'border-t-2 border-slate-300 bg-slate-50 font-bold' : 'border-b border-slate-50'}>
       <td className="px-4 py-2 text-xs text-slate-500">{label}</td>
       <td className={`px-4 py-2 text-right text-xs font-semibold ${color}`}>{value}</td>
@@ -95,7 +95,7 @@ function WOFinalAccountModal({ wo, onClose }) {
               {/* KPI row */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { l:'Contract Value',   v: fmt(w.contract_amount),      c:'text-slate-800' },
+                  { l:'Contract Value',   v: fmt(w.contract_amount),      c:'text-black' },
                   { l:'Total Billed',     v: fmt(fa?.total_gross||0),      c:'text-indigo-700' },
                   { l:'Net Certified',    v: fmt(fa?.total_net||0),         c:'text-teal-700'  },
                   { l:'Utilisation',      v: `${fa?.utilisation_pct||0}%`, c: fa?.utilisation_pct>=100?'text-red-600':'text-emerald-700' },
@@ -561,7 +561,7 @@ function NewWODrawer({ wo, onClose, onEdit }) {
             ].map(({l,v})=>(
               <div key={l} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
-                <div className="text-xs font-semibold text-slate-800">{v}</div>
+                <div className="text-xs font-semibold text-black">{v}</div>
               </div>
             ))}
           </div>
@@ -571,7 +571,7 @@ function NewWODrawer({ wo, onClose, onEdit }) {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Financial Summary</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {[
-                {l:'Contract Value', v: fmt(d.contract_amount), color:'text-slate-800'},
+                {l:'Contract Value', v: fmt(d.contract_amount), color:'text-black'},
                 {l:'Total Billed',   v: fmt(d.total_billed),    color:'text-indigo-700'},
                 {l:'Total Paid',     v: fmt(d.total_paid),      color:'text-emerald-700'},
                 {l:'GST',            v: `${d.gst_pct||18}%`,   color:'text-slate-600'},
@@ -717,7 +717,7 @@ function LegacyWODrawer({ woId, woRow, onClose }) {
                 ].map(({l,v,bold})=>(
                   <div key={l} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
-                    <p className={clsx('text-xs text-slate-800', bold && 'font-bold text-base text-emerald-700')}>{v||'—'}</p>
+                    <p className={clsx('text-xs text-black', bold && 'font-bold text-base text-emerald-700')}>{v||'—'}</p>
                   </div>
                 ))}
               </div>
@@ -867,7 +867,7 @@ export default function SCWorkOrders() {
           ].map(({k,label})=>(
             <button key={k} onClick={()=>setSource(k)}
               className={clsx('px-4 py-2 rounded-lg text-xs font-semibold transition-all',
-                sourceTab===k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50')}
+                sourceTab===k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-black hover:bg-slate-50')}
               style={sourceTab===k ? {background:`linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)`} : {}}>
               {label}
             </button>
@@ -944,7 +944,7 @@ export default function SCWorkOrders() {
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 max-w-[150px] truncate">{w.project_name}</td>
                         <td className="px-4 py-3">
-                          <p className="text-xs font-semibold text-slate-800">{w.vendor_name}</p>
+                          <p className="text-xs font-semibold text-black">{w.vendor_name}</p>
                           {w.sc_code && <p className="text-[10px] text-slate-400 font-mono">{w.sc_code}</p>}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-700 max-w-[200px] truncate">{w.subject}</td>
@@ -966,7 +966,7 @@ export default function SCWorkOrders() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-xs font-bold text-slate-800">{fmt(w.contract_amount)}</td>
+                        <td className="px-4 py-3 text-right text-xs font-bold text-black">{fmt(w.contract_amount)}</td>
                         <td className="px-4 py-3 text-right text-xs font-semibold text-indigo-600">
                           {w.total_billed > 0 ? fmt(w.total_billed) : <span className="text-slate-400">—</span>}
                         </td>

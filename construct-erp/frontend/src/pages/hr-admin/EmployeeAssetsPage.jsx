@@ -163,7 +163,7 @@ export default function EmployeeAssetsPage() {
                 return (
                   <tr key={a.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-3 font-medium">{a.full_name} <span className="text-slate-400">({a.emp_code})</span></td>
-                    <td className="px-3 py-3 font-medium text-slate-800">{a.asset_name}</td>
+                    <td className="px-3 py-3 font-medium text-black">{a.asset_name}</td>
                     <td className="px-3 py-3 capitalize">{a.category?.replace(/_/g,' ')}</td>
                     <td className="px-3 py-3 font-mono text-[10px] text-slate-500">{a.asset_code||a.serial_number||'—'}</td>
                     <td className="px-3 py-3">{dayjs(a.assigned_on).format('DD-MM-YYYY')}</td>

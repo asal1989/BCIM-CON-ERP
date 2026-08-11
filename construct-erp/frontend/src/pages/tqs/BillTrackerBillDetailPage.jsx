@@ -671,7 +671,7 @@ function PaymentTab({ bill, billId }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Certified Net',  value: inr(certified),    color: 'text-slate-800' },
+          { label: 'Certified Net',  value: inr(certified),    color: 'text-black' },
           { label: 'TDS Deducted',   value: inr(tds),          color: 'text-orange-600' },
           { label: 'Net Payable',    value: inr(certified - tds), color: 'text-blue-700' },
           { label: 'Balance to Pay', value: inr(balance),      color: balance > 0 ? 'text-red-500' : 'text-emerald-600' },

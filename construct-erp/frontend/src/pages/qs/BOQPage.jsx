@@ -343,7 +343,7 @@ export default function BOQPage() {
                 <FileSpreadsheet className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-slate-800 uppercase tracking-tight leading-none">Bill of Quantities</h1>
+                <h1 className="text-xl font-semibold text-black uppercase tracking-tight leading-none">Bill of Quantities</h1>
                 <p className="text-[10px] text-slate-900 font-medium uppercase tracking-widest mt-0.5">
                   {selectedProject ? selectedProject.name : 'Select a project to begin'}
                 </p>

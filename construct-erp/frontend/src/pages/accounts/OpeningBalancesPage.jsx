@@ -70,7 +70,7 @@ export default function OpeningBalancesPage() {
               <FileBarChart className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Opening Balances</h1>
+              <h1 className="text-lg font-semibold text-black">Opening Balances</h1>
               <p className="text-xs text-slate-400">Set account balances at the start of the financial year — one figure per account, in its natural debit/credit direction</p>
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function OpeningBalancesPage() {
               {rows.map(r => (
                 <tr key={r.code} className="hover:bg-slate-50">
                   <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{r.code}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.name}</td>
+                  <td className="px-4 py-2.5 font-medium text-black">{r.name}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-400">{r.group}</td>
                   <td className="px-4 py-2.5 text-right">
                     {r.debitNormal ? (
@@ -142,7 +142,7 @@ export default function OpeningBalancesPage() {
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50">
                 <td colSpan={3} className="px-4 py-2.5 text-sm font-bold text-slate-700">Total</td>
-                <td className="px-4 py-2.5 font-mono font-bold text-slate-800 text-right">{inr(totalDr)}</td>
+                <td className="px-4 py-2.5 font-mono font-bold text-black text-right">{inr(totalDr)}</td>
                 <td className={`px-4 py-2.5 font-mono font-bold text-right ${balanced ? 'text-emerald-700' : 'text-red-600'}`}>{inr(totalCr)}</td>
               </tr>
             </tfoot>

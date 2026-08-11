@@ -512,7 +512,7 @@ export default function BillTrackerAnalyticsPage() {
                     <div key={s.key} className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
                       <span className="text-xs text-slate-900 flex-1">{s.label}</span>
-                      <span className="text-xs font-medium text-slate-800">{s.count}</span>
+                      <span className="text-xs font-medium text-black">{s.count}</span>
                       <span className="text-[10px] text-slate-900 font-medium w-20 text-right">{inrFmt(s.amount)}</span>
                     </div>
                   ))}

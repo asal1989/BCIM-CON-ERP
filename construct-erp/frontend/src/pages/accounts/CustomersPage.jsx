@@ -28,7 +28,7 @@ export default function CustomersPage() {
             <Users className="w-4 h-4 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Customers</h1>
+            <h1 className="text-lg font-semibold text-black">Customers</h1>
             <p className="text-xs text-slate-400">Clients derived from project billing details</p>
           </div>
         </div>
@@ -65,7 +65,7 @@ export default function CustomersPage() {
               <tbody className="divide-y divide-slate-50">
                 {filtered.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{p.client_name}</td>
+                    <td className="px-4 py-2.5 font-medium text-black">{p.client_name}</td>
                     <td className="px-4 py-2.5 text-slate-600">{p.name}</td>
                     <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{p.client_gstin || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{p.client_pan || '—'}</td>

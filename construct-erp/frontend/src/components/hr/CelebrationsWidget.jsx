@@ -87,7 +87,7 @@ export default function CelebrationsWidget() {
             <span className="text-base">🎉</span>
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-800">Today's Celebrations</p>
+            <p className="text-sm font-bold text-black">Today's Celebrations</p>
             <p className="text-[10px] text-slate-400">
               {total === 0 ? 'No celebrations today' : `${birthdays.length} birthday${birthdays.length !== 1 ? 's' : ''} · ${anniversaries.length} anniversar${anniversaries.length !== 1 ? 'ies' : 'y'}`}
             </p>
@@ -149,7 +149,7 @@ export default function CelebrationsWidget() {
             <div key={i} className={clsx('flex items-center gap-3 px-5 py-3', i < visible.length - 1 && 'border-b border-slate-50')}>
               <Avatar name={emp.name} size="md" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{emp.name}</p>
+                <p className="text-sm font-semibold text-black truncate">{emp.name}</p>
                 <p className="text-[11px] text-slate-400 truncate">{emp.emp_code || '—'} · {emp.department || emp.designation || '—'}</p>
               </div>
               {emp.type === 'birthday' ? (
@@ -203,7 +203,7 @@ export default function CelebrationsWidget() {
             <div key={i} className={clsx('flex items-center gap-3 px-5 py-3', i < upcomingItems.length - 1 && 'border-b border-slate-50')}>
               <Avatar name={emp.name} size="md" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{emp.name}</p>
+                <p className="text-sm font-semibold text-black truncate">{emp.name}</p>
                 <p className="text-[11px] text-slate-400 truncate">
                   {emp.type === 'birthday' ? '🎂 Birthday' : `🏆 ${ORDINAL(emp.years)} Anniversary`} · {emp.department || emp.designation || emp.emp_code || '—'}
                 </p>

@@ -110,7 +110,7 @@ export default function AccountSettingsPage() {
             <Settings className="w-4 h-4 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Accounts Settings</h1>
+            <h1 className="text-lg font-semibold text-black">Accounts Settings</h1>
             <p className="text-xs text-slate-400">Company profile, fiscal year, currency, payment terms &amp; tax rates</p>
           </div>
         </div>
@@ -249,7 +249,7 @@ export default function AccountSettingsPage() {
 
             <div className="bg-white border border-slate-200 rounded-md p-5">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold text-slate-800">Tax Rates</p>
+                <p className="text-sm font-semibold text-black">Tax Rates</p>
                 <button onClick={addTaxRate} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
                   <Plus className="w-3.5 h-3.5" /> Add Rate
                 </button>

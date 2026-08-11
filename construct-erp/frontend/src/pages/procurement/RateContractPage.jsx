@@ -357,7 +357,7 @@ export default function RateContractPage() {
                     <div className="text-sm text-slate-700 mt-2">{latest.material}</div>
                     <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                       {[['Vendor', latest.vendorName], ['Project', latest.projectName], ['Document', latest.docNo], ['Date', fmt(latest.sourceDate)]].map(([l, v]) => (
-                        <div key={l} className="p-3 rounded-xl bg-white/80 border border-slate-100"><div className="text-slate-400 uppercase tracking-[0.18em] text-[10px]">{l}</div><div className="text-slate-800 font-medium mt-1">{v}</div></div>
+                        <div key={l} className="p-3 rounded-xl bg-white/80 border border-slate-100"><div className="text-slate-400 uppercase tracking-[0.18em] text-[10px]">{l}</div><div className="text-black font-medium mt-1">{v}</div></div>
                       ))}
                     </div>
                   </div>

@@ -64,7 +64,7 @@ function SectionCard({ title, sub, action, onAction, children }) {
     <div className="bg-white rounded-xl border border-[#e2e6ec] overflow-hidden">
       <div className="bg-[#f8f9fc] border-b border-[#e2e6ec] px-5 py-3 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-800">{title}</p>
+          <p className="text-sm font-medium text-black">{title}</p>
           {sub && <p className="text-xs text-slate-900 font-medium mt-0.5">{sub}</p>}
         </div>
         {action && (
@@ -137,7 +137,7 @@ export default function QAQCDashboard() {
             <Shield className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">QA / QC Command Centre</h1>
+            <h1 className="text-lg font-medium text-black">QA / QC Command Centre</h1>
             <p className="text-xs text-slate-500">RFI · NCR · Lab Tests · ITP Checklists · Snag List</p>
           </div>
         </div>
@@ -205,7 +205,7 @@ export default function QAQCDashboard() {
                 <FolderSearch className="w-4 h-4 text-white" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-800">QC Document Library</p>
+                <p className="text-sm font-semibold text-black">QC Document Library</p>
                 <p className="text-xs text-slate-500">
                   {qcDocs.length} documents — checklists, method statements, ITPs, certificates
                 </p>

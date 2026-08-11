@@ -274,7 +274,7 @@ function LifecycleStepper({ row }) {
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ icon: Icon, label, value, color, sub, onClick, active }) {
   const colors = {
-    slate:   { bg: 'bg-slate-50',   icon: 'text-slate-500',   val: 'text-slate-800',   accent: 'bg-slate-400'   },
+    slate:   { bg: 'bg-slate-50',   icon: 'text-slate-500',   val: 'text-black',   accent: 'bg-slate-400'   },
     amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   val: 'text-amber-800',   accent: 'bg-amber-500'   },
     orange:  { bg: 'bg-orange-50',  icon: 'text-orange-600',  val: 'text-orange-800',  accent: 'bg-orange-500'  },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    val: 'text-blue-800',    accent: 'bg-blue-500'    },
@@ -491,7 +491,7 @@ function DetailPopup({ item, onClose }) {
                       {detail.timeline.map((t, i) => {
                         const TYPE_CFG = {
                           mr:       { dot: 'bg-slate-700 border-slate-700',   text: 'text-slate-700',   sub: 'text-slate-400', tag: 'bg-slate-100 text-slate-600'   },
-                          approval: { dot: 'bg-emerald-500 border-emerald-500', text: 'text-slate-800', sub: 'text-slateald-400', tag: 'bg-emerald-100 text-emerald-700' },
+                          approval: { dot: 'bg-emerald-500 border-emerald-500', text: 'text-black', sub: 'text-slateald-400', tag: 'bg-emerald-100 text-emerald-700' },
                           po:       { dot: 'bg-blue-500 border-blue-500',     text: 'text-blue-800',    sub: 'text-blue-400',   tag: 'bg-blue-100 text-blue-700'     },
                           ign:      { dot: 'bg-teal-500 border-teal-500',     text: 'text-teal-800',    sub: 'text-teal-400',   tag: 'bg-teal-100 text-teal-700'     },
                           invoice:  { dot: 'bg-purple-500 border-purple-500', text: 'text-purple-800',  sub: 'text-purple-400', tag: 'bg-purple-100 text-purple-700' },
@@ -728,7 +728,7 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
                       </div>
                     </td>
                     <td className="px-2 py-2 max-w-[200px] border border-slate-200">
-                      <div className="font-medium text-slate-800 text-[11px] truncate" title={row.material_name}>
+                      <div className="font-medium text-black text-[11px] truncate" title={row.material_name}>
                         {overdue && <AlertTriangle className="w-2.5 h-2.5 text-red-500 inline mr-0.5" />}
                         {row.material_name}
                       </div>
@@ -748,7 +748,7 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
                     <td className="px-2 py-2 text-right border border-slate-200">
                       {orderValue > 0 ? (
                         <>
-                          <div className="font-bold text-slate-800 text-[11px] tabular-nums whitespace-nowrap">₹{inr(orderValue)}</div>
+                          <div className="font-bold text-black text-[11px] tabular-nums whitespace-nowrap">₹{inr(orderValue)}</div>
                           <div className="text-[9px] text-slate-400 tabular-nums whitespace-nowrap">@ ₹{inr(row.unit_rate)}</div>
                         </>
                       ) : <span className="text-slate-300 text-[10px]">—</span>}
@@ -921,7 +921,7 @@ function SummaryTab({ projectId, projectName, projectAddress, clientName }) {
                   const supplyPct = pct(r.received_qty, r.ordered_qty || r.requested_qty);
                   return (
                     <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{r.label}</td>
+                      <td className="px-4 py-2.5 font-medium text-black">{r.label}</td>
                       <td className="px-4 py-2.5 text-slate-500">{r.item_count}</td>
                       <td className="px-4 py-2.5 text-slate-700">{n(r.requested_qty)}</td>
                       <td className="px-4 py-2.5 text-blue-700 font-medium">{n(r.ordered_qty)}</td>

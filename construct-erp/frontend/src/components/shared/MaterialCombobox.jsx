@@ -102,7 +102,7 @@ export default function MaterialCombobox({ value, inventoryItems = [], onChange,
                     className="w-full text-left px-2.5 py-2.5 rounded-lg text-sm hover:bg-indigo-50 flex items-center gap-2.5 group transition-colors"
                   >
                     <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', dot)} />
-                    <span className="flex-1 min-w-0 font-semibold text-slate-800 group-hover:text-indigo-700 truncate">{item.material_name}</span>
+                    <span className="flex-1 min-w-0 font-semibold text-black group-hover:text-indigo-700 truncate">{item.material_name}</span>
                     <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 group-hover:bg-indigo-100 group-hover:text-indigo-600 rounded px-2 py-0.5 flex-shrink-0">{item.unit}</span>
                   </button>
                   );

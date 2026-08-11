@@ -34,7 +34,7 @@ export default function GSTR1Page() {
               <FileText className="w-4 h-4 text-violet-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">GSTR-1 — Outward Supplies</h1>
+              <h1 className="text-lg font-semibold text-black">GSTR-1 — Outward Supplies</h1>
               <p className="text-xs text-slate-400">{fyLabel} — client RA bills (sales) with GST. Due 11th of the following month.</p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export default function GSTR1Page() {
           ].map(({ label, value, sub }) => (
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3">
               <p className="text-xs text-slate-500 mb-1">{label}</p>
-              <p className="text-base font-bold text-slate-800">{value}</p>
+              <p className="text-base font-bold text-black">{value}</p>
               <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
             </div>
           ))}
@@ -90,19 +90,19 @@ export default function GSTR1Page() {
                     <td className="px-4 py-2.5 font-mono text-slate-700">{inr(r.cgst)}</td>
                     <td className="px-4 py-2.5 font-mono text-slate-700">{inr(r.sgst)}</td>
                     <td className="px-4 py-2.5 font-mono text-slate-700">{inr(r.total_gst)}</td>
-                    <td className="px-4 py-2.5 font-mono font-semibold text-slate-800">{inr(r.total)}</td>
+                    <td className="px-4 py-2.5 font-mono font-semibold text-black">{inr(r.total)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                   <td colSpan={3} className="px-4 py-2.5 text-sm text-slate-700">Total ({summary.invoice_count || 0})</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_taxable)}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_taxable)}</td>
                   <td />
-                  <td className="px-4 py-2.5 font-mono text-slate-800">{inr((summary.total_gst || 0) / 2)}</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-800">{inr((summary.total_gst || 0) / 2)}</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_gst)}</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-800">{inr((summary.total_taxable || 0) + (summary.total_gst || 0))}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">{inr((summary.total_gst || 0) / 2)}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">{inr((summary.total_gst || 0) / 2)}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_gst)}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">{inr((summary.total_taxable || 0) + (summary.total_gst || 0))}</td>
                 </tr>
               </tfoot>
             </table>

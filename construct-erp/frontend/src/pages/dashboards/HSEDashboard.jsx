@@ -71,7 +71,7 @@ export default function HSEDashboard() {
     <div className="p-6 space-y-5 bg-[#f4f6f9] min-h-full">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-medium text-slate-800">Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 17 ? 'afternoon' : 'evening'}, {user?.name?.split(' ')[0]} 👋</h1>
+          <h1 className="text-xl font-medium text-black">Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 17 ? 'afternoon' : 'evening'}, {user?.name?.split(' ')[0]} 👋</h1>
           <p className="text-sm text-slate-900 font-medium mt-0.5">HSE Dashboard — {dayjs().format('dddd, D MMMM YYYY')}</p>
         </div>
         <Badge label="HSE Officer" cls="bg-orange-100 text-orange-700 text-xs px-3 py-1" />

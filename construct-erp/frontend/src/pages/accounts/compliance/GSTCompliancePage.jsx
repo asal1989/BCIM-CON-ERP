@@ -42,7 +42,7 @@ export default function GSTCompliancePage() {
               <IndianRupee className="w-4 h-4 text-violet-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">GST Compliance</h1>
+              <h1 className="text-lg font-semibold text-black">GST Compliance</h1>
               <p className="text-xs text-slate-400">{fyLabel} — output GST, input tax credit, net liability from your ERP transactions</p>
             </div>
           </div>
@@ -69,7 +69,7 @@ export default function GSTCompliancePage() {
           ].map(({ label, value, sub }) => (
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3">
               <p className="text-xs text-slate-500 mb-1">{label}</p>
-              <p className="text-base font-bold text-slate-800">{value}</p>
+              <p className="text-base font-bold text-black">{value}</p>
               <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
             </div>
           ))}
@@ -106,25 +106,25 @@ export default function GSTCompliancePage() {
                   <tbody className="divide-y divide-slate-50">
                     {returns.map(r => (
                       <tr key={r.month_key} className={`hover:bg-slate-50 ${!r.has_activity ? 'opacity-50' : ''}`}>
-                        <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{r.month}</td>
+                        <td className="px-4 py-2.5 font-medium text-black whitespace-nowrap">{r.month}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{r.taxable ? inr(r.taxable) : '—'}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{r.cgst ? inr(r.cgst) : '—'}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{r.sgst ? inr(r.sgst) : '—'}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{r.output_gst ? inr(r.output_gst) : '—'}</td>
                         <td className="px-4 py-2.5 font-mono text-emerald-700">{r.itc_books ? inr(r.itc_books) : '—'}</td>
-                        <td className="px-4 py-2.5 font-mono font-semibold text-slate-800">{inr(r.net_payable)}</td>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-black">{inr(r.net_payable)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                       <td className="px-4 py-2.5 text-sm text-slate-700">Total</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_taxable)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr((summary.total_output_gst || 0) / 2)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr((summary.total_output_gst || 0) / 2)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_output_gst)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_taxable)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr((summary.total_output_gst || 0) / 2)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr((summary.total_output_gst || 0) / 2)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_output_gst)}</td>
                       <td className="px-4 py-2.5 font-mono text-emerald-700">{inr(summary.total_itc)}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.net_payable)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.net_payable)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -150,7 +150,7 @@ export default function GSTCompliancePage() {
                   <tbody className="divide-y divide-slate-50">
                     {activeReturns.filter(r => r.itc_books > 0).map(r => (
                       <tr key={r.month_key} className="hover:bg-slate-50">
-                        <td className="px-4 py-2.5 font-medium text-slate-800">{r.month}</td>
+                        <td className="px-4 py-2.5 font-medium text-black">{r.month}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-700">{inr(r.itc_books)}</td>
                         <td className="px-4 py-2.5 font-mono text-slate-400">—</td>
                         <td className="px-4 py-2.5">
@@ -162,7 +162,7 @@ export default function GSTCompliancePage() {
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                       <td className="px-4 py-2.5 text-sm text-slate-700">Total ITC in Books</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_itc)}</td>
+                      <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_itc)}</td>
                       <td colSpan={2} />
                     </tr>
                   </tfoot>

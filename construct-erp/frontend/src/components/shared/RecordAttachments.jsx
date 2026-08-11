@@ -159,7 +159,7 @@ export default function RecordAttachments({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <p className="text-xs font-medium text-slate-800 truncate">{doc.file_name}</p>
+                  <p className="text-xs font-medium text-black truncate">{doc.file_name}</p>
                   {doc.doc_type && doc.doc_type !== 'general' && (
                     <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-semibold uppercase">
                       {doc.doc_type.replace(/_/g, ' ')}

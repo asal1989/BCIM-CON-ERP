@@ -348,7 +348,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
             <h2 className="text-base font-medium text-slate-900">New Vendor QS Certification</h2>
             <p className="text-xs text-slate-900 font-medium mt-0.5">Select invoices, type the RA abstract summary, then print the payment certificate.</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-slate-800">
+          <button onClick={onClose} className="p-2 rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-black">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -514,7 +514,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                     <tr key={b.id} className={selectedBillIds.includes(b.id) ? 'bg-emerald-50' : 'hover:bg-slate-50'}>
                       <td className="px-3 py-2"><input type="checkbox" className="accent-emerald-600" checked={selectedBillIds.includes(b.id)} onChange={() => toggleBill(b.id)} /></td>
                       <td className="px-3 py-2 font-medium text-indigo-700">{b.sl_number}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{(b.inv_number || '-').toUpperCase()}</td>
+                      <td className="px-3 py-2 font-medium text-black">{(b.inv_number || '-').toUpperCase()}</td>
                       <td className="px-3 py-2 text-slate-500">{fmtDate(b.inv_date)}</td>
                       <td className="px-3 py-2 text-slate-500">{b.order_number || '-'}</td>
                       <td className="px-3 py-2 text-right font-bold">Rs {inr(b.total_amount)}</td>
@@ -1035,7 +1035,7 @@ export default function VendorQSCertificationPage() {
                               <td className="px-3 py-2 text-right text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.invoice_value)}</td>
                               <td className="px-3 py-2 text-right text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(certifiedValueOf(c))}</td>
                               <td className="px-3 py-2 text-right text-amber-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(deductionsOf(c))}</td>
-                              <td className="px-3 py-2 text-right font-semibold text-slate-800" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.net_payable)}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-black" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.net_payable)}</td>
                               <td className="px-3 py-2 text-right text-emerald-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.paid_amount)}</td>
                               <td className="px-3 py-2 text-center">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${statusClass(c.status)}`}>{c.status}</span>
@@ -1057,7 +1057,7 @@ export default function VendorQSCertificationPage() {
               })}
             </tbody>
             {vendorSummary.length > 0 && (
-              <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800">
+              <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-black">
                 <tr>
                   <td className="px-4 py-3">Total ({vendorSummary.length} vendors)</td>
                   <td className="px-4 py-3 text-center" style={{ fontVariantNumeric: 'tabular-nums' }}>{certs.length}</td>

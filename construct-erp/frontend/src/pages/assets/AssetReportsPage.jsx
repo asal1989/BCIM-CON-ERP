@@ -220,7 +220,7 @@ export default function AssetReportsPage() {
             <p className="text-sm font-semibold text-slate-600">Asset count, book value, deployment and missing document references by department.</p>
           </div>
           <div className="asset-report-actions flex gap-2">
-            <button onClick={exportCsv} className="h-10 px-4 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-800 hover:border-blue-300 flex items-center gap-2">
+            <button onClick={exportCsv} className="h-10 px-4 rounded-lg border border-slate-200 bg-white text-sm font-bold text-black hover:border-blue-300 flex items-center gap-2">
               <Download className="w-4 h-4" /> Excel
             </button>
             <button onClick={() => window.print()} className="h-10 px-4 rounded-lg bg-blue-700 text-white text-sm font-bold hover:bg-blue-800 flex items-center gap-2">
@@ -307,12 +307,12 @@ export default function AssetReportsPage() {
                       <td className="px-3 py-3 border border-slate-200 font-bold text-slate-900">{inferredDepartment(asset)}</td>
                       <td className="px-3 py-3 border border-slate-200 font-mono font-bold text-blue-700">{asset.asset_code || '-'}</td>
                       <td className="px-3 py-3 border border-slate-200 font-bold text-slate-950">{asset.asset_name || '-'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-semibold text-slate-800">{asset.asset_type || '-'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-slate-800">{asset.serial_number || '-'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-slate-800">{asset.po_number || '-'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-slate-800">{asset.invoice_number || '-'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-semibold text-slate-800">{asset.current_project_name || 'Central Yard'}</td>
-                      <td className="px-3 py-3 border border-slate-200 font-bold text-slate-800">{statusLabel(asset.status)}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-semibold text-black">{asset.asset_type || '-'}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-black">{asset.serial_number || '-'}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-black">{asset.po_number || '-'}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-mono font-semibold text-black">{asset.invoice_number || '-'}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-semibold text-black">{asset.current_project_name || 'Central Yard'}</td>
+                      <td className="px-3 py-3 border border-slate-200 font-bold text-black">{statusLabel(asset.status)}</td>
                       <td className="px-3 py-3 border border-slate-200 text-right font-mono font-bold text-slate-950">{fmtMoney(asset.purchase_value)}</td>
                     </tr>
                   ))}

@@ -249,7 +249,7 @@ function TrackerModal({ initial, onClose, projects }) {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-900 hover:text-slate-800">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-900 hover:text-black">Cancel</button>
             <button onClick={() => mutation.mutate(form)} disabled={mutation.isPending}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
               {mutation.isPending ? 'Saving…' : isEdit ? 'Update' : 'Create'}
@@ -586,7 +586,7 @@ function ManualTrackerTab({ projectFilter, search, projects }) {
           <div key={s.key} className="bg-white rounded-xl border border-slate-100 p-4">
             <div className="flex items-center justify-between mb-1">
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${s.light}`}>Stage {s.key}</span>
-              <span className="text-2xl font-medium text-slate-800">{s.count}</span>
+              <span className="text-2xl font-medium text-black">{s.count}</span>
             </div>
             <p className="text-xs text-slate-500">{s.label}</p>
           </div>
@@ -706,7 +706,7 @@ export default function BillTrackerMaterialTrackerPage() {
             <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">Material Tracker</h1>
+            <h1 className="text-lg font-medium text-black">Material Tracker</h1>
             <p className="text-xs text-slate-500">MR → PO → Store Receipt → QS Certification</p>
           </div>
         </div>

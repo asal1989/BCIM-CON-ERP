@@ -302,7 +302,7 @@ function CNForm({ initial, onClose, onSaved }) {
               <p className="text-xs text-slate-500 mt-0.5">Record a vendor credit note against an invoice</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-black">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -399,7 +399,7 @@ function CNForm({ initial, onClose, onSaved }) {
                       className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <span className="text-xs font-semibold text-slate-800">{b.inv_number || '—'}</span>
+                          <span className="text-xs font-semibold text-black">{b.inv_number || '—'}</span>
                           <span className="ml-2 text-[10px] text-slate-400 font-mono">{b.sl_number}</span>
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-shrink-0">
@@ -735,7 +735,7 @@ function CNDetail({ cn, onClose, onEdit }) {
             ].map(([label, value]) => (
               <div key={label} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                 <p className="text-xs text-slate-400 font-medium mb-0.5">{label}</p>
-                <p className="text-sm font-medium text-slate-800">{value}</p>
+                <p className="text-sm font-medium text-black">{value}</p>
               </div>
             ))}
           </div>
@@ -765,7 +765,7 @@ function CNDetail({ cn, onClose, onEdit }) {
                   {cn.items.map((it, i) => (
                     <tr key={i} className="hover:bg-slate-50">
                       <td className="px-3 py-2.5 text-slate-400">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">{it.material_name}</td>
+                      <td className="px-3 py-2.5 font-medium text-black">{it.material_name}</td>
                       <td className="px-3 py-2.5 text-slate-500">{it.unit}</td>
                       <td className="px-3 py-2.5 font-mono text-right">{Number(it.quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                       <td className="px-3 py-2.5 font-mono text-right">{inr(it.rate)}</td>
@@ -780,7 +780,7 @@ function CNDetail({ cn, onClose, onEdit }) {
           {/* Financial summary */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
-              { label: 'Basic Amount',  value: inr(cn.basic_amount), color: 'text-slate-800' },
+              { label: 'Basic Amount',  value: inr(cn.basic_amount), color: 'text-black' },
               { label: cn.tax_mode === 'intrastate' ? 'CGST + SGST' : 'IGST',
                 value: cn.tax_mode === 'intrastate'
                   ? `${inr(cn.cgst_amt)} + ${inr(cn.sgst_amt)}`
@@ -918,7 +918,7 @@ export default function CreditNotePage() {
       {/* ── Summary pills ── */}
       <div className="px-6 pt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total (filtered)',  value: inr(totalAmt),   color: 'text-slate-800',    bg: 'bg-white' },
+          { label: 'Total (filtered)',  value: inr(totalAmt),   color: 'text-black',    bg: 'bg-white' },
           { label: 'Pending',           value: inr(pendingAmt), color: 'text-amber-700',    bg: 'bg-amber-50' },
           { label: 'Applied',           value: inr(appliedAmt), color: 'text-emerald-700',  bg: 'bg-emerald-50' },
           { label: 'Refunded',          value: inr(refundedAmt), color: 'text-blue-700',    bg: 'bg-blue-50' },
@@ -954,7 +954,7 @@ export default function CreditNotePage() {
           value={filters.to} onChange={e => setFilter('to', e.target.value)} title="To date" />
         {(filters.search || filters.status || filters.cn_type || filters.from || filters.to) && (
           <button onClick={() => { setFilters({ search:'', status:'', cn_type:'', from:'', to:'' }); setPage(0); }}
-            className="px-3 py-2 text-sm text-slate-500 hover:text-slate-800">
+            className="px-3 py-2 text-sm text-slate-500 hover:text-black">
             Clear filters
           </button>
         )}
@@ -1000,13 +1000,13 @@ export default function CreditNotePage() {
                           <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                             {dayjs(row.cn_date).format('DD-MM-YYYY')}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-800">{row.vendor_name}</td>
+                          <td className="px-4 py-3 font-medium text-black">{row.vendor_name}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{row.project_name || '—'}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs font-mono">{row.invoice_number || '—'}</td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">{typeLabel}</span>
                           </td>
-                          <td className="px-4 py-3 font-mono font-semibold text-slate-800 text-right whitespace-nowrap">
+                          <td className="px-4 py-3 font-mono font-semibold text-black text-right whitespace-nowrap">
                             ₹ {inr(row.total_amount)}
                           </td>
                           <td className="px-4 py-3"><StatusBadge status={row.status} /></td>

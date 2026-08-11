@@ -146,7 +146,7 @@ export default function LookAheadPage() {
             <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <CalendarDays className="w-4 h-4 text-indigo-600" />
-                <h2 className="text-sm font-medium text-slate-800">Plan Details</h2>
+                <h2 className="text-sm font-medium text-black">Plan Details</h2>
                 {plan && (
                   <span className={clsx('text-xs px-2.5 py-1 rounded-md border font-medium', statusCfg.color)}>
                     {statusCfg.label}
@@ -190,7 +190,7 @@ export default function LookAheadPage() {
                           <span className="text-[9px] font-medium text-indigo-600">{i + 1}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-slate-800">{a.description}</div>
+                          <div className="text-xs font-medium text-black">{a.description}</div>
                           {a.planned_qty && <div className="text-xs text-slate-900 font-medium mt-0.5">Qty: {a.planned_qty} | Resource: {a.resource || '—'}</div>}
                         </div>
                       </div>

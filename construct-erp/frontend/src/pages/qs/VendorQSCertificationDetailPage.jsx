@@ -1241,7 +1241,7 @@ export default function VendorQSCertificationDetailPage() {
         <div className="flex flex-wrap gap-6 text-xs">
           <div>
             <p className="text-slate-400 uppercase tracking-wide text-[10px]">Created</p>
-            <p className="font-medium text-slate-800">{fmt(cert.created_at)}{cert.created_by_name ? ` · ${cert.created_by_name}` : ''}</p>
+            <p className="font-medium text-black">{fmt(cert.created_at)}{cert.created_by_name ? ` · ${cert.created_by_name}` : ''}</p>
           </div>
           {cert.status === 'rejected' ? (
             <div>
@@ -1278,7 +1278,7 @@ export default function VendorQSCertificationDetailPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Truck className="w-4 h-4 text-orange-600" />
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-black">
                   Procurement Handoff
                   <span className="ml-2 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
                     {procBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting handoff
@@ -1358,7 +1358,7 @@ export default function VendorQSCertificationDetailPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-violet-600" />
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-black">
                   QS — MD Signature Collection
                   <span className="ml-2 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                     {qsSignBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting signature
@@ -1445,7 +1445,7 @@ export default function VendorQSCertificationDetailPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <IndianRupee className="w-4 h-4 text-blue-600" />
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-black">
                   Accounts JV Date
                   <span className="ml-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
                     {acctsJvBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting JV date
@@ -1587,7 +1587,7 @@ function QuantityEditModal({ cert, onClose, onSaved }) {
                 return (
                   <tr key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                     <td className="border border-slate-200 px-2 py-1 text-center text-slate-500">{idx + 1}</td>
-                    <td className="border border-slate-200 px-2 py-1 text-slate-800">{r.description}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-black">{r.description}</td>
                     <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{r.unit}</td>
                     <td className="border border-slate-200 px-2 py-1 text-right text-slate-700">{n(r.order_rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="border border-slate-200 px-1 py-1">
@@ -1610,7 +1610,7 @@ function QuantityEditModal({ cert, onClose, onSaved }) {
                         className="w-full border border-emerald-300 rounded px-2 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                       />
                     </td>
-                    <td className="border border-slate-200 px-2 py-1 text-right font-medium text-slate-800">
+                    <td className="border border-slate-200 px-2 py-1 text-right font-medium text-black">
                       ₹{Math.round(qsAmt).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </td>
                   </tr>

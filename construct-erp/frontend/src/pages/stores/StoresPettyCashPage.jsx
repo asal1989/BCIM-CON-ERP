@@ -134,7 +134,7 @@ function Lbl({ children, req }) {
 }
 
 // ── KPI Card ─────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, accent = 'border-indigo-400', valueClass = 'text-slate-800' }) {
+function KpiCard({ label, value, sub, accent = 'border-indigo-400', valueClass = 'text-black' }) {
   return (
     <div className={clsx('bg-white rounded-xl border border-slate-200 p-4 border-l-4', accent)}>
       <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">{label}</p>
@@ -1483,7 +1483,7 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
                       className={clsx('w-full text-left px-5 py-3 border-b border-slate-100 last:border-0 transition-colors flex items-start justify-between gap-3',
                         form.wo_number === w.wo_number ? 'bg-orange-50' : 'hover:bg-orange-50/50')}>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800">{w.wo_number}</p>
+                        <p className="text-sm font-semibold text-black">{w.wo_number}</p>
                         <p className="text-xs text-slate-500 truncate mt-0.5">{w.subject || '—'}</p>
                         <p className="text-xs text-orange-600 font-medium mt-0.5">{w.vendor_name || '—'}</p>
                       </div>
@@ -1668,7 +1668,7 @@ function ApprovalModal({ entry, mode, onConfirm, onClose }) {
               <p className="text-xs text-slate-500 mt-0.5">{entry.supplier} · {inr(entry.amount)}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-black"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-3">
           {isApprove ? (
@@ -2258,7 +2258,7 @@ export default function StoresPettyCashPage() {
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={clsx('flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
-                tab === t.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
+                tab === t.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-black')}>
               <t.Icon className="w-3.5 h-3.5" /> {t.label}
               {t.id === 'local' && pendingCount > 0 && (
                 <span className="ml-1 text-[10px] bg-amber-500 text-white rounded-full px-1.5 py-0.5 font-bold leading-none">{pendingCount}</span>
@@ -2277,7 +2277,7 @@ export default function StoresPettyCashPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Summary Overview</h2>
+                <h2 className="text-xl font-bold text-black">Summary Overview</h2>
                 <p className="text-sm text-slate-500 mt-0.5">All petty cash activity{selectedProject ? ` · ${selectedProject.name}` : ''}</p>
               </div>
               <button onClick={() => setShowRepl(true)}
@@ -2335,7 +2335,7 @@ export default function StoresPettyCashPage() {
                   <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <Wallet className={clsx('w-4 h-4', over ? 'text-red-500' : warn ? 'text-amber-500' : noBudget ? 'text-slate-400' : 'text-indigo-600')} />
-                      <span className="text-sm font-bold text-slate-800">BOQ Budget — Petty Cash</span>
+                      <span className="text-sm font-bold text-black">BOQ Budget — Petty Cash</span>
                       {!noBudget && (
                         <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-bold',
                           over ? 'bg-red-100 text-red-700' : warn ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700')}>
@@ -2364,7 +2364,7 @@ export default function StoresPettyCashPage() {
                           <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide" title="Local Purchases only — SC advances paid via petty cash count against the Sub Con budget instead, not here">
                             Spent (Petty Cash head)
                           </div>
-                          <div className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-slate-800')}>{inr(spent)}</div>
+                          <div className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-black')}>{inr(spent)}</div>
                         </div>
                         <div className={clsx('rounded-lg p-3 border text-center', over ? 'bg-red-100 border-red-200' : 'bg-emerald-50 border-emerald-100')}>
                           <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">Balance</div>
@@ -2463,11 +2463,11 @@ export default function StoresPettyCashPage() {
                     <tbody className="divide-y divide-slate-50">
                       {topSuppliers.map(([sup, { count, total }], i) => (
                         <tr key={sup} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                          <td className="px-4 py-2.5 font-medium text-slate-800">
+                          <td className="px-4 py-2.5 font-medium text-black">
                             {sup}{count >= 4 && <span className="ml-2 text-[10px] text-amber-600 font-semibold">⚠ high freq</span>}
                           </td>
                           <td className="px-4 py-2.5 text-slate-500 text-center">{count}</td>
-                          <td className="px-4 py-2.5 font-semibold text-slate-800 text-right">{inr(total)}</td>
+                          <td className="px-4 py-2.5 font-semibold text-black text-right">{inr(total)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2663,7 +2663,7 @@ export default function StoresPettyCashPage() {
                             </td>
                             {/* Supplier + Materials */}
                             <td className="px-4 py-3 max-w-[220px]">
-                              <p className="font-semibold text-slate-800 truncate text-sm">{row.supplier}</p>
+                              <p className="font-semibold text-black truncate text-sm">{row.supplier}</p>
                               {matSummary && <p className="text-xs text-slate-400 truncate mt-0.5" title={mat.map(m=>m.material_name).join(', ')}>{matSummary}</p>}
                             </td>
                             {/* Invoice */}
@@ -2675,7 +2675,7 @@ export default function StoresPettyCashPage() {
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               {row.status === 'Rejected'
                                 ? <span className="font-mono text-xs text-slate-400 line-through">{inr(row.amount)}</span>
-                                : <span className="font-mono font-bold text-slate-800">{inr(row.amount)}</span>}
+                                : <span className="font-mono font-bold text-black">{inr(row.amount)}</span>}
                             </td>
                             {/* Category */}
                             <td className="px-4 py-3"><CatBadge cat={cat} /></td>
@@ -2835,7 +2835,7 @@ export default function StoresPettyCashPage() {
                           onClick={() => { setEditAdv(row); setShowAdvForm(true); }}>
                           <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD-MM-YYYY')}</td>
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-800">{row.payee_name}</p>
+                            <p className="font-semibold text-black">{row.payee_name}</p>
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs bg-amber-50 text-amber-700 font-medium px-2 py-0.5 rounded-full">{row.description || 'Salary Advance'}</span>
@@ -2934,7 +2934,7 @@ export default function StoresPettyCashPage() {
                           <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD-MM-YYYY')}</td>
                           {/* Merged: Sub-Contractor + WO */}
                           <td className="px-4 py-3 max-w-[200px]">
-                            <p className="font-semibold text-slate-800 truncate">{row.vendor_name}</p>
+                            <p className="font-semibold text-black truncate">{row.vendor_name}</p>
                             {row.wo_number && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{row.wo_number}</p>}
                           </td>
                           <td className="px-4 py-3 text-slate-400 text-xs">{row.project_name || '—'}</td>
@@ -2995,7 +2995,7 @@ export default function StoresPettyCashPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800">Cash Ledger</h2>
+                  <h2 className="text-xl font-bold text-black">Cash Ledger</h2>
                   <p className="text-sm text-slate-500 mt-0.5">All transactions in chronological order with running balance</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -3009,7 +3009,7 @@ export default function StoresPettyCashPage() {
                   </div>
                   {(ledgerFrom || ledgerTo) && (
                     <button onClick={() => { setLedgerFrom(''); setLedgerTo(''); }}
-                      className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1.5 bg-white">
+                      className="text-xs text-slate-500 hover:text-black border border-slate-200 rounded-lg px-2 py-1.5 bg-white">
                       Clear
                     </button>
                   )}
@@ -3067,7 +3067,7 @@ export default function StoresPettyCashPage() {
                             <td className="px-4 py-3 text-right font-mono font-semibold text-red-600 text-sm">
                               {row.debit > 0 ? inr(row.debit) : ''}
                             </td>
-                            <td className={clsx('px-4 py-3 text-right font-mono font-bold text-sm', row.runBal < 0 ? 'text-red-600' : 'text-slate-800')}>
+                            <td className={clsx('px-4 py-3 text-right font-mono font-bold text-sm', row.runBal < 0 ? 'text-red-600' : 'text-black')}>
                               {inr(Math.abs(row.runBal))}{row.runBal < 0 ? ' Dr' : ''}
                             </td>
                           </tr>
@@ -3105,7 +3105,7 @@ export default function StoresPettyCashPage() {
         {tab === 'analytics' && (
           <div className="space-y-5">
             <div>
-              <h2 className="text-xl font-bold text-slate-800">Analytics & Trends</h2>
+              <h2 className="text-xl font-bold text-black">Analytics & Trends</h2>
               <p className="text-sm text-slate-500 mt-0.5">Spend patterns, category breakdown, supplier insights</p>
             </div>
 
@@ -3139,7 +3139,7 @@ export default function StoresPettyCashPage() {
                           <tr key={cat} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                             <td className="px-4 py-2.5"><CatBadge cat={cat} /></td>
                             <td className="px-4 py-2.5 text-slate-500 text-center">{count}</td>
-                            <td className="px-4 py-2.5 font-semibold text-slate-800">{inr(spent)}</td>
+                            <td className="px-4 py-2.5 font-semibold text-black">{inr(spent)}</td>
                             <td className="px-4 py-2.5 text-slate-500">{pct}%</td>
                           </tr>
                         );
@@ -3205,7 +3205,7 @@ export default function StoresPettyCashPage() {
               {/* Header + export buttons */}
               <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800">Petty Cash Reports</h2>
+                  <h2 className="text-xl font-bold text-black">Petty Cash Reports</h2>
                   <p className="text-sm text-slate-500 mt-0.5">Period-wise statement, category breakdown, and exports</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -3332,7 +3332,7 @@ export default function StoresPettyCashPage() {
                               <tr key={cat} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                 <td className="px-4 py-2.5"><CatBadge cat={cat} /></td>
                                 <td className="px-4 py-2.5 text-center text-slate-500">{count}</td>
-                                <td className="px-4 py-2.5 font-semibold text-slate-800">{inr(amt)}</td>
+                                <td className="px-4 py-2.5 font-semibold text-black">{inr(amt)}</td>
                                 <td className="px-4 py-2.5 text-slate-500">{pct}%</td>
                               </tr>
                             );
@@ -3342,7 +3342,7 @@ export default function StoresPettyCashPage() {
                         <tfoot>
                           <tr className="bg-slate-50 border-t border-slate-200">
                             <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total LP</td>
-                            <td className="px-4 py-2.5 font-bold text-slate-800">{inr(totalLP)}</td>
+                            <td className="px-4 py-2.5 font-bold text-black">{inr(totalLP)}</td>
                             <td className="px-4 py-2.5 font-bold text-slate-500">100%</td>
                           </tr>
                         </tfoot>
@@ -3383,7 +3383,7 @@ export default function StoresPettyCashPage() {
                           {rows.map(([sup, { count, total, lastDate, materials }], i) => (
                             <tr key={sup} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                               <td className="px-4 py-2.5 text-slate-400 text-xs">{i + 1}</td>
-                              <td className="px-4 py-2.5 font-medium text-slate-800">
+                              <td className="px-4 py-2.5 font-medium text-black">
                                 {sup}
                                 {count >= 4 && <span className="ml-2 text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded-full">⚠ high freq</span>}
                               </td>
@@ -3393,14 +3393,14 @@ export default function StoresPettyCashPage() {
                                 {materials.size > 4 && <span className="text-slate-400"> +{materials.size - 4} more</span>}
                               </td>
                               <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{dayjs(lastDate).format('DD-MM-YYYY')}</td>
-                              <td className="px-4 py-2.5 font-semibold text-slate-800 text-right">{inr(total)}</td>
+                              <td className="px-4 py-2.5 font-semibold text-black text-right">{inr(total)}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-50 border-t border-slate-200">
                             <td colSpan={5} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
-                            <td className="px-4 py-2.5 font-bold text-slate-800 text-right">{inr(totalLP)}</td>
+                            <td className="px-4 py-2.5 font-bold text-black text-right">{inr(totalLP)}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -3431,7 +3431,7 @@ export default function StoresPettyCashPage() {
                             {rAdvances.map((a, i) => (
                               <tr key={a.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                 <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(a.advance_date).format('DD-MM-YYYY')}</td>
-                                <td className="px-4 py-2.5 font-medium text-slate-800">{a.payee_name || '—'}</td>
+                                <td className="px-4 py-2.5 font-medium text-black">{a.payee_name || '—'}</td>
                                 <td className="px-4 py-2.5 text-slate-500 max-w-[160px] truncate">{a.description || '—'}</td>
                                 <td className="px-4 py-2.5 font-semibold text-amber-700">{inr(a.amount)}</td>
                               </tr>
@@ -3466,7 +3466,7 @@ export default function StoresPettyCashPage() {
                             {rScAdv.map((a, i) => (
                               <tr key={a.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                 <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(a.advance_date).format('DD-MM-YYYY')}</td>
-                                <td className="px-4 py-2.5 font-medium text-slate-800">{a.vendor_name || '—'}</td>
+                                <td className="px-4 py-2.5 font-medium text-black">{a.vendor_name || '—'}</td>
                                 <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{a.wo_number || '—'}</td>
                                 <td className="px-4 py-2.5 font-semibold text-purple-700">{inr(a.amount)}</td>
                               </tr>
@@ -3493,7 +3493,7 @@ export default function StoresPettyCashPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Category Budget Control</h2>
+                <h2 className="text-xl font-bold text-black">Category Budget Control</h2>
                 <p className="text-sm text-slate-500 mt-0.5">Monthly caps per category vs actual spend (approved entries only)</p>
               </div>
               <div className="flex gap-2">
@@ -3548,7 +3548,7 @@ export default function StoresPettyCashPage() {
                         {!over && pct <= 80 && cap > 0 && <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">On Track</span>}
                       </div>
                       <div className="text-right">
-                        <span className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-slate-800')}>{inr(spent)}</span>
+                        <span className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-black')}>{inr(spent)}</span>
                         <span className="text-sm text-slate-400"> / {inr(cap)}</span>
                       </div>
                     </div>
@@ -4025,7 +4025,7 @@ function ReplenishmentModal({ totalReceived, totalSpent, cashInHand, projectName
               <p className="text-xs text-slate-500 mt-0.5">Generate a formal request for cash top-up</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-black"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-6 space-y-4">
@@ -4039,7 +4039,7 @@ function ReplenishmentModal({ totalReceived, totalSpent, cashInHand, projectName
             ].map(([l, v]) => (
               <div key={l} className="flex justify-between">
                 <span className="text-sm text-slate-600">{l}</span>
-                <span className="text-sm font-semibold text-slate-800">{v}</span>
+                <span className="text-sm font-semibold text-black">{v}</span>
               </div>
             ))}
           </div>

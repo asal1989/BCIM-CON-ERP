@@ -313,9 +313,9 @@ export default function SCDeductions() {
                         <td className="px-4 py-2.5"><span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">{a.advance_number}</span></td>
                         <td className="px-4 py-2.5 text-xs text-slate-500">{dayjs(a.advance_date).format('DD MMM YY')}</td>
                         <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{a.wo_number}</td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{a.sc_name}</td>
+                        <td className="px-4 py-2.5 text-xs font-semibold text-black">{a.sc_name}</td>
                         <td className="px-4 py-2.5 text-xs text-slate-500">{a.project_name}</td>
-                        <td className="px-4 py-2.5 text-right text-sm font-bold text-slate-800">{fmt(a.amount)}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-black">{fmt(a.amount)}</td>
                         <td className="px-4 py-2.5 text-right text-xs text-slate-500">{a.recovery_pct}%</td>
                         <td className="px-4 py-2.5 text-right text-xs font-bold text-emerald-600">{fmt(a.recovered_amount)}</td>
                         <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-600">{fmt(a.balance_amount)}</td>
@@ -360,8 +360,8 @@ export default function SCDeductions() {
                       <tr key={m.id} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
                         <td className="px-4 py-2.5 text-xs text-slate-500">{dayjs(m.recovery_date).format('DD MMM YY')}</td>
                         <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{m.wo_number}</td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{m.sc_name}</td>
-                        <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{m.material_name}</td>
+                        <td className="px-4 py-2.5 text-xs font-semibold text-black">{m.sc_name}</td>
+                        <td className="px-4 py-2.5 text-xs font-semibold text-black">{m.material_name}</td>
                         <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{m.material_code||'—'}</td>
                         <td className="px-4 py-2.5 text-right text-xs text-slate-600">{m.quantity||'—'}</td>
                         <td className="px-4 py-2.5 text-xs text-slate-500">{m.unit||'—'}</td>
@@ -405,7 +405,7 @@ export default function SCDeductions() {
                       return (
                         <tr key={r.wo_id} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
                           <td className="px-4 py-2.5 font-mono text-xs font-bold text-indigo-700">{r.wo_number}</td>
-                          <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{r.sc_name}</td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-black">{r.sc_name}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{r.project_name}</td>
                           <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-700">{fmt(r.total_retained)}</td>
                           <td className="px-4 py-2.5 text-right text-xs font-bold text-emerald-600">{fmt(r.total_released)}</td>

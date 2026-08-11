@@ -229,14 +229,14 @@ export default function TenderManagementPage() {
           {/* Recent Wins */}
           {dash.recent_wins?.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-black mb-3 flex items-center gap-2">
                 <Award className="w-4 h-4 text-emerald-500" /> Recent Wins
               </h3>
               <div className="space-y-2">
                 {dash.recent_wins.map(w => (
                   <div key={w.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg text-xs">
                     <div>
-                      <span className="font-medium text-slate-800">{w.title}</span>
+                      <span className="font-medium text-black">{w.title}</span>
                       <span className="text-slate-400 ml-2">{w.client_name}</span>
                     </div>
                     <div className="text-emerald-700 font-bold">{fmtC(w.awarded_amount)}</div>
@@ -292,7 +292,7 @@ export default function TenderManagementPage() {
                           <td className="py-2 px-3 text-slate-400 text-xs">{i+1}</td>
                           <td className="py-2 px-3">
                             <div className="font-mono text-xs text-indigo-600">{t.tender_number}</div>
-                            <div className="text-xs font-medium text-slate-800 max-w-[180px] truncate">{t.title}</div>
+                            <div className="text-xs font-medium text-black max-w-[180px] truncate">{t.title}</div>
                             {t.location && <div className="text-[10px] text-slate-400">{t.location}</div>}
                           </td>
                           <td className="py-2 px-3 text-xs">

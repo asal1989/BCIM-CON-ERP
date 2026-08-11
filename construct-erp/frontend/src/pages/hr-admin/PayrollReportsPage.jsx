@@ -432,7 +432,7 @@ function Form16Row({ r, expanded, onToggle, onDownloadPDF, downloading }) {
             {(r.full_name?.[0] || '?').toUpperCase()}
           </div>
           <div>
-            <div className="font-semibold text-slate-800">{r.full_name}</div>
+            <div className="font-semibold text-black">{r.full_name}</div>
             <div className="text-xs text-slate-400">{r.emp_code} · {r.designation || 'N/A'} · PAN: {r.pan_number || <span className="text-amber-500">Not set</span>}</div>
           </div>
         </div>
@@ -472,7 +472,7 @@ function Form16Row({ r, expanded, onToggle, onDownloadPDF, downloading }) {
                   {[['Basic', r.total_basic],['HRA', r.total_hra],['Conveyance', r.total_conveyance],['Medical', r.total_medical],['Special Allowance', r.total_special],['Other', r.total_other_earnings]].map(([l,v]) => (
                     <tr key={l} className="border-b border-slate-100">
                       <td className="py-1 text-slate-600">{l}</td>
-                      <td className="py-1 text-right tabular-nums text-slate-800">{fmt(v)}</td>
+                      <td className="py-1 text-right tabular-nums text-black">{fmt(v)}</td>
                     </tr>
                   ))}
                   <tr className="font-bold bg-blue-50">
@@ -491,7 +491,7 @@ function Form16Row({ r, expanded, onToggle, onDownloadPDF, downloading }) {
                   {[['PF (Employee)', r.total_pf_employee],['ESI (Employee)', r.total_esi_employee],['Professional Tax', r.total_pt],['TDS', r.total_tds],['Loan Deduction', r.total_loan_deduction]].map(([l,v]) => (
                     <tr key={l} className="border-b border-slate-100">
                       <td className="py-1 text-slate-600">{l}</td>
-                      <td className="py-1 text-right tabular-nums text-slate-800">{fmt(v)}</td>
+                      <td className="py-1 text-right tabular-nums text-black">{fmt(v)}</td>
                     </tr>
                   ))}
                   <tr className="font-bold bg-emerald-50">
@@ -671,7 +671,7 @@ function BankTransferSection({ company, logoBase64, projects }) {
                 {rows.map((r, i) => (
                   <tr key={r.user_id || i} className="border-b border-slate-50 hover:bg-slate-50/50">
                     <td className="px-3 py-2.5 text-slate-400">{i+1}</td>
-                    <td className="px-3 py-2.5 font-medium text-slate-800">{r.employee_name || r.full_name || '—'}</td>
+                    <td className="px-3 py-2.5 font-medium text-black">{r.employee_name || r.full_name || '—'}</td>
                     <td className="px-3 py-2.5 text-slate-500 font-mono text-[10px]">{r.employee_code || r.emp_code || '—'}</td>
                     <td className="px-3 py-2.5 text-slate-600">{r.bank_name || '—'}</td>
                     <td className="px-3 py-2.5 font-mono text-[10px] text-slate-600">{r.account_number || '—'}</td>
@@ -923,7 +923,7 @@ export default function PayrollReportsPage() {
             {rows.length > 0 && (
               <div className="bg-white border-2 border-indigo-100 rounded-2xl p-5 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                 {[
-                  ['Total Employees', rows.length,                                                     'text-slate-800'],
+                  ['Total Employees', rows.length,                                                     'text-black'],
                   ['Total Gross',     fmt(rows.reduce((s,r) => s + +r.total_gross,   0)),              'text-blue-700' ],
                   ['Total TDS',       fmt(rows.reduce((s,r) => s + +r.total_tds,     0)),              'text-red-600'  ],
                   ['Total Net Pay',   fmt(rows.reduce((s,r) => s + +r.total_net_pay, 0)),              'text-emerald-700'],

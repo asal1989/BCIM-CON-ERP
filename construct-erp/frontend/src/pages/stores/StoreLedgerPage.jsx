@@ -1218,7 +1218,7 @@ export default function StoreLedgerPage() {
               />
             </div>
             <select
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none focus:border-slate-900 focus:bg-white"
+              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-black outline-none focus:border-slate-900 focus:bg-white"
               value={projectFilter}
               onChange={e => setProjectFilter(e.target.value)}
             >
@@ -1226,7 +1226,7 @@ export default function StoreLedgerPage() {
               {projectsData.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <select
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none focus:border-slate-900 focus:bg-white"
+              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-black outline-none focus:border-slate-900 focus:bg-white"
               value={majorHeadFilter}
               onChange={e => setMajorHeadFilter(e.target.value)}
             >
@@ -1234,7 +1234,7 @@ export default function StoreLedgerPage() {
               {majorHeads.map(h => <option key={h} value={h}>{h}</option>)}
             </select>
             <select
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none focus:border-slate-900 focus:bg-white"
+              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-black outline-none focus:border-slate-900 focus:bg-white"
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
             >
@@ -1247,7 +1247,7 @@ export default function StoreLedgerPage() {
                 'h-10 shrink-0 rounded-xl border px-4 text-sm font-bold transition',
                 groupByMajorHead
                   ? 'border-indigo-400 bg-indigo-600 text-white'
-                  : 'border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'
+                  : 'border-slate-200 bg-slate-50 text-black hover:bg-slate-100'
               )}
               title="Group rows by Major Head"
             >
@@ -1259,7 +1259,7 @@ export default function StoreLedgerPage() {
                 'h-10 shrink-0 rounded-xl border px-4 text-sm font-bold transition',
                 showValues
                   ? 'border-emerald-400 bg-emerald-600 text-white'
-                  : 'border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'
+                  : 'border-slate-200 bg-slate-50 text-black hover:bg-slate-100'
               )}
               title="Toggle financial value columns"
             >
@@ -1270,7 +1270,7 @@ export default function StoreLedgerPage() {
               <select
                 value={sortField}
                 onChange={e => { setSortField(e.target.value); setPage(1); setSortDir(e.target.value === 'closing_stock' || e.target.value === 'grand_total' ? 'desc' : 'asc'); }}
-                className="h-8 bg-transparent text-sm font-bold text-slate-800 outline-none border-none"
+                className="h-8 bg-transparent text-sm font-bold text-black outline-none border-none"
               >
                 <option value="material_name">Name</option>
                 <option value="closing_stock">Closing Stock</option>
@@ -1291,7 +1291,7 @@ export default function StoreLedgerPage() {
             <div className="relative shrink-0">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-900 font-semibold" />
               <select
-                className="h-10 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm font-bold text-slate-800 outline-none appearance-none focus:border-slate-900 focus:bg-white"
+                className="h-10 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm font-bold text-black outline-none appearance-none focus:border-slate-900 focus:bg-white"
                 value={filterStatus}
                 onChange={e => setFilterStatus(e.target.value)}
               >
@@ -1307,10 +1307,10 @@ export default function StoreLedgerPage() {
               <Calendar size={13} className="text-indigo-600 shrink-0" />
               <span className="text-xs font-bold text-indigo-700 whitespace-nowrap">Period:</span>
               <input type="date" value={invRegFrom} onChange={e => setInvRegFrom(e.target.value)}
-                className="h-7 text-xs font-semibold text-slate-800 bg-transparent border-none outline-none" />
+                className="h-7 text-xs font-semibold text-black bg-transparent border-none outline-none" />
               <span className="text-xs text-indigo-400">–</span>
               <input type="date" value={invRegTo} max={dayjs().format('YYYY-MM-DD')} onChange={e => setInvRegTo(e.target.value)}
-                className="h-7 text-xs font-semibold text-slate-800 bg-transparent border-none outline-none" />
+                className="h-7 text-xs font-semibold text-black bg-transparent border-none outline-none" />
             </div>
             <button
               onClick={exportLedgerCSV}
@@ -1481,7 +1481,7 @@ export default function StoreLedgerPage() {
                           <select
                             value={s.dc_idc || ''}
                             onChange={e => updateMutation.mutate({ id: s.id, data: { dc_idc: e.target.value } })}
-                            className="h-7 w-full rounded border border-slate-200 bg-slate-50 px-1 text-center text-xs font-bold uppercase text-slate-800 outline-none transition focus:border-slate-900 focus:bg-white"
+                            className="h-7 w-full rounded border border-slate-200 bg-slate-50 px-1 text-center text-xs font-bold uppercase text-black outline-none transition focus:border-slate-900 focus:bg-white"
                           >
                             <option value="">—</option>
                             <option value="DC">DC</option>

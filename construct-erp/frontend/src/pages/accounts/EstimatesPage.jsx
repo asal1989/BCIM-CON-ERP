@@ -123,7 +123,7 @@ function EstimateForm({ initial, onClose }) {
             <div className="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center">
               <FileText className="w-4 h-4 text-amber-600" />
             </div>
-            <p className="text-sm font-semibold text-slate-800">{isEdit ? `Edit Estimate — ${initial.estimate_no}` : 'New Estimate'}</p>
+            <p className="text-sm font-semibold text-black">{isEdit ? `Edit Estimate — ${initial.estimate_no}` : 'New Estimate'}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
@@ -247,7 +247,7 @@ function EstimateDetail({ est, onClose }) {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center"><FileText className="w-4 h-4 text-amber-600" /></div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">{est.estimate_no}</p>
+              <p className="text-sm font-semibold text-black">{est.estimate_no}</p>
               <p className="text-xs text-slate-400">{est.client_name} · {dayjs(est.estimate_date).format('DD MMM YYYY')}</p>
             </div>
             <span className={clsx('text-[11px] px-2 py-0.5 rounded-full font-medium capitalize', STATUS_CLS[est.status])}>{est.status}</span>
@@ -261,7 +261,7 @@ function EstimateDetail({ est, onClose }) {
               <tbody className="divide-y divide-slate-50">
                 {est.items.map((it, i) => (
                   <tr key={i}>
-                    <td className="px-3 py-2 font-medium text-slate-800">{it.material_name}</td>
+                    <td className="px-3 py-2 font-medium text-black">{it.material_name}</td>
                     <td className="px-3 py-2 text-slate-500">{it.unit}</td>
                     <td className="px-3 py-2 text-right font-mono">{Number(it.quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                     <td className="px-3 py-2 text-right font-mono">{inr(it.rate)}</td>
@@ -272,7 +272,7 @@ function EstimateDetail({ est, onClose }) {
             </table>
           )}
           <div className="bg-white border border-slate-200 rounded-md p-4 grid grid-cols-3 gap-4 text-center">
-            <div><p className="text-[10px] text-slate-400 mb-0.5">Basic Amount</p><p className="text-sm font-semibold text-slate-800">{inr(est.basic_amount)}</p></div>
+            <div><p className="text-[10px] text-slate-400 mb-0.5">Basic Amount</p><p className="text-sm font-semibold text-black">{inr(est.basic_amount)}</p></div>
             <div><p className="text-[10px] text-slate-400 mb-0.5">Total GST</p><p className="text-sm font-semibold text-slate-600">{inr(est.gst_amount)}</p></div>
             <div><p className="text-[10px] text-slate-400 mb-0.5">Total Value</p><p className="text-base font-bold text-amber-700">{inr(est.total_amount)}</p></div>
           </div>
@@ -320,7 +320,7 @@ export default function EstimatesPage() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center"><FileText className="w-4 h-4 text-amber-600" /></div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Estimates</h1>
+              <h1 className="text-lg font-semibold text-black">Estimates</h1>
               <p className="text-xs text-slate-400">Quotes and proposals sent to clients before invoicing</p>
             </div>
           </div>
@@ -364,11 +364,11 @@ export default function EstimatesPage() {
                 {rows.map(r => (
                   <tr key={r.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setViewRecord(r)}>
                     <td className="px-4 py-2.5 font-mono text-xs text-amber-700">{r.estimate_no}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-800">{r.client_name}</td>
+                    <td className="px-4 py-2.5 font-medium text-black">{r.client_name}</td>
                     <td className="px-4 py-2.5 text-slate-500 text-xs">{r.project_name || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(r.estimate_date).format('DD MMM YYYY')}</td>
                     <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{r.expiry_date ? dayjs(r.expiry_date).format('DD MMM YYYY') : '—'}</td>
-                    <td className="px-4 py-2.5 font-mono font-semibold text-slate-800">{inr(r.total_amount)}</td>
+                    <td className="px-4 py-2.5 font-mono font-semibold text-black">{inr(r.total_amount)}</td>
                     <td className="px-4 py-2.5"><span className={clsx('text-[11px] px-2 py-0.5 rounded-full font-medium capitalize', STATUS_CLS[r.status])}>{r.status}</span></td>
                     <td className="px-4 py-2.5"><ChevronRight className="w-4 h-4 text-slate-300" /></td>
                   </tr>

@@ -114,7 +114,7 @@ export default function LabTestPage() {
             <Microscope className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">Material Lab Certifications</h1>
+            <h1 className="text-lg font-medium text-black">Material Lab Certifications</h1>
             <p className="text-xs text-slate-500">Concrete · Steel · Soil · Aggregates</p>
           </div>
         </div>
@@ -142,7 +142,7 @@ export default function LabTestPage() {
                 <Icon className={`w-6 h-6 ${s.iconBg.replace('bg-', 'text-')}`} />
               </div>
               <div>
-                <div className="text-2xl font-medium text-slate-800">{statVals[s.key]}</div>
+                <div className="text-2xl font-medium text-black">{statVals[s.key]}</div>
                 <div className="text-xs text-slate-900 font-medium mt-0.5">{s.label}</div>
               </div>
             </div>
@@ -259,11 +259,11 @@ export default function LabTestPage() {
               <div className="mb-4 grid grid-cols-3 gap-3">
                 <div>
                   <p className="text-xs text-slate-500">Test Name</p>
-                  <p className="text-sm font-medium text-slate-800">{selectedTest.test_name || '—'}</p>
+                  <p className="text-sm font-medium text-black">{selectedTest.test_name || '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Lab</p>
-                  <p className="text-sm font-medium text-slate-800">{selectedTest.lab_name || '—'}</p>
+                  <p className="text-sm font-medium text-black">{selectedTest.lab_name || '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Status</p>
@@ -274,11 +274,11 @@ export default function LabTestPage() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Target Strength</p>
-                  <p className="text-sm font-medium text-slate-800">{selectedTest.target_strength ? `${selectedTest.target_strength} MPa` : '—'}</p>
+                  <p className="text-sm font-medium text-black">{selectedTest.target_strength ? `${selectedTest.target_strength} MPa` : '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">7-Day Result</p>
-                  <p className={`text-sm font-semibold ${selectedTest.result_7day != null ? 'text-slate-800' : 'text-slate-400'}`}>
+                  <p className={`text-sm font-semibold ${selectedTest.result_7day != null ? 'text-black' : 'text-slate-400'}`}>
                     {selectedTest.result_7day != null ? `${selectedTest.result_7day} MPa` : '—'}
                   </p>
                 </div>

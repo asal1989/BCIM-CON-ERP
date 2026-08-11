@@ -187,7 +187,7 @@ function Toolbar({ view, setView, counts, search, setSearch, notifItems, project
                       <n.Icon size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <b className="text-xs text-slate-800 block">{n.title}</b>
+                      <b className="text-xs text-black block">{n.title}</b>
                       <p className="text-[11px] text-slate-500 mt-0.5">{n.body}</p>
                       <time className="text-[10px] text-slate-400">{n.time}</time>
                     </div>

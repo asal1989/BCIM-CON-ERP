@@ -36,7 +36,7 @@ export default function AccountTransactionsPage() {
             <Landmark className="w-4 h-4 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Account Transactions</h1>
+            <h1 className="text-lg font-semibold text-black">Account Transactions</h1>
             <p className="text-xs text-slate-400">Posted journal lines &amp; running balance per ledger account</p>
           </div>
         </div>
@@ -66,15 +66,15 @@ export default function AccountTransactionsPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <div className="text-xs text-slate-400">Opening Balance</div>
-                  <div className="text-xl font-semibold text-slate-800 mt-1">{inr(data.opening_balance)}</div>
+                  <div className="text-xl font-semibold text-black mt-1">{inr(data.opening_balance)}</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <div className="text-xs text-slate-400">Closing Balance</div>
-                  <div className="text-xl font-semibold text-slate-800 mt-1">{inr(data.closing_balance)}</div>
+                  <div className="text-xl font-semibold text-black mt-1">{inr(data.closing_balance)}</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <div className="text-xs text-slate-400">Posted Transactions</div>
-                  <div className="text-xl font-semibold text-slate-800 mt-1">{data.transactions.length}</div>
+                  <div className="text-xl font-semibold text-black mt-1">{data.transactions.length}</div>
                 </div>
               </div>
 
@@ -101,7 +101,7 @@ export default function AccountTransactionsPage() {
                           <td className="px-4 py-2.5 text-slate-600">{t.description || t.narration || '—'}</td>
                           <td className="px-4 py-2.5 text-right font-mono">{t.debit > 0 ? inr(t.debit) : ''}</td>
                           <td className="px-4 py-2.5 text-right font-mono">{t.credit > 0 ? inr(t.credit) : ''}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{inr(t.running_balance)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-black">{inr(t.running_balance)}</td>
                         </tr>
                       ))}
                     </tbody>

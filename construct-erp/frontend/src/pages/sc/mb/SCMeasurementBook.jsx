@@ -269,7 +269,7 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
             <div className="p-6 max-w-5xl mx-auto space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">Edit MB Entries</p>
+                  <p className="text-sm font-bold text-black">Edit MB Entries</p>
                   <p className="text-xs text-slate-500 mt-0.5">Modify quantity or description of approved measurement entries.</p>
                 </div>
                 <span className="text-xs text-slate-400">{mbEntries.length} {mbEntries.length === 1 ? 'entry' : 'entries'}</span>
@@ -335,10 +335,10 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
                           ) : (
                             <>
                               <td className="px-4 py-3 font-mono text-xs text-indigo-700 whitespace-nowrap">{entry.mb_number}</td>
-                              <td className="px-4 py-3 text-sm text-slate-800 max-w-xs truncate">{entry.description}</td>
+                              <td className="px-4 py-3 text-sm text-black max-w-xs truncate">{entry.description}</td>
                               <td className="px-4 py-3 text-xs text-slate-500">{entry.wo_item_desc || '—'}</td>
                               <td className="px-4 py-3 text-center text-xs text-slate-500">{entry.unit}</td>
-                              <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(entry.executed_qty).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                              <td className="px-4 py-3 text-right font-bold text-black">{Number(entry.executed_qty).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                               <td className="px-4 py-3 text-center">
                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase">{entry.status}</span>
                               </td>

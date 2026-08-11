@@ -21,7 +21,7 @@ export default function ItemsPage() {
               <Package className="w-4 h-4 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Items & Services</h1>
+              <h1 className="text-lg font-semibold text-black">Items & Services</h1>
               <p className="text-xs text-slate-400">Products and services used in invoices and purchase orders</p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export default function ItemsPage() {
               {filtered.map(item => (
                 <tr key={item.id} className="hover:bg-slate-50 cursor-pointer">
                   <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{item.code}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{item.name}</td>
+                  <td className="px-4 py-2.5 font-medium text-black">{item.name}</td>
                   <td className="px-4 py-2.5">
                     <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${item.type === 'Product' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                       {item.type}
@@ -67,7 +67,7 @@ export default function ItemsPage() {
                   </td>
                   <td className="px-4 py-2.5 text-slate-500 text-xs">{item.category}</td>
                   <td className="px-4 py-2.5 text-slate-600">{item.unit}</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-800">₹{item.rate.toLocaleString('en-IN')}</td>
+                  <td className="px-4 py-2.5 font-mono text-black">₹{item.rate.toLocaleString('en-IN')}</td>
                   <td className="px-4 py-2.5 text-slate-500 text-xs">{item.hsn}</td>
                   <td className="px-4 py-2.5 text-slate-600">{item.gst}%</td>
                 </tr>

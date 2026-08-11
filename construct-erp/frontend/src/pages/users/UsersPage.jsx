@@ -616,7 +616,7 @@ function MemberRow({ user, isMe, isAdmin, onEdit, onReset, onDeactivate, onReact
           <Avatar name={user.name} role={user.role} size={34} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-slate-800 truncate">{user.name}</span>
+              <span className="text-sm font-semibold text-black truncate">{user.name}</span>
               {isMe && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">YOU</span>}
               {!user.has_hr_profile && (
                 <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">No HR Profile</span>
@@ -721,7 +721,7 @@ function Drawer({ open, title, subtitle, onClose, children, footer }) {
 }
 
 /* ── Form Field ──────────────────────────────────────────────── */
-const Inp = 'w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-800 outline-none focus:border-blue-400 focus:bg-white transition-all';
+const Inp = 'w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-black outline-none focus:border-blue-400 focus:bg-white transition-all';
 const Label = ({ children, required }) => (
   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
     {children}{required && <span className="text-red-400 ml-0.5">*</span>}
@@ -829,7 +829,7 @@ function MenuPicker({ selectedModules, value, onChange, role }) {
             {/* Accordion header */}
             <button type="button" onClick={() => setExpanded(isOpen ? null : mod)}
               className="w-full flex items-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 transition-colors text-left">
-              <span className="flex-1 text-sm font-semibold text-slate-800">{mod}</span>
+              <span className="flex-1 text-sm font-semibold text-black">{mod}</span>
               <span className={clsx('text-[10px] font-bold px-2.5 py-0.5 rounded-full',
                 allAcc ? 'bg-emerald-100 text-emerald-700' : selCount === 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-700')}>
                 {allAcc ? 'All Menus' : `${selCount} / ${items.length}`}
@@ -1506,7 +1506,7 @@ export default function UsersPage() {
             <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
               <Avatar name={selected.name} role={selected.role} size={40} />
               <div>
-                <p className="text-sm font-bold text-slate-800">{selected.name}</p>
+                <p className="text-sm font-bold text-black">{selected.name}</p>
                 <p className="text-xs text-slate-500">{selected.email}</p>
                 <RoleBadge role={selected.role} />
               </div>
@@ -1539,7 +1539,7 @@ export default function UsersPage() {
                       {importResult.created.map((r,i) => (
                         <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                           <td className="p-3 text-slate-400 font-mono text-[10px]">{r.row}</td>
-                          <td className="p-3 font-semibold text-slate-800">{r.name}</td>
+                          <td className="p-3 font-semibold text-black">{r.name}</td>
                           <td className="p-3 text-slate-500">{r.email}</td>
                           <td className="p-3 font-mono text-emerald-600 font-bold">{r.employee_code}</td>
                         </tr>

@@ -64,7 +64,7 @@ function AddLopModal({ onClose, employees, month, year, type, existingIds, onSav
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Add LOP Entry</h3>
+        <h3 className="text-lg font-bold text-black mb-4">Add LOP Entry</h3>
 
         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Search Employee</label>
         <div className="relative mb-1">
@@ -158,7 +158,7 @@ export default function LOPDaysPage() {
   const existingIds = rows.map(r => r.user_id);
   const currentTab = TABS.find(t => t.id === tab);
 
-  const sel = 'h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 focus:outline-none focus:border-blue-400 transition';
+  const sel = 'h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-black focus:outline-none focus:border-blue-400 transition';
 
   return (
     <div className="p-6 space-y-5">
@@ -250,7 +250,7 @@ export default function LOPDaysPage() {
                 <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/60 transition">
                   <td className="px-5 py-3 text-slate-400">{i + 1}</td>
                   <td className="px-5 py-3 font-mono text-slate-500 text-xs">{row.employee_code || '—'}</td>
-                  <td className="px-5 py-3 font-bold text-slate-800">{row.employee_name}</td>
+                  <td className="px-5 py-3 font-bold text-black">{row.employee_name}</td>
                   <td className="px-5 py-3 text-slate-500">{row.department_name || '—'}</td>
                   <td className="px-5 py-3 text-right">
                     {editRow?.id === row.id ? (

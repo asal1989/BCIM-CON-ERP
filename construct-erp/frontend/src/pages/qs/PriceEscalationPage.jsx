@@ -237,7 +237,7 @@ export default function PriceEscalationPage() {
               ))}
             </tbody>
             {rows.length > 0 && (
-              <tfoot className="bg-slate-50 font-semibold text-slate-800">
+              <tfoot className="bg-slate-50 font-semibold text-black">
                 <tr>
                   <td colSpan={8} className="px-3 py-2.5 text-right">Net Escalation</td>
                   <td className={`px-3 py-2.5 text-right ${net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>

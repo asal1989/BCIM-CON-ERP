@@ -342,7 +342,7 @@ function DelayModal({ projectId, activities, delay, onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 className="text-sm font-medium text-slate-800">{isEdit ? 'Edit Delay Record' : 'Log Delay'}</h2>
+          <h2 className="text-sm font-medium text-black">{isEdit ? 'Edit Delay Record' : 'Log Delay'}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
             <X className="w-4 h-4 text-slate-500" />
           </button>

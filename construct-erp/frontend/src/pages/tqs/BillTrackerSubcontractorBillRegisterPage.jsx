@@ -24,7 +24,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function KPICard({ label, value, color = 'text-slate-800' }) {
+function KPICard({ label, value, color = 'text-black' }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
       <p className="text-xs font-medium text-slate-900 font-medium uppercase tracking-wide mb-1">{label}</p>
@@ -198,7 +198,7 @@ export default function BillTrackerSubcontractorBillRegisterPage() {
                     <td className="px-4 py-2.5 text-slate-900 font-medium whitespace-nowrap">{fmt(b.inv_date)}</td>
                     <td className="px-4 py-2.5 text-right font-medium text-slate-700">₹{inr(b.basic_amount)}</td>
                     <td className="px-4 py-2.5 text-right text-orange-600">₹{inr(b.gst_amount)}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-slate-800">₹{inr(b.total_amount)}</td>
+                    <td className="px-4 py-2.5 text-right font-medium text-black">₹{inr(b.total_amount)}</td>
                     <td className="px-4 py-2.5 text-center"><StatusBadge status={b.workflow_status} /></td>
                     <td className="px-4 py-2.5 text-center">
                       <button onClick={() => navigate(`/tqs/bills/${b.id}`)}

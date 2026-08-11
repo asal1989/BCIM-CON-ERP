@@ -256,7 +256,7 @@ function WODrawer({ wo, onClose }) {
             ].map(([label, value]) => (
               <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
                 <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">{label}</p>
-                <p className="text-sm font-medium text-slate-800 break-words">{value}</p>
+                <p className="text-sm font-medium text-black break-words">{value}</p>
               </div>
             ))}
           </div>
@@ -296,7 +296,7 @@ function WODrawer({ wo, onClose }) {
                     return (
                       <tr key={it.id || idx} className="hover:bg-slate-50 transition-colors">
                         <td className="px-3 py-2.5 text-slate-400 font-mono">{idx + 1}</td>
-                        <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[260px]">{it.description || `Item ${idx + 1}`}</td>
+                        <td className="px-3 py-2.5 font-medium text-black max-w-[260px]">{it.description || `Item ${idx + 1}`}</td>
                         <td className="px-3 py-2.5">
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium uppercase">{it.unit || 'LS'}</span>
                         </td>
@@ -311,7 +311,7 @@ function WODrawer({ wo, onClose }) {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 font-mono text-right text-slate-600">{inr(rate)}</td>
-                        <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
+                        <td className="px-3 py-2.5 font-mono text-right font-semibold text-black">{inr(amount)}</td>
                       </tr>
                     );
                   })}
@@ -353,7 +353,7 @@ function WODrawer({ wo, onClose }) {
             {bills.length > 0 && (
               <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
                 {[
-                  { label: 'Total Billed', value: inr(totalBilled),    color: 'text-slate-800' },
+                  { label: 'Total Billed', value: inr(totalBilled),    color: 'text-black' },
                   { label: 'Approved',     value: inr(approvedBilled), color: 'text-emerald-600' },
                   { label: 'Pending',      value: inr(pendingBilled),  color: 'text-amber-600' },
                 ].map((k, i) => (
@@ -386,11 +386,11 @@ function WODrawer({ wo, onClose }) {
                       return (
                         <tr key={b.id || i} className="hover:bg-slate-50 transition-colors">
                           <td className="px-3 py-2.5 text-slate-400 font-mono">{i + 1}</td>
-                          <td className="px-3 py-2.5 font-medium text-slate-800">{b.bill_number || '—'}</td>
+                          <td className="px-3 py-2.5 font-medium text-black">{b.bill_number || '—'}</td>
                           <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
                             {b.bill_date ? dayjs(b.bill_date).format('DD-MM-YYYY') : '—'}
                           </td>
-                          <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">₹{inr(b.total_amount)}</td>
+                          <td className="px-3 py-2.5 font-medium text-black whitespace-nowrap">₹{inr(b.total_amount)}</td>
                           <td className="px-3 py-2.5">
                             <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium border', st.cls)}>{st.label}</span>
                           </td>
@@ -844,13 +844,13 @@ export default function WORegisterPage() {
                         <tr key={wo.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedWO(wo)}>
                           <TD className="font-mono font-medium text-indigo-700">{wo.wo_number}</TD>
                           <TD>{wo.start_date ? dayjs(wo.start_date).format('DD-MM-YYYY') : '-'}</TD>
-                          <TD className="font-medium text-slate-800">{(wo.vendor_name || '-').toUpperCase()}</TD>
+                          <TD className="font-medium text-black">{(wo.vendor_name || '-').toUpperCase()}</TD>
                           <TD>{(wo.project_name || '-').toUpperCase()}</TD>
                           <TD className="max-w-[260px] truncate">{wo.subject || '-'}</TD>
                           <TD><StatusBadge status={wo.status} /></TD>
                           <TD right className="font-mono font-semibold">Rs {inr(value)}</TD>
                           <TD right className="font-mono text-emerald-700">Rs {inr(billed)}</TD>
-                          <TD right className="font-mono text-slate-800">Rs {inr(value - billed)}</TD>
+                          <TD right className="font-mono text-black">Rs {inr(value - billed)}</TD>
                           <TD right><ChevronRight className="w-4 h-4 text-slate-300 ml-auto" /></TD>
                         </tr>
                       );
@@ -902,12 +902,12 @@ export default function WORegisterPage() {
                   <tbody>
                     {vendorSummary.map(v => (
                       <tr key={v.vendor_name} className="hover:bg-slate-50">
-                        <TD className="font-medium text-slate-800">{(v.vendor_name || '').toUpperCase()}</TD>
+                        <TD className="font-medium text-black">{(v.vendor_name || '').toUpperCase()}</TD>
                         <TD className="max-w-[320px] truncate">{v.projects || '-'}</TD>
                         <TD right className="font-mono">{v.count}</TD>
                         <TD right className="font-mono font-semibold">Rs {inr(v.total)}</TD>
                         <TD right className="font-mono text-emerald-700">Rs {inr(v.billed)}</TD>
-                        <TD right className="font-mono text-slate-800">Rs {inr(v.total - v.billed)}</TD>
+                        <TD right className="font-mono text-black">Rs {inr(v.total - v.billed)}</TD>
                       </tr>
                     ))}
                   </tbody>

@@ -45,7 +45,7 @@ export default function ComplianceCalendarPage() {
               <Shield className="w-4 h-4 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Compliance Overview</h1>
+              <h1 className="text-lg font-semibold text-black">Compliance Overview</h1>
               <p className="text-xs text-slate-400">{fyLabel} — statutory due dates with amounts computed from your ERP data</p>
             </div>
           </div>
@@ -108,7 +108,7 @@ export default function ComplianceCalendarPage() {
                       <td className="px-4 py-2.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CAT_CLR[r.category] || 'bg-slate-100 text-slate-600'}`}>{r.category}</span>
                       </td>
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{r.name}</td>
+                      <td className="px-4 py-2.5 font-medium text-black">{r.name}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500">{r.period}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">{dayjs(r.due_date).format('DD MMM YYYY')}</td>
                       <td className="px-4 py-2.5 font-mono text-slate-700">{r.amount ? inr(r.amount) : '—'}</td>

@@ -127,7 +127,7 @@ export default function MethodStatementPage() {
             <BookOpen className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">Method Statements</h1>
+            <h1 className="text-xl font-semibold text-black">Method Statements</h1>
             <p className="text-xs text-slate-500">MS Register — Submit → Approve workflow</p>
           </div>
         </div>
@@ -202,7 +202,7 @@ export default function MethodStatementPage() {
                       {ms.ms_number}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-800 max-w-xs">
+                  <td className="px-4 py-3 font-medium text-black max-w-xs">
                     <span className="truncate block max-w-[200px]" title={ms.title}>{ms.title}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{ms.project_name}</td>

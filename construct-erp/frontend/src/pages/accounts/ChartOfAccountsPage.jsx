@@ -60,7 +60,7 @@ function AccountModal({ initial, onClose }) {
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-xl border border-slate-200 shadow-xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-800">{isEdit ? 'Edit Account' : 'New Account'}</p>
+          <p className="text-sm font-semibold text-black">{isEdit ? 'Edit Account' : 'New Account'}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -132,7 +132,7 @@ function LedgerDrawer({ account, projectId, onClose }) {
               <span className="font-mono text-sm text-slate-500">{account.code}</span>
               <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium border', meta.badge)}>{meta.label}</span>
             </div>
-            <h2 className="text-lg font-semibold text-slate-800 mt-1">{account.name}</h2>
+            <h2 className="text-lg font-semibold text-black mt-1">{account.name}</h2>
             {account.sub_type && <p className="text-xs text-slate-400">{account.sub_type}</p>}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
@@ -147,7 +147,7 @@ function LedgerDrawer({ account, projectId, onClose }) {
           ].map(([label, val, isCount]) => (
             <div key={label} className="px-6 py-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
-              <p className="text-sm font-semibold font-mono text-slate-800 mt-0.5">
+              <p className="text-sm font-semibold font-mono text-black mt-0.5">
                 {isCount ? `${val} ${val === 1 ? 'entry' : 'entries'}` : `₹${inr(val || 0)}`}
               </p>
             </div>
@@ -184,7 +184,7 @@ function LedgerDrawer({ account, projectId, onClose }) {
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{Number(t.debit) ? inr(t.debit) : '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-slate-700">{Number(t.credit) ? inr(t.credit) : '—'}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{inr(t.running_balance)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-black">{inr(t.running_balance)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -215,7 +215,7 @@ function AccountRow({ a, indent, onOpen, onEdit, onDelete }) {
       <td className="w-1.5 p-0"><div className={clsx('w-1 h-9 mx-auto rounded-full opacity-30', m.bar)} /></td>
       <td className={clsx('pr-4 py-2.5 font-mono text-xs text-slate-500', indent ? 'pl-8' : 'pl-4')}>{a.code}</td>
       <td className="px-4 py-2.5">
-        <button onClick={() => onOpen(a)} className="font-medium text-slate-800 hover:text-blue-600 text-left">{a.name}</button>
+        <button onClick={() => onOpen(a)} className="font-medium text-black hover:text-blue-600 text-left">{a.name}</button>
       </td>
       <td className="px-4 py-2.5">
         <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border', m.badge)}>{m.label}</span>
@@ -282,7 +282,7 @@ function OpeningBalancesModal({ accounts, onClose }) {
       <div className="bg-white w-full max-w-2xl rounded-xl border border-slate-200 shadow-xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <p className="text-sm font-semibold text-slate-800">Set Opening Balances</p>
+            <p className="text-sm font-semibold text-black">Set Opening Balances</p>
             <p className="text-xs text-slate-400 mt-0.5">Enter your trial balance figures as of your accounting start date</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
@@ -469,7 +469,7 @@ export default function ChartOfAccountsPage() {
               <BookOpen className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight">Chart of Accounts</h1>
+              <h1 className="text-xl font-bold text-black tracking-tight">Chart of Accounts</h1>
               <p className="text-xs text-slate-400">Structured account hierarchy — Indian GAAP · GST-compliant</p>
             </div>
           </div>

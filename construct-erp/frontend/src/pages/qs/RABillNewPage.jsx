@@ -549,7 +549,7 @@ export default function RABillNewPage() {
                         <td className="px-6 py-3.5 border-b border-slate-50">
                           <div className={clsx(
                             'text-[13px] font-medium leading-snug',
-                            isOver ? 'text-rose-600' : 'text-slate-800'
+                            isOver ? 'text-rose-600' : 'text-black'
                           )}>
                             {it.is_variation && (
                               <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-violet-100 text-violet-600 align-middle">VO</span>
@@ -642,7 +642,7 @@ export default function RABillNewPage() {
               {selectedProject && (
                 <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-1">
                   <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Billing To Client</div>
-                  <div className="text-[13px] font-semibold text-slate-800">{selectedProject.client_name || 'Generic Client'}</div>
+                  <div className="text-[13px] font-semibold text-black">{selectedProject.client_name || 'Generic Client'}</div>
                   {(selectedProject.client_gstin || selectedProject.client_pan) && (
                     <div className="text-[10px] font-medium text-slate-500">
                       GST {selectedProject.client_gstin || '—'} · PAN {selectedProject.client_pan || '—'}
@@ -763,7 +763,7 @@ export default function RABillNewPage() {
                 )}
                 <div className="border-t border-slate-100 pt-2 flex justify-between items-center">
                   <span className="text-[12px] font-medium text-slate-600">Gross Bill Value</span>
-                  <span className="text-[12px] font-semibold font-mono text-slate-800">{inr(grossTotal + gstAmount + priceEscalation)}</span>
+                  <span className="text-[12px] font-semibold font-mono text-black">{inr(grossTotal + gstAmount + priceEscalation)}</span>
                 </div>
 
                 {/* Deductions block */}
@@ -807,7 +807,7 @@ export default function RABillNewPage() {
                   {theoreticList.map((theo, i) => (
                     <div key={i} className="flex justify-between items-center text-[12px]">
                       <span className="font-medium text-slate-500">{theo.material}</span>
-                      <span className="font-semibold text-slate-800 font-mono">{theo.qty.toFixed(2)} {theo.unit}</span>
+                      <span className="font-semibold text-black font-mono">{theo.qty.toFixed(2)} {theo.unit}</span>
                     </div>
                   ))}
                 </div>
@@ -893,7 +893,7 @@ function Field({ label, action, children }) {
   );
 }
 
-function SummaryRow({ label, value, valueClass = 'text-slate-800' }) {
+function SummaryRow({ label, value, valueClass = 'text-black' }) {
   return (
     <div className="flex justify-between items-center">
       <span className="text-[12px] text-slate-500">{label}</span>

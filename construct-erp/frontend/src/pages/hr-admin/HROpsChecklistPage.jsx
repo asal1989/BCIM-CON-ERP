@@ -226,7 +226,7 @@ function SectionCard({ section, checked, onToggle, onReset }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">{section.title}</span>
+            <span className="text-sm font-semibold text-black">{section.title}</span>
             {allDone && <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -486,7 +486,7 @@ export default function HROpsChecklistPage() {
                 <TrendingUp className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-800">Overall Progress</p>
+                <p className="text-sm font-semibold text-black">Overall Progress</p>
                 <p className="text-xs text-slate-500">{totalDone} of {TOTAL_ITEMS} tasks completed</p>
               </div>
             </div>

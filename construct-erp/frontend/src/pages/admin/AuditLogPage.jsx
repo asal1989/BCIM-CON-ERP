@@ -50,7 +50,7 @@ function LogRow({ log }) {
         </td>
         <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">{dayjs(log.created_at).format('DD MMM YYYY, HH:mm')}</td>
         <td className="px-3 py-2.5">
-          <p className="text-xs font-semibold text-slate-800">{log.user_name || 'System'}</p>
+          <p className="text-xs font-semibold text-black">{log.user_name || 'System'}</p>
           {log.user_role && <p className="text-[10px] text-slate-400">{log.user_role}</p>}
         </td>
         <td className="px-3 py-2.5">

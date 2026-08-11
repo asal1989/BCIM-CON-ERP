@@ -232,7 +232,7 @@ export default function QuotationEntryPage() {
           </div>
           <div>
             <p className="text-[11px] text-slate-900 font-medium uppercase tracking-wide mb-0.5">Project</p>
-            <p className="text-sm font-medium text-slate-800">{indent.project_name || '—'}</p>
+            <p className="text-sm font-medium text-black">{indent.project_name || '—'}</p>
           </div>
           <div>
             <p className="text-[11px] text-slate-900 font-medium uppercase tracking-wide mb-0.5">Required By</p>
@@ -321,7 +321,7 @@ export default function QuotationEntryPage() {
             <div className="space-y-2.5">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-500">Sub Total (Basic)</span>
-                <span className="text-sm font-mono text-slate-800">₹{inr(grossTotal)}</span>
+                <span className="text-sm font-mono text-black">₹{inr(grossTotal)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-500">Total GST</span>
@@ -442,7 +442,7 @@ export default function QuotationEntryPage() {
                       <div className="col-span-2 flex items-center justify-end">
                         {hasRate ? (
                           <div className="text-right">
-                            <p className="text-sm font-medium font-mono text-slate-800">₹{inr(total)}</p>
+                            <p className="text-sm font-medium font-mono text-black">₹{inr(total)}</p>
                             {gst > 0 && (
                               <p className="text-[10px] text-amber-500">+₹{inr(gst)} GST</p>
                             )}

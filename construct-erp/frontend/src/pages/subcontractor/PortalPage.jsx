@@ -32,7 +32,7 @@ export default function SubcontractorPortalPage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="bg-white border border-amber-200 rounded-2xl p-8 max-w-md text-center">
           <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-slate-800">Portal Access Not Configured</h2>
+          <h2 className="text-lg font-bold text-black">Portal Access Not Configured</h2>
           <p className="text-sm text-slate-600 mt-2">
             Your account is not linked to a vendor record. Please contact the administrator
             to enable your subcontractor portal access.
@@ -88,7 +88,7 @@ export default function SubcontractorPortalPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <FileText className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-slate-800">My Bills</span>
+            <span className="text-sm font-semibold text-black">My Bills</span>
             <span className="ml-auto text-xs text-slate-400">{bills.length} record{bills.length !== 1 ? 's' : ''}</span>
           </div>
           {isLoading ? (

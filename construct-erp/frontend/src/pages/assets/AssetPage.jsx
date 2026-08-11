@@ -120,7 +120,7 @@ function QRPrintPreview({ assets, onClose }) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b">
             <div>
-              <h2 className="font-bold text-slate-800 text-lg">QR Labels</h2>
+              <h2 className="font-bold text-black text-lg">QR Labels</h2>
               <p className="text-xs text-slate-400">{assets.length} asset{assets.length!==1?'s':''} · click Print to send to printer</p>
             </div>
             <div className="flex items-center gap-2">
@@ -433,7 +433,7 @@ function AssetDetailPanel({ asset: a, onClose, onEdit, onPrintQR, qc }) {
                 ].map(([l,v])=>(
                   <div key={l} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{l}</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{v}</p>
+                    <p className="text-sm font-semibold text-black mt-0.5 truncate">{v}</p>
                   </div>
                 ))}
               </div>
@@ -511,7 +511,7 @@ function AssetDetailPanel({ asset: a, onClose, onEdit, onPrintQR, qc }) {
                 <QRCodeSVG value={`BCIM | ${a.asset_code} | ${a.asset_name} | ${a.serial_number||'—'}`} size={200} level="H" />
               </div>
               <div className="text-center">
-                <p className="font-bold text-slate-800 text-lg">{a.asset_code}</p>
+                <p className="font-bold text-black text-lg">{a.asset_code}</p>
                 <p className="text-sm text-slate-500">{a.asset_name}</p>
               </div>
               <button onClick={onPrintQR} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">
@@ -596,7 +596,7 @@ export default function AssetPage() {
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Asset Master</h1>
+            <h1 className="text-xl font-bold text-black">Asset Master</h1>
             <p className="text-xs text-slate-400 mt-0.5">
               {assets.length} total assets · {fmtCur(assets.reduce((s,a)=>s+parseFloat(a.purchase_value||0),0))} total value
             </p>
@@ -726,7 +726,7 @@ export default function AssetPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3" onClick={()=>setSelected(a)}>
-                    <div className="font-medium text-slate-800 text-sm">{a.asset_name}</div>
+                    <div className="font-medium text-black text-sm">{a.asset_name}</div>
                     {(a.brand||a.model) && <div className="text-xs text-slate-400 mt-0.5">{[a.brand,a.model].filter(Boolean).join(' · ')}</div>}
                   </td>
                   <td className="px-4 py-3">

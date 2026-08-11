@@ -106,7 +106,7 @@ export default function SCSettings() {
           {TABS.map(({k,label,badge})=>(
             <button key={k} onClick={()=>setTab(k)}
               className={clsx('flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
-                activeTab===k?'text-white shadow-sm':'text-slate-600 hover:text-slate-800 hover:bg-slate-50')}
+                activeTab===k?'text-white shadow-sm':'text-slate-600 hover:text-black hover:bg-slate-50')}
               style={activeTab===k?{background:`linear-gradient(135deg,${Theme.navyLight} 0%,${Theme.navyDark} 100%)`}:{}}>
               {label}
               {badge && <span className="text-emerald-400 text-xs">{badge}</span>}
@@ -214,7 +214,7 @@ export default function SCSettings() {
                         ? <Wifi className="w-5 h-5 text-emerald-600"/>
                         : <WifiOff className="w-5 h-5 text-slate-400"/>}
                       <div>
-                        <p className="font-bold text-slate-800">ESSL Biometric Integration</p>
+                        <p className="font-bold text-black">ESSL Biometric Integration</p>
                         <p className="text-xs text-slate-500 mt-0.5">
                           Auto-sync attendance from ESSL ETimetracklite / biometric attendance machine
                         </p>

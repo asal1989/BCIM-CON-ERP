@@ -106,7 +106,7 @@ export default function UserModuleAccessPage() {
                   return (
                     <tr key={u.id} className="border-t border-slate-50 hover:bg-slate-50/60">
                       <td className="sticky left-0 bg-white px-3 py-2 border-r border-slate-100">
-                        <p className="font-semibold text-slate-800">{u.name}</p>
+                        <p className="font-semibold text-black">{u.name}</p>
                         <p className="text-[10px] text-slate-400">{u.email}</p>
                         <p className={clsx('text-[10px] font-bold mt-0.5 flex items-center gap-1', fullAccess ? 'text-indigo-600' : 'text-slate-400')}>
                           {fullAccess && <ShieldCheck className="w-3 h-3" />} {u.role}{fullAccess ? ' — full access' : ''}

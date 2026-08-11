@@ -78,7 +78,7 @@ function WBSNode({ node, depth = 0, projectId, phases, onRefresh }) {
             className="flex-1 text-sm border border-indigo-300 rounded px-2 py-0.5 outline-none"
             autoFocus onKeyDown={e => { if (e.key === 'Enter') updateMut.mutate(form); if (e.key === 'Escape') setEditing(false); }} />
         ) : (
-          <span className="flex-1 text-sm text-slate-800 font-medium">{node.wbs_name}</span>
+          <span className="flex-1 text-sm text-black font-medium">{node.wbs_name}</span>
         )}
 
         {/* Stats */}

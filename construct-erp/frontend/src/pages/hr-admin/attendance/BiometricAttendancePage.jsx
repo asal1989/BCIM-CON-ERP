@@ -93,7 +93,7 @@ function DeviceStatusTab() {
           <div className="flex items-center gap-3">
             <Monitor size={16} className="text-slate-400" />
             <div>
-              <p className="text-sm font-semibold text-slate-800">{d.name}</p>
+              <p className="text-sm font-semibold text-black">{d.name}</p>
               <p className="text-xs text-slate-400">{d.location || d.ip_address || d.serial_number || '—'}</p>
             </div>
           </div>
@@ -202,7 +202,7 @@ export default function BiometricAttendancePage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+        <h1 className="text-xl font-bold text-black flex items-center gap-2">
           <Fingerprint size={20} className="text-blue-500" /> Biometric Attendance
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">Manage device sync, log import, and unmatched punch records</p>

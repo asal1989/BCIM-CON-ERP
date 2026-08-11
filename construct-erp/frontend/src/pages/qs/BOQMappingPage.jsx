@@ -113,7 +113,7 @@ function AllocationModal({ boqItem, balance, scList, onClose, existing }) {
               ['Balance Qty', `${Number(balance).toFixed(3)} ${boqItem.unit}`],
             ].map(([l,v])=>(
               <div key={l}><p className="text-[9px] font-bold text-slate-400 uppercase">{l}</p>
-              <p className="text-sm font-bold text-slate-800">{v}</p></div>
+              <p className="text-sm font-bold text-black">{v}</p></div>
             ))}
           </div>
 
@@ -183,7 +183,7 @@ function AllocationModal({ boqItem, balance, scList, onClose, existing }) {
               <p className={clsx('text-[10px] font-bold uppercase tracking-widest mb-2', mc.text)}>Live Margin Preview</p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  ['Client Amount', fmt(clientAmt), 'text-slate-800'],
+                  ['Client Amount', fmt(clientAmt), 'text-black'],
                   ['SC Amount',     fmt(scAmt),     mc.text],
                   ['Margin',        `${fmt(margin)} (${pct(marginPct)})`, mc.text],
                 ].map(([l,v,c])=>(
@@ -360,7 +360,7 @@ function OwnTeamCostModal({ mappingId, boqItem, onClose }) {
                 {costs.map(c => (
                   <div key={c.id} className="flex items-start justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-800">{c.description}</p>
+                      <p className="text-sm font-semibold text-black">{c.description}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         {c.cost_date?.slice(0,10)} · <span className="capitalize">{c.cost_type}</span>
                         {c.floor_ref && ` · ${c.floor_ref}`}
@@ -369,7 +369,7 @@ function OwnTeamCostModal({ mappingId, boqItem, onClose }) {
                       {c.remarks && <p className="text-[10px] text-slate-400 mt-0.5 italic">{c.remarks}</p>}
                     </div>
                     <div className="text-right ml-4 flex-shrink-0">
-                      <p className="text-sm font-bold text-slate-800">{fmt(c.amount)}</p>
+                      <p className="text-sm font-bold text-black">{fmt(c.amount)}</p>
                       <p className="text-[10px] text-slate-400">{c.qty} × ₹{c.rate}</p>
                     </div>
                   </div>
@@ -473,7 +473,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
               </select>
               {selectedWO && (
                 <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                  <p className="font-bold text-slate-800">{selectedWO.wo_number} - {selectedWO.sc_name}</p>
+                  <p className="font-bold text-black">{selectedWO.wo_number} - {selectedWO.sc_name}</p>
                   <p className="text-slate-600 mt-1">{selectedWO.description}</p>
                   <p className="mt-2 font-semibold text-slate-700">
                     Qty: {selectedWO.qty || 0} {selectedWO.unit || ''} | WO Rate: {fmt2(selectedWO.rate)} | Amount: {fmt(selectedWO.amount)}
@@ -511,7 +511,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
                         onChange={() => toggleBOQ(i.boq_item_id)}
                         className="mt-0.5 accent-indigo-600"/>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-800">{i.item_no}</p>
+                        <p className="text-xs font-bold text-black">{i.item_no}</p>
                         <p className="text-[11px] text-slate-600 truncate">{boqDesc(i)}</p>
                         <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
                           {i.client_qty || 0} {i.unit || ''} × {fmt2(i.client_rate)} = {fmt(boqAmt(i))}
@@ -537,7 +537,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                   <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">BOQ Amount</p>
-                  <p className="text-lg font-bold text-slate-800">{fmt(boqAmount)}</p>
+                  <p className="text-lg font-bold text-black">{fmt(boqAmount)}</p>
                   <p className="text-[9px] text-slate-500 mt-1">{selectedBOQs.length > 1 ? 'Combined BOQ value' : 'Total BOQ value'}</p>
                 </div>
                 <div className="text-center">
@@ -758,7 +758,7 @@ export default function BOQMappingPage() {
                     style={{background:`linear-gradient(90deg,${Theme.navy}0a 0%,transparent 60%)`}}>
                     <div className="flex items-center gap-3">
                       {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400"/> : <ChevronRight className="w-4 h-4 text-slate-400"/>}
-                      <span className="font-bold text-slate-800">{chapter.name}</span>
+                      <span className="font-bold text-black">{chapter.name}</span>
                       <span className="text-xs bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full font-medium">{chapter.items.length} items</span>
                     </div>
                     <div className="flex items-center gap-5 text-sm">
@@ -803,7 +803,7 @@ export default function BOQMappingPage() {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-sm font-semibold text-slate-800 mt-1 leading-snug line-clamp-2">{boqDesc(item)}</p>
+                                <p className="text-sm font-semibold text-black mt-1 leading-snug line-clamp-2">{boqDesc(item)}</p>
                               </div>
 
                               {/* BOQ financials — right side */}
@@ -867,7 +867,7 @@ export default function BOQMappingPage() {
                                                 alloc.execution_type==='own_team'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700')}>
                                                 {alloc.execution_type==='own_team'?'OWN':'SC'}
                                               </span>
-                                              <span className="font-semibold text-slate-800">{alloc.sc_name}</span>
+                                              <span className="font-semibold text-black">{alloc.sc_name}</span>
                                               {alloc.wo_number && (
                                                 <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{alloc.wo_number}</span>
                                               )}

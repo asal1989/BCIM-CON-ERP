@@ -80,7 +80,7 @@ export default function ComplianceDrawer({ item, onClose }) {
                   ].map(([l, v]) => (
                     <div key={l}>
                       <p className="text-[11px] text-slate-400 font-medium">{l}</p>
-                      <p className="text-slate-800 font-semibold mt-0.5">{v}</p>
+                      <p className="text-black font-semibold mt-0.5">{v}</p>
                     </div>
                   ))}
                 </div>
@@ -88,7 +88,7 @@ export default function ComplianceDrawer({ item, onClose }) {
               </Section>
 
               <Section icon={Scale} title="Legal Requirement">
-                <p className="text-sm font-semibold text-slate-800">{item.legalRef}</p>
+                <p className="text-sm font-semibold text-black">{item.legalRef}</p>
                 <p className="text-xs text-slate-500 mt-1">Non-compliance may attract penalty, interest and prosecution under the applicable Act.</p>
               </Section>
 
@@ -105,7 +105,7 @@ export default function ComplianceDrawer({ item, onClose }) {
                       <FileText className="w-4 h-4 text-red-500" />
                     </div>
                     <p className="text-sm text-slate-600">
-                      <strong className="text-slate-800">{item.documents}</strong> document{item.documents === 1 ? '' : 's'} on file
+                      <strong className="text-black">{item.documents}</strong> document{item.documents === 1 ? '' : 's'} on file
                       {item.sourcePage ? <> — see <span className="font-semibold">{item.sourcePage}</span> for details</> : null}
                     </p>
                   </div>

@@ -278,7 +278,7 @@ export default function MBMeasurementDetail({ boqItems = [], measurements = [] }
             <div className="flex flex-wrap gap-4 items-start justify-between">
               <div className="flex-1 min-w-[300px]">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">BOQ Item Code</p>
-                <p className="text-sm font-mono font-bold text-slate-800 break-all">{getItemCode(activeItem) || '—'}</p>
+                <p className="text-sm font-mono font-bold text-black break-all">{getItemCode(activeItem) || '—'}</p>
               </div>
               <div className="flex gap-6 flex-wrap">
                 {[
@@ -290,7 +290,7 @@ export default function MBMeasurementDetail({ boqItems = [], measurements = [] }
                 ].map(({ label, val }) => (
                   <div key={label}>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
-                    <p className="text-sm font-bold text-slate-800">{val}</p>
+                    <p className="text-sm font-bold text-black">{val}</p>
                   </div>
                 ))}
               </div>

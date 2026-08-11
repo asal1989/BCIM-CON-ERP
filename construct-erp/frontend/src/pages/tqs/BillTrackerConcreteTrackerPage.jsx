@@ -138,7 +138,7 @@ export default function BillTrackerConcreteTrackerPage() {
             <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Concrete Tracker</h1>
+            <h1 className="text-lg font-semibold text-black">Concrete Tracker</h1>
             <p className="text-xs text-slate-500">Pour cards · RMC bills · DPR concrete consumption</p>
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function BillTrackerConcreteTrackerPage() {
           <select
             value={projectId}
             onChange={e => setProjectId(e.target.value)}
-            className="w-full h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-800"
+            className="w-full h-9 rounded-lg border border-slate-200 px-2 text-sm text-black"
           >
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -163,12 +163,12 @@ export default function BillTrackerConcreteTrackerPage() {
         <div>
           <label className="block text-[11px] font-medium text-slate-500 mb-1">From</label>
           <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-            className="h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-800" />
+            className="h-9 rounded-lg border border-slate-200 px-2 text-sm text-black" />
         </div>
         <div>
           <label className="block text-[11px] font-medium text-slate-500 mb-1">To</label>
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-            className="h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-800" />
+            className="h-9 rounded-lg border border-slate-200 px-2 text-sm text-black" />
         </div>
         <div className="flex-1 min-w-40 relative">
           <label className="block text-[11px] font-medium text-slate-500 mb-1">Search</label>
@@ -177,7 +177,7 @@ export default function BillTrackerConcreteTrackerPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Pour #, location, vendor…"
-            className="w-full h-9 rounded-lg border border-slate-200 pl-8 pr-3 text-sm text-slate-800"
+            className="w-full h-9 rounded-lg border border-slate-200 pl-8 pr-3 text-sm text-black"
           />
         </div>
       </div>
@@ -247,7 +247,7 @@ export default function BillTrackerConcreteTrackerPage() {
                               {pc.pour_card_number || '—'}
                             </td>
                             <td className="px-4 py-2.5">
-                              <p className="font-medium text-slate-800 text-xs">{pc.location || '—'}</p>
+                              <p className="font-medium text-black text-xs">{pc.location || '—'}</p>
                               {pc.pour_description && (
                                 <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-48">{pc.pour_description}</p>
                               )}
@@ -261,7 +261,7 @@ export default function BillTrackerConcreteTrackerPage() {
                               ) : '—'}
                             </td>
                             <td className="px-4 py-2.5 text-right text-xs text-slate-700">{num(pc.volume_planned).toFixed(2)}</td>
-                            <td className="px-4 py-2.5 text-right text-xs font-medium text-slate-800">
+                            <td className="px-4 py-2.5 text-right text-xs font-medium text-black">
                               {pc.volume_actual ? num(pc.volume_actual).toFixed(2) : '—'}
                             </td>
                             <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">
@@ -329,13 +329,13 @@ export default function BillTrackerConcreteTrackerPage() {
                         {filteredBills.map(b => (
                           <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-2.5 text-[11px] font-mono text-slate-500">{b.sl_number}</td>
-                            <td className="px-4 py-2.5 text-xs font-medium text-slate-800 max-w-36 truncate">{(b.vendor_name || '').toUpperCase() || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs font-medium text-black max-w-36 truncate">{(b.vendor_name || '').toUpperCase() || '—'}</td>
                             <td className="px-4 py-2.5 text-[11px] font-mono text-indigo-600">{b.inv_number || '—'}</td>
                             <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtDate(b.inv_date)}</td>
                             <td className="px-4 py-2.5 text-[11px] text-slate-500">{b.po_number || '—'}</td>
                             <td className="px-4 py-2.5 text-[11px] text-slate-500 max-w-36 truncate" title={b.work_desc}>{b.work_desc || '—'}</td>
                             <td className="px-4 py-2.5 text-right text-xs text-slate-700">{inr(b.basic_amount)}</td>
-                            <td className="px-4 py-2.5 text-right text-xs font-medium text-slate-800">{inr(b.total_amount)}</td>
+                            <td className="px-4 py-2.5 text-right text-xs font-medium text-black">{inr(b.total_amount)}</td>
                             <td className="px-4 py-2.5 text-right text-xs text-emerald-700">{inr(b.paid_amount)}</td>
                             <td className="px-4 py-2.5 text-right text-xs font-medium text-red-600">{inr(b.balance_to_pay)}</td>
                             <td className="px-4 py-2.5">
@@ -355,7 +355,7 @@ export default function BillTrackerConcreteTrackerPage() {
                           <td className="px-4 py-2 text-right text-xs text-slate-700">
                             {inr(filteredBills.reduce((s, b) => s + num(b.basic_amount), 0))}
                           </td>
-                          <td className="px-4 py-2 text-right text-xs text-slate-800">
+                          <td className="px-4 py-2 text-right text-xs text-black">
                             {inr(filteredBills.reduce((s, b) => s + num(b.total_amount), 0))}
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-emerald-700">
@@ -407,7 +407,7 @@ export default function BillTrackerConcreteTrackerPage() {
                                 ))}
                               </div>
                             </td>
-                            <td className="px-4 py-2.5 text-right text-xs font-semibold text-slate-800">
+                            <td className="px-4 py-2.5 text-right text-xs font-semibold text-black">
                               {num(r.total_qty).toFixed(2)}
                             </td>
                           </tr>
@@ -416,7 +416,7 @@ export default function BillTrackerConcreteTrackerPage() {
                       <tfoot className="bg-slate-50 border-t border-slate-200 font-medium">
                         <tr>
                           <td colSpan={2} className="px-4 py-2 text-[11px] text-slate-500">{dprData.length} days</td>
-                          <td className="px-4 py-2 text-right text-xs text-slate-800">{totalDPRVol.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right text-xs text-black">{totalDPRVol.toFixed(2)}</td>
                         </tr>
                       </tfoot>
                     </table>

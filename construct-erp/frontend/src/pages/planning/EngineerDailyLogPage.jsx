@@ -658,7 +658,7 @@ function LogDetail({ log, onClose, onEdit }) {
                 {icon}
                 <div>
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">{label}</p>
-                  <p className="text-sm font-bold text-slate-800 mt-0.5">{val}</p>
+                  <p className="text-sm font-bold text-black mt-0.5">{val}</p>
                 </div>
               </div>
             ))}
@@ -725,7 +725,7 @@ function LogDetail({ log, onClose, onEdit }) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-slate-800 text-sm">{a.activity_name}</p>
+                            <p className="font-semibold text-black text-sm">{a.activity_name}</p>
                             <ActBadge status={a.status} />
                             {a.activity_id && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-600">
@@ -1032,7 +1032,7 @@ function LogRow({ log, onView, onEdit, isManager }) {
       onClick={onView}>
       {/* Date */}
       <div className="w-20 flex-shrink-0 text-center">
-        <p className="text-lg font-bold text-slate-800 leading-none">{dayjs(log.log_date).format('DD')}</p>
+        <p className="text-lg font-bold text-black leading-none">{dayjs(log.log_date).format('DD')}</p>
         <p className="text-[10px] text-slate-400 font-semibold uppercase">{dayjs(log.log_date).format('MMM YYYY')}</p>
         <p className="text-[9px] text-slate-300 mt-0.5">{dayjs(log.log_date).format('ddd')}</p>
       </div>
@@ -1044,7 +1044,7 @@ function LogRow({ log, onView, onEdit, isManager }) {
 
       {/* Project + Engineer */}
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-slate-800 text-sm truncate">
+        <p className="font-semibold text-black text-sm truncate">
           {isManager ? `${log.engineer_name} · ` : ''}{log.project_name}
         </p>
         <p className="text-[10px] text-slate-400 font-mono mt-0.5">{log.log_number} · {log.project_code}</p>

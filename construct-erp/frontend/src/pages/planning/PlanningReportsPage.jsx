@@ -32,7 +32,7 @@ function SectionCard({ title, icon: Icon, children }) {
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
         <Icon className="w-4 h-4 text-indigo-600" />
-        <h3 className="text-sm font-medium text-slate-800">{title}</h3>
+        <h3 className="text-sm font-medium text-black">{title}</h3>
       </div>
       <div className="p-5">{children}</div>
     </div>
@@ -231,7 +231,7 @@ export default function PlanningReportsPage() {
                       <div key={w.weather} className="flex items-center gap-3 p-3 border rounded-lg">
                         <Icon className="w-6 h-6 flex-shrink-0" style={{ color: cfg.color }} />
                         <div>
-                          <div className="text-sm font-semibold text-slate-800">{w.count} days</div>
+                          <div className="text-sm font-semibold text-black">{w.count} days</div>
                           <div className="text-xs text-slate-500">{cfg.label} ({pct}%)</div>
                         </div>
                       </div>

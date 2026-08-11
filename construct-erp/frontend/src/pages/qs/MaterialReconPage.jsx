@@ -19,7 +19,7 @@ function SectionTitle({ icon: Icon, title, subtitle }) {
         <Icon className="w-4 h-4 text-emerald-600" />
       </div>
       <div>
-        <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+        <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
         {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
       </div>
     </div>
@@ -119,7 +119,7 @@ export default function MaterialReconPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Total Suggested Recovery</p>
-                    <p className="text-2xl font-bold text-slate-800">{inr(summary.total_suggested_recovery)}</p>
+                    <p className="text-2xl font-bold text-black">{inr(summary.total_suggested_recovery)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Previously Recovered</p>
@@ -156,7 +156,7 @@ export default function MaterialReconPage() {
                     {records.map((r, i) => (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="text-sm font-semibold text-slate-800">{r.material_name}</div>
+                          <div className="text-sm font-semibold text-black">{r.material_name}</div>
                           <div className="text-[10px] text-slate-400 uppercase tracking-wide">{r.unit}</div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-xs text-slate-500">{r.theoretical_qty.toFixed(2)}</td>

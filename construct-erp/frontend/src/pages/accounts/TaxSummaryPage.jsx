@@ -61,7 +61,7 @@ export default function TaxSummaryPage() {
               <Landmark className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Tax Summary</h1>
+              <h1 className="text-lg font-semibold text-black">Tax Summary</h1>
               <p className="text-xs text-slate-400">GST and TDS position from posted journal entries</p>
             </div>
           </div>
@@ -110,10 +110,10 @@ export default function TaxSummaryPage() {
               <tbody className="divide-y divide-slate-50">
                 {monthly.map(m => (
                   <tr key={m.month} className="hover:bg-slate-50">
-                    <td className="px-4 py-2 text-slate-800">{dayjs(m.month + '-01').format('MMM YYYY')}</td>
+                    <td className="px-4 py-2 text-black">{dayjs(m.month + '-01').format('MMM YYYY')}</td>
                     <td className="px-4 py-2 text-right font-mono">{inr(m.output_gst)}</td>
                     <td className="px-4 py-2 text-right font-mono">{inr(m.input_gst)}</td>
-                    <td className="px-4 py-2 text-right font-mono font-semibold text-slate-800">{inr(m.net_gst_payable)}</td>
+                    <td className="px-4 py-2 text-right font-mono font-semibold text-black">{inr(m.net_gst_payable)}</td>
                     <td className="px-4 py-2 text-right font-mono">{inr(m.tds_payable)}</td>
                   </tr>
                 ))}
@@ -127,7 +127,7 @@ export default function TaxSummaryPage() {
         <button onClick={() => navigate('/accounts/taxes/gst')}
           className="bg-white border border-slate-200 rounded-md p-5 text-left hover:bg-slate-50 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-800">GST Filing</p>
+            <p className="text-sm font-semibold text-black">GST Filing</p>
             <p className="text-xs text-slate-400 mt-1">GSTR-1 / GSTR-3B summaries, returns &amp; reconciliation</p>
           </div>
           <ArrowRight className="w-4 h-4 text-slate-400" />
@@ -135,7 +135,7 @@ export default function TaxSummaryPage() {
         <button onClick={() => navigate('/accounts/taxes/tds')}
           className="bg-white border border-slate-200 rounded-md p-5 text-left hover:bg-slate-50 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-800">TDS Management</p>
+            <p className="text-sm font-semibold text-black">TDS Management</p>
             <p className="text-xs text-slate-400 mt-1">TDS deducted by vendor, due dates &amp; certificates</p>
           </div>
           <ArrowRight className="w-4 h-4 text-slate-400" />

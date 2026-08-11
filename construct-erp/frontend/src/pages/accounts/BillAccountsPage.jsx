@@ -222,7 +222,7 @@ function TdsTab({ projectId }) {
         <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-md border border-slate-200 shadow-xl p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-800">Record TDS deposit — {modal.period}</p>
+              <p className="text-sm font-semibold text-black">Record TDS deposit — {modal.period}</p>
               <button onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-xs text-slate-500">Posts the period's pending TDS as Dr TDS Payable → Cr Bank. The amount is summed automatically from the bills.</p>
@@ -317,7 +317,7 @@ function VendorTab({ projectId }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center"><span className="ml-auto text-sm text-slate-500">Total outstanding: <strong className="text-slate-800">{fmt(totalOut)}</strong></span></div>
+      <div className="flex items-center"><span className="ml-auto text-sm text-slate-500">Total outstanding: <strong className="text-black">{fmt(totalOut)}</strong></span></div>
       {isLoading ? <Spinner /> : (
         <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
           <table className="w-full text-sm">
@@ -405,7 +405,7 @@ export default function BillAccountsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center"><Receipt className="w-4 h-4 text-blue-600" /></div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Bill accounts automation</h1>
+            <h1 className="text-lg font-semibold text-black">Bill accounts automation</h1>
             <p className="text-xs text-slate-400">GST ITC · TDS / 26Q · retention · vendor ledger · AP aging — from the bill tracker</p>
           </div>
           <div className="ml-auto">

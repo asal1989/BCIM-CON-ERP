@@ -62,7 +62,7 @@ function KpiCard({ label, value, color = 'slate', icon: Icon }) {
   return (
     <div className={`bg-white border rounded-xl p-4 flex items-center gap-3 ${colors[color]}`}>
       {Icon && <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${colors[color]}`}><Icon className="w-4 h-4" /></div>}
-      <div><p className="text-[11px] text-slate-900 font-medium font-medium">{label}</p><p className="text-lg font-medium mt-0.5 text-slate-800">{value}</p></div>
+      <div><p className="text-[11px] text-slate-900 font-medium font-medium">{label}</p><p className="text-lg font-medium mt-0.5 text-black">{value}</p></div>
     </div>
   );
 }
@@ -90,7 +90,7 @@ function VendorPicker({ vendors, value, onChange, placeholder = 'Search vendor..
         onClick={() => setOpen(o => !o)}
       >
         {selected ? (
-          <span className="font-medium text-slate-800">{selected.name}</span>
+          <span className="font-medium text-black">{selected.name}</span>
         ) : (
           <span className="text-slate-400">{placeholder}</span>
         )}
@@ -118,7 +118,7 @@ function VendorPicker({ vendors, value, onChange, placeholder = 'Search vendor..
               <button key={v.id || v.name} type="button"
                 className="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 border-b border-slate-50 last:border-b-0 transition-colors"
                 onClick={() => { onChange(v.name, v); setOpen(false); setQ(''); }}>
-                <div className="font-medium text-slate-800">{v.name}</div>
+                <div className="font-medium text-black">{v.name}</div>
                 {v.contact_person && <div className="text-[11px] text-slate-900 font-medium mt-0.5">{v.contact_person}</div>}
               </button>
             ))}
@@ -591,7 +591,7 @@ export default function PaymentsPage() {
         ].map(([k, Icon, label]) => (
           <button key={k} onClick={() => setActiveTab(k)}
             className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5',
-              activeTab === k ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-900 font-medium hover:text-slate-800')}>
+              activeTab === k ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-900 font-medium hover:text-black')}>
             <Icon className="w-4 h-4" /> {label}
             {k === 'ra-bills' && certifiedBills.length > 0 && (
               <span className="bg-violet-100 text-violet-700 text-[10px] font-medium px-1.5 py-0.5 rounded-full">{certifiedBills.length}</span>
@@ -649,7 +649,7 @@ export default function PaymentsPage() {
                       <td className="px-4 py-3">
                         <span className="bg-slate-100 text-slate-900 text-[10px] font-medium px-2 py-0.5 rounded capitalize">{p.payment_type || '—'}</span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-medium text-slate-800">{inr(p.amount)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-sm font-medium text-black">{inr(p.amount)}</td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-red-500">{(p.tds_deducted || p.tds_amount) > 0 ? inr(p.tds_deducted || p.tds_amount) : '—'}</td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-medium text-emerald-600">{inr(p.net_amount || p.net_paid)}</td>
                       <td className="px-4 py-3"><span className="text-[11px] bg-slate-100 text-slate-900 px-2 py-0.5 rounded font-medium">{p.payment_mode}</span></td>
@@ -666,7 +666,7 @@ export default function PaymentsPage() {
                   <tfoot>
                     <tr className="bg-slate-50 border-t border-slate-200">
                       <td colSpan={4} className="px-4 py-3 text-xs font-medium text-slate-600">{filtered.length} records</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium text-slate-800">{inr(filtered.reduce((s, p) => s + Number(p.amount || 0), 0))}</td>
+                      <td className="px-4 py-3 text-right font-mono font-medium text-black">{inr(filtered.reduce((s, p) => s + Number(p.amount || 0), 0))}</td>
                       <td className="px-4 py-3 text-right font-mono font-medium text-red-500">{inr(filtered.reduce((s, p) => s + Number(p.tds_deducted || p.tds_amount || 0), 0))}</td>
                       <td className="px-4 py-3 text-right font-mono font-medium text-emerald-600">{inr(filtered.reduce((s, p) => s + Number(p.net_amount || p.net_paid || 0), 0))}</td>
                       <td colSpan={4} />
@@ -742,7 +742,7 @@ export default function PaymentsPage() {
                           {c.is_final_bill && <span className="ml-1 bg-red-100 text-red-700 text-[9px] font-bold px-1 py-0.5 rounded">FINAL</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800 text-sm">{c.vendor_name}</div>
+                          <div className="font-medium text-black text-sm">{c.vendor_name}</div>
                           <div className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{c.order_type} · {c.order_number || '—'}</div>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{c.project_name || '—'}</td>
@@ -808,9 +808,9 @@ export default function PaymentsPage() {
                     return (
                       <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3"><div className={clsx('font-mono text-xs font-semibold', isPaid ? 'text-emerald-700' : 'text-violet-700')}>{b.bill_number}</div></td>
-                        <td className="px-4 py-3"><div className="font-medium text-slate-800">{b.project_name}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.contractor_name}</div></td>
+                        <td className="px-4 py-3"><div className="font-medium text-black">{b.project_name}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.contractor_name}</div></td>
                         <td className="px-4 py-3 text-xs text-slate-900 font-medium whitespace-nowrap">{b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—'}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-medium text-slate-800">{inr(b.net_payable)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm font-medium text-black">{inr(b.net_payable)}</td>
                         <td className="px-4 py-3 text-right font-mono text-xs text-red-500">{inr(split.clientTds)}</td>
                         {isPaid ? (
                           <>
@@ -855,7 +855,7 @@ export default function PaymentsPage() {
                 <div className="w-8 h-8 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-center">
                   <CreditCard className="w-4 h-4 text-indigo-600" />
                 </div>
-                <h2 className="text-base font-medium text-slate-800">Record New Payment</h2>
+                <h2 className="text-base font-medium text-black">Record New Payment</h2>
               </div>
               <button onClick={() => { setShowModal(false); resetModal(); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
                 <X className="w-4 h-4" />
@@ -1010,11 +1010,11 @@ export default function PaymentsPage() {
                       <div className="grid grid-cols-4 gap-3">
                         <div>
                           <p className="text-[10px] text-emerald-600 uppercase font-semibold">Sanctioned</p>
-                          <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.advance_value)}</p>
+                          <p className="text-sm font-bold text-black">{inr(selectedExistingAdv.advance_value)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-emerald-600 uppercase font-semibold">Paid So Far</p>
-                          <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.paid_amount || 0)}</p>
+                          <p className="text-sm font-bold text-black">{inr(selectedExistingAdv.paid_amount || 0)}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-emerald-600 uppercase font-semibold">Remaining</p>
@@ -1022,7 +1022,7 @@ export default function PaymentsPage() {
                         </div>
                         <div>
                           <p className="text-[10px] text-emerald-600 uppercase font-semibold">Order Value</p>
-                          <p className="text-sm font-bold text-slate-800">{selectedExistingAdv.order_value ? inr(selectedExistingAdv.order_value) : '—'}</p>
+                          <p className="text-sm font-bold text-black">{selectedExistingAdv.order_value ? inr(selectedExistingAdv.order_value) : '—'}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-4 gap-3 pt-3 border-t border-emerald-100">
@@ -1156,7 +1156,7 @@ export default function PaymentsPage() {
               {/* Breakdown strip */}
               {form.amount > 0 && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-3 gap-3 text-center">
-                  <div><div className="text-[10px] text-slate-900 font-medium mb-1">Gross Pay</div><div className="font-mono font-medium text-slate-800">{inr(form.amount)}</div></div>
+                  <div><div className="text-[10px] text-slate-900 font-medium mb-1">Gross Pay</div><div className="font-mono font-medium text-black">{inr(form.amount)}</div></div>
                   <div><div className="text-[10px] text-slate-900 font-medium mb-1">TDS Hold</div><div className="font-mono font-medium text-red-500">{inr(tdsAmount)}</div></div>
                   <div><div className="text-[10px] text-slate-900 font-medium mb-1">Net Released</div><div className="font-mono font-medium text-emerald-600">{inr(netAmount)}</div></div>
                 </div>
@@ -1210,20 +1210,20 @@ export default function PaymentsPage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-center"><Banknote className="w-4 h-4 text-emerald-600" /></div>
-                <h2 className="text-base font-medium text-slate-800">Record Client Receipt</h2>
+                <h2 className="text-base font-medium text-black">Record Client Receipt</h2>
               </div>
               <button onClick={() => setPayBill(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
                 {[['Bill', payBill.bill_number], ['Project', payBill.project_name], ['Client', payBill.contractor_name]].map(([k, v]) => (
-                  <div key={k} className="flex justify-between text-sm"><span className="text-slate-500">{k}</span><span className="font-medium text-slate-800">{v}</span></div>
+                  <div key={k} className="flex justify-between text-sm"><span className="text-slate-500">{k}</span><span className="font-medium text-black">{v}</span></div>
                 ))}
               </div>
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="bg-slate-50 px-4 py-2.5 text-[11px] font-semibold text-slate-500 border-b border-slate-200">Payment Breakdown</div>
                 <div className="divide-y divide-slate-100">
-                  <div className="flex justify-between px-4 py-3 text-sm"><span className="text-slate-600">Net Payable</span><span className="font-mono font-medium text-slate-800">{inr(tdsSplit.netPayable)}</span></div>
+                  <div className="flex justify-between px-4 py-3 text-sm"><span className="text-slate-600">Net Payable</span><span className="font-mono font-medium text-black">{inr(tdsSplit.netPayable)}</span></div>
                   <div className="flex justify-between px-4 py-3 text-sm"><span className="text-red-500">Less: Client TDS @ {payBill.tds_rate || 2}%</span><span className="font-mono font-medium text-red-500">− {inr(tdsSplit.clientTds)}</span></div>
                   <div className="flex justify-between px-4 py-3 bg-emerald-50"><span className="font-medium text-emerald-700">Amount to Receive</span><span className="font-mono font-medium text-emerald-600 text-base">{inr(tdsSplit.amountReceived)}</span></div>
                 </div>

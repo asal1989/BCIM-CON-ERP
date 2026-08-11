@@ -355,7 +355,7 @@ function WorkflowConfigModal({ onClose }) {
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/60">
                       <td className="px-5 py-3">
-                        <p className="font-semibold text-slate-800">{p.name}</p>
+                        <p className="font-semibold text-black">{p.name}</p>
                         <p className="text-[10px] text-slate-400 font-mono">{p.project_code}</p>
                         {isCustom && <span className="text-[10px] text-orange-600 font-bold">Custom workflow</span>}
                       </td>
@@ -1233,7 +1233,7 @@ export default function MRSPage() {
                             {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 2}
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-semibold text-slate-800">{stage.label}</p>
+                            <p className="text-xs font-semibold text-black">{stage.label}</p>
                           </div>
                           {isDone && <span className="text-xs font-semibold text-emerald-600">Done</span>}
                           {isActive && <span className="text-xs font-semibold text-indigo-600">Pending</span>}
@@ -1581,7 +1581,7 @@ export default function MRSPage() {
                 <ClipboardCheck className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">Requisition Control Desk</h2>
+                <h2 className="text-sm font-semibold text-black">Requisition Control Desk</h2>
                 <p className="text-xs text-slate-500">Track requests from site entry through MD authorization and issue.</p>
               </div>
             </div>
@@ -2191,7 +2191,7 @@ export default function MRSPage() {
                     ['Department', formData.department || '—'],
                     ['Priority', `${PRIORITY_CONFIG[normalizePriority(formData.priority)].emoji} ${PRIORITY_CONFIG[normalizePriority(formData.priority)].label}`],
                   ].map(([l, v]) => (
-                    <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-slate-800 truncate">{v}</p></div>
+                    <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-black truncate">{v}</p></div>
                   ))}
                 </div>
               </div>
@@ -2207,7 +2207,7 @@ export default function MRSPage() {
                     ['Delivery Location', formData.delivery_location || '—'],
                     ['Site Incharge', formData.site_incharge || '—'],
                   ].map(([l, v]) => (
-                    <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-slate-800 truncate">{v}</p></div>
+                    <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-black truncate">{v}</p></div>
                   ))}
                 </div>
               </div>
@@ -2228,7 +2228,7 @@ export default function MRSPage() {
                       {itemsWithValue.map((i, idx) => (
                         <tr key={idx} className="border-t border-slate-100">
                           <td className="px-3 py-2 font-mono text-slate-400">{idx + 1}</td>
-                          <td className="px-3 py-2 font-medium text-slate-800">{i.material}</td>
+                          <td className="px-3 py-2 font-medium text-black">{i.material}</td>
                           <td className="px-3 py-2 text-right font-mono">{i.qty}</td>
                           <td className="px-3 py-2">{i.unit}</td>
                           <td className="px-3 py-2 text-right font-mono">{i.est_rate ? parseFloat(i.est_rate).toLocaleString('en-IN') : '—'}</td>
@@ -2292,7 +2292,7 @@ export default function MRSPage() {
                   ].map(([l, v, c]) => (
                     <div key={l} className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 text-xs">
                       <span className="text-slate-500">{l}</span>
-                      <span className={clsx('font-mono font-semibold', c || 'text-slate-800')}>{v}</span>
+                      <span className={clsx('font-mono font-semibold', c || 'text-black')}>{v}</span>
                     </div>
                   ))}
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-blue-50 text-xs">
@@ -2466,7 +2466,7 @@ export default function MRSPage() {
                         className={clsx('w-full text-left px-4 py-3 border-b border-slate-100 transition-colors',
                           isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-slate-50')}>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-slate-800 font-mono truncate">{label}</span>
+                          <span className="text-xs font-bold text-black font-mono truncate">{label}</span>
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">{itemCount} items</span>
                         </div>
                         <div className="text-[11px] text-slate-500 truncate mt-0.5">{m.project_name || '—'}</div>
@@ -2498,7 +2498,7 @@ export default function MRSPage() {
                         {srcItems.map((it, idx) => (
                           <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60' : ''}>
                             <td className="px-3 py-2 text-slate-400 font-mono">{idx + 1}</td>
-                            <td className="px-3 py-2 text-slate-800 font-medium">{it.material_name || it.material}</td>
+                            <td className="px-3 py-2 text-black font-medium">{it.material_name || it.material}</td>
                             <td className="px-3 py-2 text-right font-mono text-slate-700">{it.quantity || it.qty || '—'}</td>
                             <td className="px-3 py-2 text-slate-500">{it.unit || '—'}</td>
                           </tr>
@@ -2817,7 +2817,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
                 onChange={() => toggle(idx)}
                 className="w-4 h-4 accent-green-700 cursor-pointer flex-shrink-0"
               />
-              <span className="flex-1 text-sm font-semibold text-slate-800 truncate min-w-0">{it.material_name}</span>
+              <span className="flex-1 text-sm font-semibold text-black truncate min-w-0">{it.material_name}</span>
               <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded px-2 py-0.5 font-mono flex-shrink-0">{it.unit}</span>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <span className="text-[10px] text-slate-400 whitespace-nowrap">Req: <span className="font-bold text-slate-600">{it.original_qty}</span></span>

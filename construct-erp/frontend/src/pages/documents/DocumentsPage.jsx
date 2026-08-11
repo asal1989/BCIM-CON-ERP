@@ -462,7 +462,7 @@ export default function DocumentsPage() {
                     ].map(item => (
                       <div key={item.label} className="bg-slate-50 rounded-lg p-3">
                         <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{item.label}</p>
-                        <p className="text-sm font-semibold text-slate-800 mt-0.5 truncate">{item.value}</p>
+                        <p className="text-sm font-semibold text-black mt-0.5 truncate">{item.value}</p>
                       </div>
                     ))}
                   </div>

@@ -249,7 +249,7 @@ function MBDrawer({ mbId, onClose }) {
                 ].map(({l,v})=>(
                   <div key={l} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{l}</p>
-                    <p className="text-sm font-semibold text-slate-800">{v}</p>
+                    <p className="text-sm font-semibold text-black">{v}</p>
                   </div>
                 ))}
               </div>
@@ -271,7 +271,7 @@ function MBDrawer({ mbId, onClose }) {
                   ].filter(Boolean).map(({l,v,bold,color})=>(
                     <div key={l} className="flex justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
                       <span className="text-sm text-slate-500">{l}</span>
-                      <span className={clsx('text-sm font-semibold', bold ? color||'text-indigo-700':'text-slate-800')}>{v}</span>
+                      <span className={clsx('text-sm font-semibold', bold ? color||'text-indigo-700':'text-black')}>{v}</span>
                     </div>
                   ))}
                 </div>
@@ -546,7 +546,7 @@ export default function SCProgress() {
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{dayjs(m.mb_date).format('DD MMM YY')}</td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-600">{m.wo_number}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-slate-800">{m.sc_name}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-black">{m.sc_name}</td>
                         <td className="px-4 py-3 text-xs text-slate-600 max-w-[180px] truncate">{m.description}</td>
                         <td className="px-4 py-3">
                           {(m.tower_block||m.floor_number)?(

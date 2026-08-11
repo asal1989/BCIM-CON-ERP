@@ -176,7 +176,7 @@ export default function ITPPage() {
             <ClipboardList className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Inspection & Test Plans</h1>
+            <h1 className="text-lg font-semibold text-black">Inspection & Test Plans</h1>
             <p className="text-xs text-slate-500">ITP Register — Hold / Witness / Review Points</p>
           </div>
         </div>
@@ -253,7 +253,7 @@ export default function ITPPage() {
                       <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{itp.discipline}</span>
                     )}
                   </div>
-                  <p className="text-sm font-semibold text-slate-800 mt-1 truncate">{itp.title}</p>
+                  <p className="text-sm font-semibold text-black mt-1 truncate">{itp.title}</p>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {itp.project_name} · Rev {itp.revision} · {itp.activity_count || 0} activities
                     {itp.approved_at && ` · Issued ${dayjs(itp.approved_at).format('DD MMM YYYY')}`}
@@ -498,7 +498,7 @@ function ITPActivitiesPanel({ itp, checklists, onAddActivity, onDeleteActivity }
               {activities.map(act => (
                 <tr key={act.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{act.sequence_no}</td>
-                  <td className="px-4 py-2.5 text-sm text-slate-800">{act.activity_name}</td>
+                  <td className="px-4 py-2.5 text-sm text-black">{act.activity_name}</td>
                   <td className="px-4 py-2.5"><PointBadge type={act.point_type} /></td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">{act.responsibility || '—'}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-500 max-w-xs truncate">

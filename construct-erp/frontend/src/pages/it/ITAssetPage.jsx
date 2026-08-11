@@ -56,7 +56,7 @@ const LABEL = {
 };
 
 const TYPE_ICON = Object.fromEntries(ASSET_TYPES.slice(1).map(t => [t.key, t]));
-const inputCls = 'w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition';
+const inputCls = 'w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm text-black outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition';
 const IT_TYPE_CODES = {
   laptop: 'LT',
   desktop: 'DT',
@@ -438,7 +438,7 @@ export default function ITAssetPage() {
           {/* Search */}
           <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <Search className="h-4 w-4 shrink-0 text-gray-400" />
-            <input className="flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-gray-400"
+            <input className="flex-1 bg-transparent text-sm text-black outline-none placeholder:text-gray-400"
               placeholder="Search by tag, brand, model, serial, location…"
               value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch('')}><X className="h-4 w-4 text-gray-400 hover:text-gray-600" /></button>}
@@ -819,7 +819,7 @@ function AssetDetailPanel({ assetId, onClose }) {
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-slate-50 rounded-lg p-2.5">
                     <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{label}</p>
-                    <div className="text-xs font-semibold text-slate-800 mt-0.5">{value}</div>
+                    <div className="text-xs font-semibold text-black mt-0.5">{value}</div>
                   </div>
                 ))}
               </div>
@@ -852,7 +852,7 @@ function AssetDetailPanel({ assetId, onClose }) {
                       <div key={h.id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 text-xs">
                         <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                         <div className="flex-1">
-                          <span className="font-semibold text-slate-800">{h.assigned_to_name || 'Unknown'}</span>
+                          <span className="font-semibold text-black">{h.assigned_to_name || 'Unknown'}</span>
                           {h.location && <span className="text-slate-400 ml-1">— {h.location}</span>}
                         </div>
                         <div className="text-slate-400 text-right">
@@ -914,7 +914,7 @@ function AssetDetailPanel({ assetId, onClose }) {
                     {asset.maintenance.map(m => (
                       <div key={m.id} className="bg-slate-50 rounded-lg px-3 py-2 text-xs">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-800 capitalize">{m.issue_type?.replace('_',' ')}</span>
+                          <span className="font-semibold text-black capitalize">{m.issue_type?.replace('_',' ')}</span>
                           <span className={clsx('px-1.5 py-0.5 rounded-full text-[10px] font-medium',
                             m.status === 'closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
                             {m.status}

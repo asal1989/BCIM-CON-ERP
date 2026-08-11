@@ -265,13 +265,13 @@ export default function ProjectDetail() {
                 {project.start_date && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Start Date</span>
-                    <span className="text-xs font-medium text-slate-800">{dayjs(project.start_date).format('DD MMM YYYY')}</span>
+                    <span className="text-xs font-medium text-black">{dayjs(project.start_date).format('DD MMM YYYY')}</span>
                   </div>
                 )}
                 {project.end_date && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-slate-400">Planned End Date</span>
-                    <span className={clsx('text-xs font-medium', dayjs(project.end_date).isBefore(dayjs()) && project.status !== 'completed' ? 'text-red-600' : 'text-slate-800')}>
+                    <span className={clsx('text-xs font-medium', dayjs(project.end_date).isBefore(dayjs()) && project.status !== 'completed' ? 'text-red-600' : 'text-black')}>
                       {dayjs(project.end_date).format('DD MMM YYYY')}
                       {dayjs(project.end_date).isBefore(dayjs()) && project.status !== 'completed' && <span className="ml-1 text-red-500">(overdue)</span>}
                     </span>
@@ -316,7 +316,7 @@ export default function ProjectDetail() {
               <div className="w-9 h-9 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-center text-emerald-600">
                 <Wallet size={16} />
               </div>
-              <h3 className="text-sm font-medium text-slate-800">Contract Financial Ledger</h3>
+              <h3 className="text-sm font-medium text-black">Contract Financial Ledger</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -409,7 +409,7 @@ export default function ProjectDetail() {
                   <div className="w-9 h-9 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
                     <Receipt size={16} />
                   </div>
-                  <h3 className="text-sm font-medium text-slate-800">Recent RA Bills</h3>
+                  <h3 className="text-sm font-medium text-black">Recent RA Bills</h3>
                 </div>
                 <Link to={`/qs/ra-bills?project_id=${id}`} className="text-xs text-indigo-600 hover:underline font-medium">
                   View all →
@@ -419,7 +419,7 @@ export default function ProjectDetail() {
                 {bills.slice(0, 5).map(b => (
                   <div key={b.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
                     <div>
-                      <div className="text-xs font-medium text-slate-800">{b.bill_number}</div>
+                      <div className="text-xs font-medium text-black">{b.bill_number}</div>
                       <div className="text-[11px] text-slate-400">{b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—'}</div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -449,7 +449,7 @@ export default function ProjectDetail() {
                   <FileText size={16} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-slate-800">Project Repository</h3>
+                  <h3 className="text-sm font-medium text-black">Project Repository</h3>
                   <p className="text-xs text-slate-400">{docs.length > 0 ? `${docs.length} document${docs.length > 1 ? 's' : ''}` : 'PDF, DOCX, DWG files'}</p>
                 </div>
               </div>
@@ -477,7 +477,7 @@ export default function ProjectDetail() {
                           {(ext || '?').slice(0, 3)}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-xs font-medium text-slate-800 truncate">{doc.doc_title || doc.file_name}</div>
+                          <div className="text-xs font-medium text-black truncate">{doc.doc_title || doc.file_name}</div>
                           <div className="text-[10px] text-slate-400">
                             {doc.file_size ? fileSize(doc.file_size) : ''}{doc.created_at ? ` · ${dayjs(doc.created_at).format('DD MMM YYYY')}` : ''}
                           </div>

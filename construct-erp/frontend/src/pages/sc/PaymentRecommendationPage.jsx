@@ -195,7 +195,7 @@ function CreatePRModal({ onClose }) {
                                   className="w-4 h-4 accent-indigo-600 cursor-pointer" />
                               </td>
                               <td className="px-3 py-2.5">
-                                <p className="font-semibold text-slate-800 text-sm">{b.vendor_name}</p>
+                                <p className="font-semibold text-black text-sm">{b.vendor_name}</p>
                                 <p className="text-xs text-slate-400">{b.project_name}</p>
                               </td>
                               <td className="px-3 py-2.5 text-sm text-indigo-600 font-mono">{b.bill_number || '—'}</td>
@@ -325,7 +325,7 @@ function PRDetailModal({ prId, onClose }) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Recommended by</p>
-                  <p className="font-bold text-slate-800">{pr.recommended_by_name || '—'}</p>
+                  <p className="font-bold text-black">{pr.recommended_by_name || '—'}</p>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Remarks</p>
@@ -351,7 +351,7 @@ function PRDetailModal({ prId, onClose }) {
                   <tbody>
                     {items.map((it, i) => (
                       <tr key={it.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{it.vendor_name}</td>
+                        <td className="px-4 py-3 font-semibold text-black">{it.vendor_name}</td>
                         <td className="px-4 py-3 font-mono text-indigo-600 text-sm">{it.bill_number || '—'}</td>
                         <td className="px-3 py-3 text-center">
                           <span className={clsx('text-xs font-bold px-2 py-0.5 rounded-full', BILL_TYPE_META[it.bill_type]?.cls)}>
@@ -546,7 +546,7 @@ export default function PaymentRecommendationPage() {
       <div className="px-6 py-5 border-b bg-white shadow-sm">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Payment Recommendations</h1>
+            <h1 className="text-xl font-bold text-black">Payment Recommendations</h1>
             <p className="text-sm text-slate-500 mt-0.5">Recommend approved bills for payment to accounts</p>
           </div>
           {canCreate && (
@@ -652,7 +652,7 @@ export default function PaymentRecommendationPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 font-mono">{pr.pr_number}</span>
+                          <span className="font-bold text-black font-mono">{pr.pr_number}</span>
                           <span className={clsx('text-xs px-2 py-0.5 rounded-full font-bold', sm.cls)}>{sm.label}</span>
                           {pr.priority === 'urgent' && (
                             <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">

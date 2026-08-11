@@ -70,7 +70,7 @@ function PreviewModal({ doc, onClose }) {
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b bg-slate-50">
           <div>
-            <h3 className="font-semibold text-slate-800">{doc.doc_title || doc.file_name}</h3>
+            <h3 className="font-semibold text-black">{doc.doc_title || doc.file_name}</h3>
             <p className="text-xs text-slate-400">{doc.file_name}</p>
           </div>
           <div className="flex items-center gap-2">

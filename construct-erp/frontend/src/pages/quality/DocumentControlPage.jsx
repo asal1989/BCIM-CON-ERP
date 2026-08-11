@@ -274,7 +274,7 @@ export default function DocumentControlPage() {
             <FolderSearch className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Document Control Registry</h1>
+            <h1 className="text-lg font-semibold text-black">Document Control Registry</h1>
             <p className="text-xs text-slate-500">Submittals · Transmittals · Drawing Register</p>
           </div>
         </div>
@@ -335,7 +335,7 @@ export default function DocumentControlPage() {
                   <tr key={s.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">{s.submittal_number||'—'}</td>
                     <td className="px-4 py-3 max-w-[200px]">
-                      <div className="font-medium text-slate-800 truncate">{s.title||s.description||'—'}</div>
+                      <div className="font-medium text-black truncate">{s.title||s.description||'—'}</div>
                       {s.material_name && <div className="text-xs text-slate-400 truncate">{s.material_name}</div>}
                     </td>
                     <td className="px-4 py-3"><span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{s.category||'General'}</span></td>
@@ -389,7 +389,7 @@ export default function DocumentControlPage() {
                     <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">{t.transmittal_no}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap">{dayjs(t.transmittal_date).format('DD MMM YYYY')}</td>
                     <td className="px-4 py-3 max-w-[140px]">
-                      <div className="font-medium text-slate-800 truncate text-xs">{t.to_party}</div>
+                      <div className="font-medium text-black truncate text-xs">{t.to_party}</div>
                       {t.to_contact && <div className="text-[10px] text-slate-400">{t.to_contact}</div>}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-700 max-w-[180px] truncate">{t.subject}</td>
@@ -451,7 +451,7 @@ export default function DocumentControlPage() {
                 {drawings.map(d=>(
                   <tr key={d.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3"><span className="font-mono text-xs font-bold text-slate-700">{d.drawing_number}</span></td>
-                    <td className="px-4 py-3 text-sm text-slate-800 max-w-[200px] truncate">{d.title||'—'}</td>
+                    <td className="px-4 py-3 text-sm text-black max-w-[200px] truncate">{d.title||'—'}</td>
                     <td className="px-4 py-3"><span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{d.discipline||'—'}</span></td>
                     <td className="px-4 py-3"><span className="font-mono text-xs font-bold text-indigo-600">Rev {d.revision??'0'}</span></td>
                     <td className="px-4 py-3"><StatusBadge status={d.status} /></td>
@@ -569,7 +569,7 @@ export default function DocumentControlPage() {
       {ackModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="font-semibold text-slate-800 mb-1">Acknowledge Transmittal</h2>
+            <h2 className="font-semibold text-black mb-1">Acknowledge Transmittal</h2>
             <p className="text-xs text-slate-500 mb-4">{ackModal.transmittal_no} — {ackModal.subject}</p>
             <div className="space-y-3">
               <div><label className="block text-xs font-medium text-slate-500 mb-1">Acknowledged By</label>

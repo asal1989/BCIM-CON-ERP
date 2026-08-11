@@ -17,7 +17,7 @@ export default function ComplianceTimeline({ events }) {
             <span className="absolute -left-5 top-0.5 bg-white rounded-full">
               <Icon className="w-4 h-4" style={{ color }} />
             </span>
-            <p className="text-sm font-semibold text-slate-800 leading-tight">{ev.title}</p>
+            <p className="text-sm font-semibold text-black leading-tight">{ev.title}</p>
             <p className="text-xs text-slate-400 mt-0.5">{ev.date}{ev.by ? ` · ${ev.by}` : ''}</p>
             {ev.note && <p className="text-xs text-slate-500 mt-1">{ev.note}</p>}
           </motion.div>

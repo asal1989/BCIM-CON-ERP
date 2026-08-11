@@ -110,7 +110,7 @@ export default function SnagListPage() {
             <Hammer className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-medium text-slate-800">Snag & Punch List</h1>
+            <h1 className="text-lg font-medium text-black">Snag & Punch List</h1>
             <p className="text-xs text-slate-500">Raise, assign and track defect rectification to sign-off</p>
           </div>
         </div>

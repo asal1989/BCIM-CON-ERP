@@ -185,7 +185,7 @@ export default function MTCPage() {
             <ShieldCheck className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Material Test Certificates</h1>
+            <h1 className="text-lg font-semibold text-black">Material Test Certificates</h1>
             <p className="text-xs text-slate-500">MTC / MIL Register — Auto pass/fail vs spec · NABL / ISO 17025</p>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function MTCPage() {
                   </td>
                   <td className="px-4 py-3 text-xs font-medium text-slate-700">{mtc.mtc_number}</td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800 text-sm">{mtc.material_name}</p>
+                    <p className="font-medium text-black text-sm">{mtc.material_name}</p>
                     {mtc.heat_number && <p className="text-xs text-slate-400">Heat: {mtc.heat_number}</p>}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{mtc.material_grade || '—'}</td>
@@ -397,7 +397,7 @@ export default function MTCPage() {
                     ].map(({ label, value }) => (
                       <div key={label} className="bg-slate-50 rounded-lg p-3">
                         <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{label}</p>
-                        <div className="text-sm font-semibold text-slate-800 mt-0.5">{value}</div>
+                        <div className="text-sm font-semibold text-black mt-0.5">{value}</div>
                       </div>
                     ))}
                   </div>
@@ -420,7 +420,7 @@ export default function MTCPage() {
                               const r = evalParam(p);
                               return (
                                 <tr key={i} className={r === 'fail' ? 'bg-red-50' : r === 'pass' ? 'bg-emerald-50/30' : ''}>
-                                  <td className="px-3 py-2 font-medium text-slate-800">{p.parameter}</td>
+                                  <td className="px-3 py-2 font-medium text-black">{p.parameter}</td>
                                   <td className="px-3 py-2 text-slate-500">{p.unit || '—'}</td>
                                   <td className="px-3 py-2 text-slate-500">{p.required_min != null ? p.required_min : '—'}</td>
                                   <td className="px-3 py-2 text-slate-500">{p.required_max != null ? p.required_max : '—'}</td>

@@ -102,14 +102,14 @@ export default function QSDashboard() {
   // ── Table columns ───────────────────────────────────────────
   const pendingCols = [
     { key: 'sl_number',    label: 'SL #',     cls: 'font-mono text-indigo-700 font-bold text-[11px]' },
-    { key: 'vendor_name',  label: 'Vendor',   cls: 'font-semibold text-slate-800 max-w-[130px] truncate' },
+    { key: 'vendor_name',  label: 'Vendor',   cls: 'font-semibold text-black max-w-[130px] truncate' },
     { key: 'inv_number',   label: 'Invoice',  cls: 'text-slate-600 text-[11px]' },
-    { key: 'total_amount', label: 'Amount',   right: true, render: r => <span className="font-semibold text-slate-800">{inr(r.total_amount)}</span> },
+    { key: 'total_amount', label: 'Amount',   right: true, render: r => <span className="font-semibold text-black">{inr(r.total_amount)}</span> },
     { key: 'inv_date',     label: 'Inv Date', cls: 'text-slate-500', render: r => r.inv_date ? dayjs(r.inv_date).format('DD MMM') : '—' },
   ];
 
   const certCols = [
-    { key: 'vendor_name',  label: 'Vendor',    cls: 'font-semibold text-slate-800 max-w-[130px] truncate' },
+    { key: 'vendor_name',  label: 'Vendor',    cls: 'font-semibold text-black max-w-[130px] truncate' },
     { key: 'inv_number',   label: 'Invoice',   cls: 'text-slate-600 text-[11px]' },
     { key: 'certified_net',label: 'Certified', right: true, render: r => <span className="font-bold text-emerald-700">{inr(r.certified_net)}</span> },
     { key: 'updated_at',   label: 'Cert Date', cls: 'text-slate-500', render: r => r.updated_at ? dayjs(r.updated_at).format('DD MMM') : '—' },
@@ -121,7 +121,7 @@ export default function QSDashboard() {
   ];
 
   const agingCols = [
-    { key: 'vendor_name',   label: 'Vendor',      cls: 'font-semibold text-slate-800 max-w-[140px] truncate' },
+    { key: 'vendor_name',   label: 'Vendor',      cls: 'font-semibold text-black max-w-[140px] truncate' },
     { key: 'certified_net', label: 'Certified',   right: true, render: r => <span className="font-semibold text-slate-700">{inr(r.certified_net)}</span> },
     { key: 'balance',       label: 'Outstanding', right: true, render: r => <span className="font-bold text-red-600">{inr(r.balance)}</span> },
     { key: 'aging_bucket',  label: 'Aging',       render: r => <Badge label={r.aging_bucket || '—'} cls={AGING_CLS[r.aging_bucket] || AGING_CLS.unscheduled} /> },
@@ -194,7 +194,7 @@ export default function QSDashboard() {
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
               <div className="text-center">
-                <p className="text-lg font-bold text-slate-800">{inr(totalInvoiced)}</p>
+                <p className="text-lg font-bold text-black">{inr(totalInvoiced)}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total Invoiced</p>
               </div>
               <div className="text-center">
@@ -241,7 +241,7 @@ export default function QSDashboard() {
             </div>
             <div className="space-y-3">
               {[
-                { label: 'New Bills Received', value: newThisMonth.length, color: 'text-slate-800' },
+                { label: 'New Bills Received', value: newThisMonth.length, color: 'text-black' },
                 { label: 'Bills Certified', value: thisMonth.length, color: 'text-emerald-700' },
                 { label: 'With Accounts', value: pendingAcct.filter(b => dayjs(b.updated_at).isSame(now, 'month')).length, color: 'text-blue-700' },
                 { label: 'Payments Made', value: paidBills.filter(b => dayjs(b.updated_at).isSame(now, 'month')).length, color: 'text-indigo-700' },

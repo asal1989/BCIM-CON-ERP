@@ -102,7 +102,7 @@ function VendorModal({ vendor, onClose, onSave }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-medium text-slate-800">{vendor ? 'Edit Vendor' : 'New Vendor'}</h2>
+          <h2 className="text-base font-medium text-black">{vendor ? 'Edit Vendor' : 'New Vendor'}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-4 h-4" /></button>
         </div>
 
@@ -367,7 +367,7 @@ export default function BillTrackerVendorsPage() {
               <Users className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-medium text-slate-800">Vendor Management</h1>
+              <h1 className="text-lg font-medium text-black">Vendor Management</h1>
               <p className="text-xs text-slate-500">DQS vendors — suppliers, contractors &amp; consultants</p>
             </div>
           </div>

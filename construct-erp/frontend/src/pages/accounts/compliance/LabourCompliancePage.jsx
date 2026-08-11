@@ -45,7 +45,7 @@ export default function LabourCompliancePage() {
               <Users className="w-4 h-4 text-teal-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Labour Law Compliance</h1>
+              <h1 className="text-lg font-semibold text-black">Labour Law Compliance</h1>
               <p className="text-xs text-slate-400">{fyLabel} — PF, ESI & Professional Tax computed from your payroll runs</p>
             </div>
           </div>
@@ -71,7 +71,7 @@ export default function LabourCompliancePage() {
           ].map(({ label, value, sub }) => (
             <div key={label} className="bg-slate-50 border border-slate-200 rounded-md px-4 py-3">
               <p className="text-xs text-slate-500 mb-1">{label}</p>
-              <p className="text-base font-bold text-slate-800">{value}</p>
+              <p className="text-base font-bold text-black">{value}</p>
               <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>
             </div>
           ))}
@@ -106,7 +106,7 @@ export default function LabourCompliancePage() {
                     <tbody className="divide-y divide-slate-50">
                       {months.map(m => (
                         <tr key={m.month_key} className={`hover:bg-slate-50 ${!m.has_activity ? 'opacity-50' : ''}`}>
-                          <td className="px-4 py-2.5 font-medium text-slate-800">{m.month}</td>
+                          <td className="px-4 py-2.5 font-medium text-black">{m.month}</td>
                           <td className="px-4 py-2.5 text-slate-600">{m.employees || '—'}</td>
                           <td className="px-4 py-2.5 font-mono text-slate-700">{m.gross ? inr(m.gross) : '—'}</td>
                           <td className="px-4 py-2.5 font-mono text-slate-700">{m.pf ? inr(m.pf) : '—'}</td>
@@ -121,10 +121,10 @@ export default function LabourCompliancePage() {
                       <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                         <td className="px-4 py-2.5 text-sm text-slate-700">Total</td>
                         <td className="px-4 py-2.5" />
-                        <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_gross)}</td>
-                        <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_pf)}</td>
-                        <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_esi)}</td>
-                        <td className="px-4 py-2.5 font-mono text-slate-800">{inr(summary.total_pt)}</td>
+                        <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_gross)}</td>
+                        <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_pf)}</td>
+                        <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_esi)}</td>
+                        <td className="px-4 py-2.5 font-mono text-black">{inr(summary.total_pt)}</td>
                         <td colSpan={2} />
                       </tr>
                     </tfoot>
@@ -151,7 +151,7 @@ export default function LabourCompliancePage() {
                       ['ESI — Employer', '3.25% (wages ≤ ₹21,000)'],
                     ].map(([k, v]) => (
                       <div key={k} className="flex justify-between border-b border-slate-100 pb-1.5">
-                        <span>{k}</span><span className="font-mono font-medium text-slate-800">{v}</span>
+                        <span>{k}</span><span className="font-mono font-medium text-black">{v}</span>
                       </div>
                     ))}
                   </div>
@@ -165,7 +165,7 @@ export default function LabourCompliancePage() {
                       ['Above ₹35,000/month', '₹200/month (max ₹2,400/yr)'],
                     ].map(([k, v]) => (
                       <div key={k} className="flex justify-between border-b border-slate-100 pb-1.5">
-                        <span>{k}</span><span className="font-mono font-medium text-slate-800">{v}</span>
+                        <span>{k}</span><span className="font-mono font-medium text-black">{v}</span>
                       </div>
                     ))}
                   </div>

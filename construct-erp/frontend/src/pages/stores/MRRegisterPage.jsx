@@ -482,7 +482,7 @@ export default function MRRegisterPage() {
                         <TD mono bold>{m.mr_no}</TD>
                         <TD>{fmtDate(m.mr_date)}</TD>
                         <TD>
-                          <span className="font-medium text-slate-800">{m.project_name || '—'}</span>
+                          <span className="font-medium text-black">{m.project_name || '—'}</span>
                           <span className="block text-[11px] text-slate-400">{m.department || '—'}</span>
                         </TD>
                         <TD right>{m.itemCount}</TD>

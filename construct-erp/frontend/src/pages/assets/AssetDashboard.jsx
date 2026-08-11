@@ -35,7 +35,7 @@ function SectionTitle({ icon: Icon, title, subtitle, action }) {
           <Icon className="w-4 h-4 text-indigo-600" />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          <h2 className="text-sm font-bold text-black leading-tight">{title}</h2>
           {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
         </div>
       </div>
@@ -183,7 +183,7 @@ export default function AssetDashboard() {
                     <div key={d.name} className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background: PIE_COLORS[i % PIE_COLORS.length]}} />
                       <span className="text-xs text-slate-600 truncate">{d.name}</span>
-                      <span className="text-xs font-bold text-slate-800 ml-auto">{d.value}</span>
+                      <span className="text-xs font-bold text-black ml-auto">{d.value}</span>
                     </div>
                   ))}
                 </div>
@@ -281,7 +281,7 @@ export default function AssetDashboard() {
                           <StatusBadge status={a.status} />
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-semibold text-slate-800">{a.purchase_value ? fmtINR(a.purchase_value) : '—'}</span>
+                          <span className="text-xs font-semibold text-black">{a.purchase_value ? fmtINR(a.purchase_value) : '—'}</span>
                         </td>
                       </tr>
                     ))}

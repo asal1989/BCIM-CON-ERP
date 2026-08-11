@@ -123,7 +123,7 @@ function ActionModal({ item, actionType, onConfirm, onClose }) {
             ].map(({ l, v }) => (
               <div key={l} className="bg-slate-50 rounded-xl p-2.5">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{l}</p>
-                <p className="text-xs font-semibold text-slate-800 mt-0.5 truncate">{v || '—'}</p>
+                <p className="text-xs font-semibold text-black mt-0.5 truncate">{v || '—'}</p>
               </div>
             ))}
           </div>
@@ -248,7 +248,7 @@ function MDAuthModal({ mrsId, mrsRef, onClose, onAuthorized }) {
             )}>
               <input type="checkbox" checked={it.included} onChange={() => toggle(idx)}
                 className="w-4 h-4 accent-green-700 cursor-pointer flex-shrink-0" />
-              <span className="flex-1 text-sm font-semibold text-slate-800 truncate min-w-0">{it.material_name}</span>
+              <span className="flex-1 text-sm font-semibold text-black truncate min-w-0">{it.material_name}</span>
               <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded px-2 py-0.5 font-mono flex-shrink-0">{it.unit}</span>
               <span className="text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0">
                 Req: <span className="font-bold text-slate-600">{it.original_qty}</span>
@@ -344,7 +344,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview, mdMode, i
 
             {/* Reference + party */}
             <div className="flex items-center gap-2 mt-1">
-              <span className="font-mono text-xs font-bold text-slate-800">{item.ref_no}</span>
+              <span className="font-mono text-xs font-bold text-black">{item.ref_no}</span>
               <span className="text-slate-300">·</span>
               <span className="text-xs font-semibold text-slate-700 truncate max-w-[200px]">{item.party_name}</span>
             </div>
@@ -511,7 +511,7 @@ export default function ApprovalsPage({ embedded = false, mdMode = false, hideHe
       {embedded && !hideHeader ? (
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-base font-bold text-slate-800">
+            <h2 className="text-base font-bold text-black">
               {mdMode ? 'Awaiting Your Review & Authorisation' : 'Pending Approvals'}
             </h2>
             <p className="text-xs text-slate-500">
@@ -550,7 +550,7 @@ export default function ApprovalsPage({ embedded = false, mdMode = false, hideHe
               return (
                 <div key={type} className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{type}</p>
-                  <p className="text-2xl font-bold text-slate-800 leading-none">{count}</p>
+                  <p className="text-2xl font-bold text-black leading-none">{count}</p>
                   <p className="text-[11px] text-slate-500 mt-1">pending</p>
                 </div>
               );
@@ -615,7 +615,7 @@ export default function ApprovalsPage({ embedded = false, mdMode = false, hideHe
                 {tabs.map(tab => (
                   <button key={tab} onClick={() => setFilter(tab)}
                     className={clsx('px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all',
-                      filter === tab ? 'text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50')}
+                      filter === tab ? 'text-white shadow-sm' : 'text-slate-600 hover:text-black hover:bg-slate-50')}
                     style={filter === tab ? { background:`linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` } : {}}>
                     {tab}
                     {tab !== 'All' && (

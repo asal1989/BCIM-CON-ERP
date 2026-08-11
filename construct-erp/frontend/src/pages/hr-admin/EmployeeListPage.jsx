@@ -216,7 +216,7 @@ export default function EmployeeListPage() {
             <Users className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-800">Employees</h1>
+            <h1 className="text-xl font-semibold text-black">Employees</h1>
             <p className="text-sm text-gray-500">
               {employees.length} {statusFilter || 'total'} employee{employees.length !== 1 ? 's' : ''}
             </p>

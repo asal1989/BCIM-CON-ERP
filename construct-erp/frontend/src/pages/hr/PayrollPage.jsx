@@ -143,7 +143,7 @@ export default function PayrollPage() {
                 {/* Worker info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-slate-800 text-sm">{rec.worker_name}</span>
+                    <span className="font-semibold text-black text-sm">{rec.worker_name}</span>
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs capitalize">{rec.skill_type?.replace('_', ' ')}</span>
                     {rec.gang_name && <span className="text-xs text-slate-400">{rec.gang_name}</span>}
                   </div>
@@ -245,7 +245,7 @@ export default function PayrollPage() {
 
             <div className="p-6 space-y-5">
               <div className="bg-slate-50 rounded-xl p-4 text-center">
-                <div className="text-sm font-semibold text-slate-800">{payModal.worker_name}</div>
+                <div className="text-sm font-semibold text-black">{payModal.worker_name}</div>
                 <div className="text-xs text-slate-400 mt-0.5">{dayjs(payModal.period_from).format('D MMM')} – {dayjs(payModal.period_to).format('D MMM YYYY')}</div>
                 <div className="text-3xl font-bold text-emerald-600 mt-3 font-mono">{inr(payModal.net_wages)}</div>
               </div>

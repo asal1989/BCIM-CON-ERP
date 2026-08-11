@@ -45,7 +45,7 @@ function DayCard({ day, isToday }) {
       <div className={clsx('w-9 h-9 mx-auto rounded-lg flex items-center justify-center my-1', cfg.bg)}>
         <Icon size={18} className={cfg.color} />
       </div>
-      <div className="text-sm font-bold text-slate-800">{Math.round(day.temp_max)}°</div>
+      <div className="text-sm font-bold text-black">{Math.round(day.temp_max)}°</div>
       <div className="text-xs text-slate-400">{Math.round(day.temp_min)}°</div>
       {day.precipitation_mm > 0 && (
         <div className="text-[10px] text-blue-500 mt-1 flex items-center justify-center gap-0.5">

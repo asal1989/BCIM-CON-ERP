@@ -111,7 +111,7 @@ function PendingTab() {
               return (
                 <tr key={r.id} className="border-b border-slate-100">
                   <td className="px-3 py-2 font-mono text-slate-500">{r.employee_code}</td>
-                  <td className="px-3 py-2 font-semibold text-slate-800">{r.employee_name}</td>
+                  <td className="px-3 py-2 font-semibold text-black">{r.employee_name}</td>
                   <td className="px-3 py-2">{r.department_name || '—'}</td>
                   <td className="px-3 py-2">{r.project_name || '—'}</td>
                   <td className="px-3 py-2">{r.course_name}</td>
@@ -296,7 +296,7 @@ function QuestionEditor({ course, onClose }) {
             {questions.map((q, i) => (
               <div key={q.id} className="flex items-start justify-between border border-slate-200 rounded-lg px-3 py-2">
                 <div>
-                  <p className="text-xs font-semibold text-slate-800">{i + 1}. {q.question}</p>
+                  <p className="text-xs font-semibold text-black">{i + 1}. {q.question}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Correct: {q.options[q.correct_index]} · {q.marks} mark(s)</p>
                 </div>
                 <button onClick={() => delMut.mutate(q.id)} className="text-red-400 hover:text-red-600"><Trash2 size={13} /></button>
@@ -351,7 +351,7 @@ function CoursesTab() {
           <div key={c.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className="text-white" style={{ background: CATEGORY_COLOR[c.category] }}>{CATEGORY_LABEL[c.category]}</Badge>
-              <span className="font-semibold text-sm text-slate-800">{c.name}</span>
+              <span className="font-semibold text-sm text-black">{c.name}</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">{c.department_name || c.project_name || c.description || '—'}</p>
             <div className="flex justify-between items-center mt-2">
@@ -378,7 +378,7 @@ function ProgressTab() {
         <div className="text-center py-16 text-slate-400 text-sm">No training assignments yet</div>
       ) : Object.entries(grouped).map(([name, items]) => (
         <div key={name} className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-          <p className="font-semibold text-sm text-slate-800 mb-2">{name}</p>
+          <p className="font-semibold text-sm text-black mb-2">{name}</p>
           <div className="space-y-2">
             {items.map(it => (
               <div key={it.id}>
@@ -459,7 +459,7 @@ function CertificatesTab() {
         {rows.filter(r => r.certificate_number).map(r => (
           <div key={r.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between">
             <div>
-              <p className="font-semibold text-sm text-slate-800">{r.employee_name}</p>
+              <p className="font-semibold text-sm text-black">{r.employee_name}</p>
               <p className="text-[11px] text-slate-500">{r.course_name} · {r.certificate_number}</p>
             </div>
             <button onClick={() => setViewing(r.id)} className="h-8 px-3 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-semibold flex items-center gap-1"><Award size={12} /> View</button>
@@ -472,11 +472,11 @@ function CertificatesTab() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 text-center border-8" style={{ borderColor: '#1E3A8A22' }} onClick={e => e.stopPropagation()}>
             <GraduationCap size={36} className="mx-auto text-blue-700 mb-2" />
             <p className="text-[11px] tracking-widest text-slate-400 uppercase">{cert.company_name || 'Certificate of Completion'}</p>
-            <h2 className="text-xl font-bold text-slate-800 my-2">Certificate of Completion</h2>
+            <h2 className="text-xl font-bold text-black my-2">Certificate of Completion</h2>
             <p className="text-sm text-slate-600">This certifies that</p>
             <p className="text-lg font-bold text-blue-700 my-1">{cert.employee_name}</p>
             <p className="text-sm text-slate-600">has successfully completed</p>
-            <p className="text-base font-semibold text-slate-800 my-1">{cert.course_name}</p>
+            <p className="text-base font-semibold text-black my-1">{cert.course_name}</p>
             <p className="text-[11px] text-slate-400 mt-3">Issued {dayjs(cert.issued_date).format('DD-MM-YYYY')}{cert.valid_until ? ` · Valid until ${dayjs(cert.valid_until).format('DD-MM-YYYY')}` : ''}</p>
             <p className="text-[10px] font-mono text-slate-400 mt-1">{cert.certificate_number}</p>
             {cert.qr_data_url && <img src={cert.qr_data_url} alt="QR" className="w-20 h-20 mx-auto mt-3" />}

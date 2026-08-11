@@ -114,7 +114,7 @@ function PreviewModal({ doc, onClose }) {
           <div className="flex items-center gap-3 min-w-0">
             <FileIcon fileName={doc.file_name} size={5} />
             <div className="min-w-0">
-              <h3 className="font-semibold text-slate-800 truncate">{doc.doc_title || doc.file_name}</h3>
+              <h3 className="font-semibold text-black truncate">{doc.doc_title || doc.file_name}</h3>
               <p className="text-xs text-slate-400 mt-0.5">{doc.file_name}</p>
             </div>
           </div>
@@ -232,7 +232,7 @@ export default function QAQCDocumentLibraryPage() {
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
             <FileStack className="w-3.5 h-3.5" /> QA/QC Module
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">QA/QC Document Library</h1>
+          <h1 className="text-2xl font-bold text-black">QA/QC Document Library</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {docs.length} documents — checklists, method statements, ITPs, certificates & vendor profiles
           </p>
@@ -311,7 +311,7 @@ export default function QAQCDocumentLibraryPage() {
                       <Icon className="w-5 h-5" />
                     </div>
                     <div>
-                      <h2 className="font-semibold text-slate-800">{cfg.label}</h2>
+                      <h2 className="font-semibold text-black">{cfg.label}</h2>
                       <p className="text-xs text-slate-500">{cfg.desc}</p>
                     </div>
                   </div>
@@ -348,7 +348,7 @@ export default function QAQCDocumentLibraryPage() {
                       <div className="flex items-center gap-3">
                         <FileIcon fileName={doc.file_name} size={4} />
                         <div>
-                          <p className="text-sm font-medium text-slate-800 leading-tight">{doc.doc_title || doc.file_name}</p>
+                          <p className="text-sm font-medium text-black leading-tight">{doc.doc_title || doc.file_name}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">{doc.file_name}</p>
                         </div>
                       </div>
@@ -399,7 +399,7 @@ function DocCard({ doc, onPreview, onDownload }) {
       onClick={onPreview}>
       <FileIcon fileName={doc.file_name} size={4} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 leading-tight truncate pr-2">
+        <p className="text-sm font-medium text-black leading-tight truncate pr-2">
           {doc.doc_title || doc.file_name}
         </p>
         <p className="text-[11px] text-slate-400 mt-0.5 truncate">{doc.file_name}</p>

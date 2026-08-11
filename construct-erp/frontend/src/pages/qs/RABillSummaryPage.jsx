@@ -241,7 +241,7 @@ export default function RABillSummaryPage() {
                       {deductions.map(d => (
                         <div key={d.key} className="flex items-center justify-between">
                           <span className="text-[12px] text-slate-500 font-medium">{d.label}</span>
-                          <span className="text-[12.5px] font-semibold font-mono text-slate-800">{inr(d.amount)}</span>
+                          <span className="text-[12.5px] font-semibold font-mono text-black">{inr(d.amount)}</span>
                         </div>
                       ))}
                       <div className="border-t border-slate-100 pt-2 flex items-center justify-between">
@@ -359,7 +359,7 @@ export default function RABillSummaryPage() {
                           <div key={row.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50">
                             <span className="text-[11px] font-medium text-slate-600">{MONTH_NAMES[parseInt(m, 10) - 1]} {y}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-semibold font-mono text-slate-800">{inr(row.planned_value)}</span>
+                              <span className="text-[11px] font-semibold font-mono text-black">{inr(row.planned_value)}</span>
                               <button onClick={() => deletePlanMut.mutate(row.id)} className="text-slate-400 hover:text-red-500">
                                 <Trash2 size={12} />
                               </button>

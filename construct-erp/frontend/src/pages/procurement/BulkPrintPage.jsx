@@ -94,7 +94,7 @@ export default function BulkPrintPage() {
             <Printer className="w-4 h-4 text-indigo-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Bulk Print — PO &amp; WO</h1>
+            <h1 className="text-lg font-semibold text-black">Bulk Print — PO &amp; WO</h1>
             <p className="text-xs text-slate-400">Select a project, load documents, then Save as PDF to your local folder</p>
           </div>
         </div>

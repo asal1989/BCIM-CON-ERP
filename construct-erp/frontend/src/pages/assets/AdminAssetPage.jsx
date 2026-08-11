@@ -149,7 +149,7 @@ function Kpi({ label, value }) {
 }
 
 function Td({ children, strong }) {
-  return <td className={`px-3 py-3 align-top ${strong ? 'font-black text-slate-950' : 'font-semibold text-slate-800'}`}>{children}</td>;
+  return <td className={`px-3 py-3 align-top ${strong ? 'font-black text-slate-950' : 'font-semibold text-black'}`}>{children}</td>;
 }
 
 function AddAdminAssetModal({ projects, onClose, onDone }) {
@@ -205,9 +205,9 @@ function AddAdminAssetModal({ projects, onClose, onDone }) {
 }
 
 function Select({ label, value, onChange, options, optional }) {
-  return <label className="text-sm font-bold text-slate-800">{label}<select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold"><option value="">{optional ? 'Office / HO' : 'Select'}</option>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
+  return <label className="text-sm font-bold text-black">{label}<select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold"><option value="">{optional ? 'Office / HO' : 'Select'}</option>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
 }
 
 function Input({ label, value, onChange, type = 'text' }) {
-  return <label className="text-sm font-bold text-slate-800">{label}<input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold" /></label>;
+  return <label className="text-sm font-bold text-black">{label}<input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-semibold" /></label>;
 }

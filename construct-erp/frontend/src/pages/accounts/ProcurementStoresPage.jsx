@@ -44,7 +44,7 @@ export default function ProcurementStoresPage() {
               <Truck className="w-4 h-4 text-amber-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Procurement &amp; Stores</h1>
+              <h1 className="text-lg font-semibold text-black">Procurement &amp; Stores</h1>
               <p className="text-xs text-slate-400">Live PO and GRN/stock data — read-only view inside Accounts</p>
             </div>
           </div>
@@ -61,11 +61,11 @@ export default function ProcurementStoresPage() {
           <div className="px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white border border-slate-200 rounded-md p-4">
               <div className="text-xs text-slate-400">Open POs</div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1">{data?.open_po_count ?? 0}</div>
+              <div className="text-2xl font-semibold text-black mt-1">{data?.open_po_count ?? 0}</div>
             </div>
             <div className="bg-white border border-slate-200 rounded-md p-4">
               <div className="text-xs text-slate-400">Open PO Value</div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1">{inr(data?.open_po_value)}</div>
+              <div className="text-2xl font-semibold text-black mt-1">{inr(data?.open_po_value)}</div>
             </div>
             <div className="bg-white border border-slate-200 rounded-md p-4">
               <div className="text-xs text-slate-400">Goods Received, Not Invoiced</div>
@@ -74,7 +74,7 @@ export default function ProcurementStoresPage() {
             </div>
             <div className="bg-white border border-slate-200 rounded-md p-4">
               <div className="text-xs text-slate-400">Stock Value</div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1">{inr(data?.stock_value)}</div>
+              <div className="text-2xl font-semibold text-black mt-1">{inr(data?.stock_value)}</div>
             </div>
           </div>
 

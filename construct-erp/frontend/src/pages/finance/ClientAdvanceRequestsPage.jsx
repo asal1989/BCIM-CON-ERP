@@ -78,7 +78,7 @@ export default function ClientAdvanceRequestsPage() {
             <Coins size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Client Advance Requests</h1>
+            <h1 className="text-lg font-semibold text-black">Client Advance Requests</h1>
             <p className="text-xs text-slate-500">Proforma vouchers submitted to client for advance payment</p>
           </div>
         </div>
@@ -119,11 +119,11 @@ export default function ClientAdvanceRequestsPage() {
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{r.proforma_no}</td>
                   <td className="px-4 py-3">
-                    <div className="text-slate-800">{r.project_name || '—'}</div>
+                    <div className="text-black">{r.project_name || '—'}</div>
                     {r.work_description && <div className="text-xs text-slate-400 truncate max-w-[200px]">{r.work_description}</div>}
                   </td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{r.proforma_date ? new Date(r.proforma_date).toLocaleDateString('en-IN') : '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-800">{inr(r.advance_amount)}
+                  <td className="px-4 py-3 text-right font-mono text-black">{inr(r.advance_amount)}
                     {r.advance_pct > 0 && <span className="text-xs text-slate-400 ml-1">({r.advance_pct}%)</span>}
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -188,7 +188,7 @@ function HistoryModal({ row, onClose }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800">Payment History · {row.proforma_no}</h3>
+          <h3 className="font-semibold text-black">Payment History · {row.proforma_no}</h3>
           <button onClick={onClose} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={18} /></button>
         </div>
         <div className="p-5">
@@ -206,7 +206,7 @@ function HistoryModal({ row, onClose }) {
               {receipts.map((r, i) => (
                 <div key={r.id} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
                   <div>
-                    <div className="text-sm font-mono font-semibold text-slate-800">{inr(r.amount)}</div>
+                    <div className="text-sm font-mono font-semibold text-black">{inr(r.amount)}</div>
                     <div className="text-[11px] text-slate-400">
                       {r.received_date ? new Date(r.received_date).toLocaleDateString('en-IN') : '—'}
                       {r.bank_reference && ` · ${r.bank_reference}`}
@@ -235,7 +235,7 @@ function StatCard({ label, value, icon, tone }) {
         <span className={clsx('w-7 h-7 rounded-lg border flex items-center justify-center', tones[tone])}>{icon}</span>
         <span className="text-xs text-slate-500">{label}</span>
       </div>
-      <div className="text-xl font-bold font-mono text-slate-800">{value}</div>
+      <div className="text-xl font-bold font-mono text-black">{value}</div>
     </div>
   );
 }
@@ -253,7 +253,7 @@ function FormModal({ projects, onClose, onSubmit, saving }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800">New Advance Request</h3>
+          <h3 className="font-semibold text-black">New Advance Request</h3>
           <button onClick={onClose} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -321,7 +321,7 @@ function ReceiveModal({ row, onClose, onSubmit, saving }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800">Record Client Payment</h3>
+          <h3 className="font-semibold text-black">Record Client Payment</h3>
           <button onClick={onClose} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">

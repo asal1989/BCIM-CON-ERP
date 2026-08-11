@@ -93,7 +93,7 @@ export default function RolePermissionsPage() {
                   return (
                     <tr key={roleRow.role} className={clsx('border-t border-slate-50', dirty && 'bg-amber-50/40')}>
                       <td className="sticky left-0 bg-white px-3 py-2 border-r border-slate-100">
-                        <p className="font-semibold text-slate-800">{roleRow.role}</p>
+                        <p className="font-semibold text-black">{roleRow.role}</p>
                         <p className="text-[10px] text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> {roleRow.user_count} user{roleRow.user_count !== 1 ? 's' : ''}</p>
                       </td>
                       {modules.map(m => {
