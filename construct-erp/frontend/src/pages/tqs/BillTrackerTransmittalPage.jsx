@@ -25,6 +25,26 @@ const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigit
 const fmtDate = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 const totalOf = (i) => Number(i.amount || 0) + Number(i.tax_amount || 0);
 
+// Static public asset, no auth needed — fetched once and cached for jsPDF's
+// addImage(), which needs a base64 data URI rather than a plain <img> src.
+let logoBase64Cache = null;
+async function loadBcimLogoBase64() {
+  if (logoBase64Cache) return logoBase64Cache;
+  try {
+    const resp = await fetch('/bcim-logo.png');
+    const blob = await resp.blob();
+    logoBase64Cache = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return logoBase64Cache;
+  } catch {
+    return null;
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // PRINT TEMPLATE — replicates the site's existing "INTERNAL INVOICES
 // TRANSMITTAL" Excel format exactly (title, header block, 10-column table,
@@ -37,25 +57,34 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
   const totalTax         = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
   const grandTotal        = totalWithoutTax + totalTax;
 
+  const NAVY = '#1B3A6B';
+
   return (
     <div ref={ref} style={{ fontFamily: 'Arial, sans-serif', fontSize: '10px', padding: '20px 24px', color: '#000' }}>
 
-      {/* From line sits above the title in the source form (row 1, then the
-          title block spans rows 2–4) — kept in that order here too. */}
-      <div style={{ textAlign: 'right', fontSize: '10px', marginBottom: '8px' }}>
-        From : BCIM Engineering Pvt. Ltd, <br />
-        {t.project_name || 'Project'}
-      </div>
-      <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '15px', letterSpacing: '0.5px', marginBottom: '10px' }}>
-        INTERNAL INVOICES TRANSMITTAL
+      {/* Letterhead — logo + company name, same convention as every other
+          print template in the app (ReportPrintKit's ReportPrintHeader). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: `3px solid ${NAVY}`, paddingBottom: 10, marginBottom: 14 }}>
+        <img src="/bcim-logo.png" alt="BCIM Engineering"
+          style={{ height: 52, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 9, fontWeight: 600, color: '#555', letterSpacing: 2, textTransform: 'uppercase' }}>
+            BCIM Engineering Pvt. Ltd.
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: NAVY, letterSpacing: 0.5, margin: '2px 0' }}>
+            INTERNAL INVOICES TRANSMITTAL
+          </div>
+          <div style={{ fontSize: 9, color: '#444' }}>From : {t.project_name || 'Project'}</div>
+        </div>
+        <div style={{ width: 52, flexShrink: 0 }} />
       </div>
 
       {/* Header meta block */}
-      <table style={{ borderCollapse: 'collapse', marginBottom: '10px', fontSize: '10px' }}>
+      <table style={{ borderCollapse: 'collapse', marginBottom: '12px', fontSize: '10px' }}>
         <tbody>
           <tr>
             <td style={{ padding: '2px 8px 2px 0', fontWeight: 'bold' }}>Transmittal No :</td>
-            <td style={{ padding: '2px 0', fontWeight: 'bold', color: '#1a3c6e' }}>{t.transmittal_number}</td>
+            <td style={{ padding: '2px 0', fontWeight: 'bold', color: NAVY }}>{t.transmittal_number}</td>
           </tr>
           <tr>
             <td style={{ padding: '2px 8px 2px 0', fontWeight: 'bold' }}>Transmittal Revision :</td>
@@ -71,10 +100,10 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
       {/* Invoice table */}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: '#e8edf5' }}>
+          <tr>
             {['Sl No', 'Invoice No.', 'Dated', 'Vendor Name', 'Invoice Amount\nwithout Tax', 'Tax %', 'Tax Amount', 'Total Amount', 'HSN Codes', 'Remarks']
               .map((h) => (
-                <th key={h} style={{ border: '1px solid #999', padding: '4px 5px', textAlign: 'center', fontWeight: 'bold', fontSize: '9px', whiteSpace: 'pre-line' }}>
+                <th key={h} style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '5px 6px', textAlign: 'center', fontWeight: 'bold', fontSize: '9px', whiteSpace: 'pre-line' }}>
                   {h}
                 </th>
               ))}
@@ -82,27 +111,27 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={item.id || idx}>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'center' }}>{item.sl_no ?? idx + 1}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px' }}>{item.invoice_no || ''}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'center' }}>{fmtDate(item.invoice_date)}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px' }}>{(item.vendor_name || '').toUpperCase()}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'right' }}>{fmt(item.amount)}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'center' }}>{item.tax_pct ? `${item.tax_pct}%` : ''}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'right' }}>{fmt(item.tax_amount)}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(totalOf(item))}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px', textAlign: 'center' }}>{item.hsn_codes || ''}</td>
-              <td style={{ border: '1px solid #ccc', padding: '3px 5px' }}>{item.item_remarks || ''}</td>
+            <tr key={item.id || idx} style={{ background: idx % 2 ? '#F3F6FB' : '#fff' }}>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.sl_no ?? idx + 1}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{item.invoice_no || ''}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{fmtDate(item.invoice_date)}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{(item.vendor_name || '').toUpperCase()}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right' }}>{fmt(item.amount)}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.tax_pct ? `${item.tax_pct}%` : ''}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right' }}>{fmt(item.tax_amount)}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(totalOf(item))}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.hsn_codes || ''}</td>
+              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{item.item_remarks || ''}</td>
             </tr>
           ))}
           {/* Total */}
-          <tr style={{ background: '#e8edf5', fontWeight: 'bold' }}>
-            <td colSpan={4} style={{ border: '1px solid #999', padding: '5px', textAlign: 'right' }}>TOTAL AMOUNT</td>
-            <td style={{ border: '1px solid #999', padding: '5px', textAlign: 'right' }}>{fmt(totalWithoutTax)}</td>
-            <td style={{ border: '1px solid #999', padding: '5px' }}></td>
-            <td style={{ border: '1px solid #999', padding: '5px', textAlign: 'right' }}>{fmt(totalTax)}</td>
-            <td style={{ border: '1px solid #999', padding: '5px', textAlign: 'right' }}>{fmt(grandTotal)}</td>
-            <td colSpan={2} style={{ border: '1px solid #999', padding: '5px' }}></td>
+          <tr style={{ background: '#E8EDF5', fontWeight: 'bold' }}>
+            <td colSpan={4} style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>TOTAL AMOUNT</td>
+            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(totalWithoutTax)}</td>
+            <td style={{ border: '1px solid #999', padding: '6px' }}></td>
+            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(totalTax)}</td>
+            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(grandTotal)}</td>
+            <td colSpan={2} style={{ border: '1px solid #999', padding: '6px' }}></td>
           </tr>
         </tbody>
       </table>
@@ -117,14 +146,14 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
       <table style={{ width: '100%', marginTop: '34px', borderCollapse: 'collapse', fontSize: '10px' }}>
         <tbody>
           <tr>
-            <td style={{ width: '50%', verticalAlign: 'top', paddingRight: '20px' }}>
-              <div style={{ fontWeight: 'bold' }}>Issued By : BCIM Engineering Pvt. Ltd ({t.project_short || t.project_name || 'Site'})</div>
+            <td style={{ width: '50%', verticalAlign: 'top', paddingRight: '20px', borderTop: `1.5px solid ${NAVY}`, paddingTop: '10px' }}>
+              <div style={{ fontWeight: 'bold', color: NAVY }}>Issued By : BCIM Engineering Pvt. Ltd ({t.project_short || t.project_name || 'Site'})</div>
               <div style={{ marginTop: '18px' }}>NAME: {t.issued_by || '_______________'}</div>
               <div style={{ marginTop: '10px' }}>Sign : _______________</div>
               <div style={{ marginTop: '10px' }}>Date: {fmtDate(t.issued_date)}</div>
             </td>
-            <td style={{ width: '50%', verticalAlign: 'top' }}>
-              <div style={{ fontWeight: 'bold' }}>Received By : BCIM Engineering Pvt Ltd (HO)</div>
+            <td style={{ width: '50%', verticalAlign: 'top', borderTop: `1.5px solid ${NAVY}`, paddingTop: '10px' }}>
+              <div style={{ fontWeight: 'bold', color: NAVY }}>Received By : BCIM Engineering Pvt Ltd (HO)</div>
               <div style={{ marginTop: '18px' }}>Name: {t.received_by || '_______________'}</div>
               <div style={{ marginTop: '10px' }}>Sign : _______________</div>
               <div style={{ marginTop: '10px' }}>Date: {t.received_date ? fmtDate(t.received_date) : '_______________'}</div>
@@ -492,24 +521,36 @@ function DetailView({ id, onBack, onRefresh }) {
 
   const handlePrint = useReactToPrint({ contentRef: printRef });
 
-  const handlePDF = () => {
+  const handlePDF = async () => {
     if (!t) return;
     const items = t.items || [];
     const totalWithoutTax = items.reduce((s, i) => s + Number(i.amount || 0), 0);
     const totalTax = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
     const grandTotal = totalWithoutTax + totalTax;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const NAVY = [27, 58, 107]; // #1B3A6B, matches the print template / ReportPrintKit
 
-    doc.setFontSize(13);
+    const logo = await loadBcimLogoBase64();
+    if (logo) doc.addImage(logo, 'PNG', 14, 8, 20, 20, undefined, 'FAST');
+
+    doc.setTextColor(...NAVY);
+    doc.setFontSize(15);
     doc.setFont(undefined, 'bold');
-    doc.text('INTERNAL INVOICES TRANSMITTAL', 148, 14, { align: 'center' });
+    doc.text('INTERNAL INVOICES TRANSMITTAL', 148, 15, { align: 'center' });
+    doc.setTextColor(80);
     doc.setFont(undefined, 'normal');
     doc.setFontSize(9);
-    doc.text(`From: BCIM Engineering Pvt. Ltd, ${t.project_name || ''}`, 282, 20, { align: 'right' });
-    doc.text(`Transmittal No: ${t.transmittal_number}   Revision: ${t.revision || 'REV.000'}   Date: ${fmtDate(t.transmittal_date)}`, 14, 26);
+    doc.text('BCIM ENGINEERING PVT. LTD.', 148, 21, { align: 'center' });
+    doc.setTextColor(0);
+    doc.text(`From: ${t.project_name || ''}`, 282, 26, { align: 'right' });
+    doc.setDrawColor(...NAVY);
+    doc.setLineWidth(0.8);
+    doc.line(14, 30, 282, 30);
+
+    doc.text(`Transmittal No: ${t.transmittal_number}   Revision: ${t.revision || 'REV.000'}   Date: ${fmtDate(t.transmittal_date)}`, 14, 37);
 
     autoTable(doc, {
-      startY: 30,
+      startY: 41,
       head: [['Sl No', 'Invoice No.', 'Dated', 'Vendor Name', 'Amt w/o Tax', 'Tax %', 'Tax Amt', 'Total', 'HSN', 'Remarks']],
       body: [
         ...items.map((i, idx) => [
@@ -524,15 +565,16 @@ function DetailView({ id, onBack, onRefresh }) {
           i.hsn_codes || '',
           i.item_remarks || '',
         ]),
-        [{ content: 'TOTAL AMOUNT', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
-          { content: fmt(totalWithoutTax), styles: { fontStyle: 'bold', halign: 'right' } },
+        [{ content: 'TOTAL AMOUNT', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
+          { content: fmt(totalWithoutTax), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
           '',
-          { content: fmt(totalTax), styles: { fontStyle: 'bold', halign: 'right' } },
-          { content: fmt(grandTotal), styles: { fontStyle: 'bold', halign: 'right' } },
+          { content: fmt(totalTax), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
+          { content: fmt(grandTotal), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
           '', ''],
       ],
       styles: { fontSize: 7.5, cellPadding: 1.8 },
-      headStyles: { fillColor: [232, 237, 245], textColor: 0, fontStyle: 'bold' },
+      headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [243, 246, 251] },
       columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 4: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
     });
 
