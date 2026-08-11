@@ -149,12 +149,22 @@ function SwipeDir({ direction }) {
   return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
 }
 
-// ESSL stores IST device-local time as if it were UTC — read UTC components
-// to recover the actual punch time the device recorded.
+// swipe_time is stored as a true UTC instant (backend tags the device's naive
+// IST wall-clock string with +05:30 before insert) — convert to real IST here
+// rather than reading raw UTC components, which understates the time by 5:30.
+const IST_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
 function esslTime(ts) {
   if (!ts) return null;
   const d = new Date(ts);
-  return { h: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds(), dateStr: d.toISOString().slice(0, 10) };
+  const parts = {};
+  for (const p of IST_PARTS.formatToParts(d)) parts[p.type] = p.value;
+  return {
+    h: Number(parts.hour) % 24, m: Number(parts.minute), s: Number(parts.second),
+    dateStr: `${parts.year}-${parts.month}-${parts.day}`,
+  };
 }
 function fmt12(h, m, s = 0) {
   const period = h >= 12 ? 'pm' : 'am';
@@ -171,9 +181,8 @@ function fmtSwipeTime(ts) {
 function groupByDate(swipes) {
   const groups = {};
   for (const s of swipes) {
-    // ESSL stores IST device-local time as if it were UTC — read UTC date
-    // components to recover the actual calendar date the device recorded.
-    const dayKey = new Date(s.swipe_time).toISOString().slice(0, 10);
+    // swipe_time is a true UTC instant — group by its real IST calendar date.
+    const dayKey = esslTime(s.swipe_time).dateStr;
     if (!groups[dayKey]) groups[dayKey] = [];
     groups[dayKey].push(s);
   }
