@@ -40,13 +40,14 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
   return (
     <div ref={ref} style={{ fontFamily: 'Arial, sans-serif', fontSize: '10px', padding: '20px 24px', color: '#000' }}>
 
-      {/* Title */}
-      <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '15px', letterSpacing: '0.5px', marginBottom: '4px' }}>
-        INTERNAL INVOICES TRANSMITTAL
-      </div>
+      {/* From line sits above the title in the source form (row 1, then the
+          title block spans rows 2–4) — kept in that order here too. */}
       <div style={{ textAlign: 'right', fontSize: '10px', marginBottom: '8px' }}>
         From : BCIM Engineering Pvt. Ltd, <br />
         {t.project_name || 'Project'}
+      </div>
+      <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '15px', letterSpacing: '0.5px', marginBottom: '10px' }}>
+        INTERNAL INVOICES TRANSMITTAL
       </div>
 
       {/* Header meta block */}
