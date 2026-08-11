@@ -87,7 +87,9 @@ const filterAlertRecipients = ({ recipients, subject }) => {
   return recipients.filter(email => !excluded.has(String(email).toLowerCase()));
 };
 
-const sendViaGraph = async ({ to, cc, subject, html, text, attachments = [] }) => {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const sendViaGraphOnce = async ({ to, cc, subject, html, text, attachments = [] }) => {
   const token  = await getGraphToken();
   const sender = process.env.MAIL_FROM || process.env.ONEDRIVE_USER_EMAIL;
   const toRecipients = normalizeRecipients(to);
@@ -130,12 +132,46 @@ const sendViaGraph = async ({ to, cc, subject, html, text, attachments = [] }) =
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     console.error(`[mail] Graph error detail:`, JSON.stringify(err));
-    throw new Error(
+    const e = new Error(
       err?.error?.message ||
       `Graph sendMail failed (HTTP ${res.status})`
     );
+    e.status = res.status;
+    e.retryAfterSeconds = parseInt(res.headers.get('Retry-After'), 10) || null;
+    throw e;
   }
   // 202 Accepted — no body
+};
+
+// Every Graph send goes through this single chain so concurrent notifications
+// (e.g. a manager approving a dozen documents within a couple of seconds,
+// each firing its own fire-and-forget notification) queue up one-after-another
+// instead of hitting Graph in parallel — that parallel burst is what caused
+// MD-approval emails to be silently dropped by Graph throttling in the past.
+// Throttled (429) or transient (5xx) responses are retried with backoff
+// (honoring Graph's Retry-After header when present) instead of just failing.
+let graphSendQueue = Promise.resolve();
+const MIN_GAP_MS = 250;
+const MAX_RETRIES = 3;
+
+const sendViaGraph = (args) => {
+  const run = graphSendQueue.then(async () => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await sendViaGraphOnce(args);
+      } catch (err) {
+        const retryable = err.status === 429 || (err.status >= 500 && err.status < 600);
+        if (!retryable || attempt >= MAX_RETRIES) throw err;
+        const backoffMs = (err.retryAfterSeconds ? err.retryAfterSeconds * 1000 : 1000 * 2 ** attempt);
+        console.warn(`[mail] Graph send throttled/transient (HTTP ${err.status}), retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(backoffMs);
+      }
+    }
+  });
+  // Keep the queue alive even if this send ultimately fails, and pace the
+  // next queued send so we never fire two Graph calls back-to-back.
+  graphSendQueue = run.catch(() => {}).then(() => sleep(MIN_GAP_MS));
+  return run;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
