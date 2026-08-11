@@ -61,13 +61,24 @@ async function ensureTables() {
 runSchemaInit('tqs_transmittals', ensureTables);
 runSchemaInit('tqs_transmittals_site_ho_cols', ensureTables);
 
+// Per-project short code for transmittal numbering, same idea as the
+// existing mrs_prefix column — lets a project use a shorter/legacy code
+// (e.g. DQS Towers -> 'DQS') instead of its full project_code.
+runSchemaInit('projects_transmittal_prefix', async () => {
+  await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS transmittal_prefix TEXT`);
+});
+
 // ── Auto-number helper ─────────────────────────────────────────────────────
-// One continuous sequence per project — "BCIM-<ProjectCode>-HO-INV-001",
-// matching the site's existing paper/Excel transmittal register so numbers
-// stay recognisable to whoever's been filing these by hand.
+// One continuous sequence per project — "BCIM-<Code>-HO-INV-001", matching
+// the site's existing paper/Excel transmittal register so numbers stay
+// recognisable to whoever's been filing these by hand. Uses
+// projects.transmittal_prefix when set (e.g. DQS Towers -> 'DQS', shorter
+// than its project_code 'DQSTWR001' and matching the site's own existing
+// numbering — BCIM-DQS-HO-INV-001), falling back to project_code otherwise.
+// Same override pattern as the existing mrs_prefix column.
 async function nextTransmittalNumber(companyId, projectId) {
-  const proj = await query(`SELECT project_code FROM projects WHERE id = $1 AND company_id = $2`, [projectId, companyId]);
-  const projectCode = proj.rows[0]?.project_code || 'GEN';
+  const proj = await query(`SELECT project_code, transmittal_prefix FROM projects WHERE id = $1 AND company_id = $2`, [projectId, companyId]);
+  const projectCode = proj.rows[0]?.transmittal_prefix || proj.rows[0]?.project_code || 'GEN';
   const prefix = `BCIM-${projectCode}-HO-INV-`;
 
   const res = await query(
