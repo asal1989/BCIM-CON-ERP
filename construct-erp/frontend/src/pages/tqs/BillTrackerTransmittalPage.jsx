@@ -454,6 +454,7 @@ function ReceiveModal({ transmittal, onClose, onDone }) {
   const [form, setForm] = useState({
     received_by: '',
     received_date: dayjs().format('YYYY-MM-DD'),
+    received_remarks: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -499,6 +500,19 @@ function ReceiveModal({ transmittal, onClose, onDone }) {
               value={form.received_date}
               onChange={e => setForm(f => ({ ...f, received_date: e.target.value }))}
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-900 mb-1">Remarks</label>
+            <textarea
+              rows={3}
+              placeholder="e.g. 2 invoices missing vendor signature"
+              className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
+              value={form.received_remarks}
+              onChange={e => setForm(f => ({ ...f, received_remarks: e.target.value }))}
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Emailed to whoever raised this transmittal, along with the receipt confirmation.
+            </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm border rounded-lg text-gray-600">Cancel</button>
@@ -680,6 +694,12 @@ function DetailView({ id, onBack, onRefresh }) {
           <div><span className="text-slate-900 font-medium text-xs">Issued By</span><div>{t.issued_by || '—'}</div></div>
           {t.received_by && <div><span className="text-slate-900 font-medium text-xs">Received By (HO)</span><div className="text-green-700 font-medium">{t.received_by} on {fmtDate(t.received_date)}</div></div>}
           {t.remarks && <div className="col-span-3"><span className="text-slate-900 font-medium text-xs">Remarks</span><div>{t.remarks}</div></div>}
+          {t.received_remarks && (
+            <div className="col-span-3">
+              <span className="text-slate-900 font-medium text-xs">Remarks from HO (on receipt)</span>
+              <div className="mt-1 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">{t.received_remarks}</div>
+            </div>
+          )}
         </div>
       </div>
 

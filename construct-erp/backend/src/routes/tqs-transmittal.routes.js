@@ -14,6 +14,11 @@ const LOGO_PATH = path.join(__dirname, '../../../frontend/public/bcim-logo.png')
 const NAVY = '#1B3A6B';
 const fmtINR = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDateShort = (d) => d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
+// Free-text (remarks, names) is interpolated into HTML email bodies — escape
+// it so a stray < or & can't break the markup.
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 // A transmittal's single project_id (and the "From: <project>" label on the
 // print/PDF/email) only tells the full story when every item came from one
@@ -86,6 +91,10 @@ async function ensureTables() {
   // the per-project numbering sequence) is no longer enough to know where
   // each line item actually came from.
   await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS project_id UUID`);
+  // HO's note when acknowledging receipt — distinct from the creator's own
+  // `remarks` and from the approver's `approval_remarks`, since receipt is a
+  // separate step by a different person (e.g. "2 invoices missing signature").
+  await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS received_remarks TEXT`);
   // tqs_transmittals.project_id must be nullable for a multi-project bundle
   // (it falls back to a company-wide numbering sequence in that case) — it
   // was already nullable by definition above, this just makes the intent
@@ -96,6 +105,7 @@ runSchemaInit('tqs_transmittals', ensureTables);
 runSchemaInit('tqs_transmittals_site_ho_cols', ensureTables);
 runSchemaInit('tqs_transmittals_approval_cols', ensureTables);
 runSchemaInit('tqs_transmittal_items_project_id', ensureTables);
+runSchemaInit('tqs_transmittals_received_remarks', ensureTables);
 
 // Per-project short code for transmittal numbering, same idea as the
 // existing mrs_prefix column — lets a project use a shorter/legacy code
@@ -311,6 +321,70 @@ async function emailTransmittalToHO(t) {
     console.log(`[tqs-transmittal] Email to dheenadayalan@bcim.in for ${t.transmittal_number}: ${JSON.stringify(result)}`);
   } catch (err) {
     console.error(`[tqs-transmittal] FAILED to email ${t.transmittal_number}: ${err.message}`);
+  }
+}
+
+// ── Email — fires when HO acknowledges receipt, back to whoever raised the
+// transmittal from site (they're the one waiting to hear it landed, and the
+// one who has to act on any discrepancy noted in the receipt remarks).
+// Best-effort: never blocks the status change, always logs the real error. ──
+async function emailReceiptToRaiser(t) {
+  const to = t.raised_by_email;
+  if (!to) {
+    console.warn(`[tqs-transmittal] No raiser email for ${t.transmittal_number} — receipt notification skipped`);
+    return;
+  }
+
+  const items = t.items || [];
+  const grandTotal = items.reduce((s, i) => s + Number(i.amount || 0) + Number(i.tax_amount || 0), 0);
+
+  const remarksBlock = t.received_remarks
+    ? `<div style="margin:14px 0;padding:10px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:6px">
+         <p style="margin:0 0 4px;font-weight:700;color:#9A3412;font-size:12px">Remarks from Head Office</p>
+         <p style="margin:0;color:#7C2D12">${esc(t.received_remarks)}</p>
+       </div>`
+    : '';
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:13px;color:#1E293B;max-width:680px">
+      <h2 style="color:#1B3A6B;margin-bottom:4px">Invoice Transmittal Received by HO</h2>
+      <p style="margin:0 0 12px">Head Office has acknowledged receipt of the invoices you sent.</p>
+      <table style="border-collapse:collapse;font-size:12px;margin-bottom:14px">
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Transmittal No</td><td style="color:#1B3A6B;font-weight:600">${esc(t.transmittal_number)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Project</td><td>${esc(t.project_name || '—')}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Received By</td><td style="font-weight:600">${esc(t.received_by || '—')}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Received On</td><td>${fmtDateShort(t.received_date)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Invoices</td><td>${items.length}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Total Amount</td><td style="font-weight:700">₹${fmtINR(grandTotal)}</td></tr>
+      </table>
+      ${remarksBlock}
+      <p style="margin-top:16px;font-size:11px;color:#888">Automated notification from BCIM ConstructERP.</p>
+    </div>`;
+
+  const text = [
+    `Invoice Transmittal Received by HO — ${t.transmittal_number}`,
+    '',
+    'Head Office has acknowledged receipt of the invoices you sent.',
+    '',
+    `Transmittal No : ${t.transmittal_number}`,
+    `Project        : ${t.project_name || '—'}`,
+    `Received By    : ${t.received_by || '—'}`,
+    `Received On    : ${fmtDateShort(t.received_date)}`,
+    `Invoices       : ${items.length}`,
+    `Total Amount   : ${fmtINR(grandTotal)}`,
+    ...(t.received_remarks ? ['', `Remarks from HO: ${t.received_remarks}`] : []),
+  ].join('\n');
+
+  try {
+    const result = await sendMail({
+      to,
+      subject: `Transmittal Received by HO — ${t.transmittal_number} (${t.project_name || ''})`,
+      html,
+      text,
+    });
+    console.log(`[tqs-transmittal] Receipt notification to ${to} for ${t.transmittal_number}: ${JSON.stringify(result)}`);
+  } catch (err) {
+    console.error(`[tqs-transmittal] FAILED receipt notification for ${t.transmittal_number}: ${err.message}`);
   }
 }
 
@@ -594,18 +668,47 @@ router.patch('/:id/submit', async (req, res) => {
 // ── PATCH /tqs/transmittals/:id/receive ───────────────────────────────────
 router.patch('/:id/receive', async (req, res) => {
   try {
-    const { received_by, received_date } = req.body;
+    const { received_by, received_date, received_remarks } = req.body;
     if (!received_by) return res.status(400).json({ error: 'received_by is required' });
 
     const r = await query(
       `UPDATE tqs_transmittals
-       SET status = 'received', received_by = $3, received_date = $4, updated_at = NOW()
+       SET status = 'received', received_by = $3, received_date = $4,
+           received_remarks = $5, updated_at = NOW()
        WHERE id = $1 AND company_id = $2 AND status = 'submitted' AND is_deleted = FALSE
        RETURNING *`,
-      [req.params.id, req.user.company_id, received_by, received_date || new Date().toISOString().slice(0, 10)]
+      [req.params.id, req.user.company_id, received_by,
+       received_date || new Date().toISOString().slice(0, 10),
+       received_remarks || null]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Transmittal not found or not in submitted state' });
-    res.json(r.rows[0]);
+    const transmittal = r.rows[0];
+
+    // Notify whoever raised this transmittal from site that HO has it, along
+    // with any remarks HO recorded. Sent synchronously so the caller only sees
+    // success once the attempt is done, but a mail failure never blocks the
+    // status change (emailReceiptToRaiser catches its own errors).
+    const raiser = await query(
+      `SELECT u.email AS raised_by_email FROM users u WHERE u.id = $1`,
+      [transmittal.created_by]
+    );
+    const projRes = await query(`SELECT name FROM projects WHERE id = $1`, [transmittal.project_id]);
+    const itemsRes = await query(
+      `SELECT ti.*, p.name AS project_name
+       FROM tqs_transmittal_items ti
+       LEFT JOIN projects p ON p.id = ti.project_id
+       WHERE ti.transmittal_id = $1 ORDER BY sl_no`,
+      [transmittal.id]
+    );
+    const projectName = projRes.rows[0]?.name;
+    await emailReceiptToRaiser({
+      ...transmittal,
+      raised_by_email: raiser.rows[0]?.raised_by_email,
+      project_name: projectName || projectDisplayFor({ project_name: projectName }, itemsRes.rows),
+      items: itemsRes.rows,
+    });
+
+    res.json(transmittal);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
