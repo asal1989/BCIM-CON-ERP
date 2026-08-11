@@ -22,8 +22,19 @@ const isGraphConfigured = () =>
 /**
  * Obtain a short-lived access token using Azure AD client-credentials flow.
  * Scope: https://graph.microsoft.com/.default  (picks up app permissions)
+ *
+ * Cached module-wide until near expiry — bulk operations (e.g. approving a
+ * batch of MRS in a couple of seconds) used to fetch a brand-new token for
+ * every single recipient of every email, which was enough rapid-fire traffic
+ * to trip Microsoft Graph/Exchange throttling and silently drop mail.
  */
+let cachedToken = null; // { accessToken, expiresAt }
+
 const getGraphToken = async () => {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) {
+    return cachedToken.accessToken;
+  }
+
   const tenantId  = process.env.AZURE_TENANT_ID     || process.env.ONEDRIVE_TENANT_ID;
   const clientId  = process.env.AZURE_CLIENT_ID     || process.env.ONEDRIVE_CLIENT_ID;
   const clientSec = process.env.AZURE_CLIENT_SECRET || process.env.ONEDRIVE_CLIENT_SECRET;
@@ -48,7 +59,11 @@ const getGraphToken = async () => {
       `Azure token request failed (HTTP ${res.status})`
     );
   }
-  return data.access_token;
+  cachedToken = {
+    accessToken: data.access_token,
+    expiresAt: Date.now() + (parseInt(data.expires_in, 10) || 3600) * 1000,
+  };
+  return cachedToken.accessToken;
 };
 
 /**
@@ -75,8 +90,9 @@ const filterAlertRecipients = ({ recipients, subject }) => {
 const sendViaGraph = async ({ to, cc, subject, html, text, attachments = [] }) => {
   const token  = await getGraphToken();
   const sender = process.env.MAIL_FROM || process.env.ONEDRIVE_USER_EMAIL;
+  const toRecipients = normalizeRecipients(to);
 
-  console.log(`[mail] Graph → FROM: ${sender}  TO: ${to}  SUBJECT: ${subject}`);
+  console.log(`[mail] Graph → FROM: ${sender}  TO: ${toRecipients.join(', ')}  SUBJECT: ${subject}`);
 
   const payload = {
     message: {
@@ -85,7 +101,7 @@ const sendViaGraph = async ({ to, cc, subject, html, text, attachments = [] }) =
         contentType: html ? 'HTML' : 'Text',
         content:     html  || text || '',
       },
-      toRecipients: [{ emailAddress: { address: to } }],
+      toRecipients: toRecipients.map(address => ({ emailAddress: { address } })),
       ccRecipients: normalizeRecipients(cc).map(address => ({ emailAddress: { address } })),
       attachments: attachments.map(a => ({
         '@odata.type':  '#microsoft.graph.fileAttachment',
@@ -140,12 +156,29 @@ const getTransport = () =>
     },
   });
 
+// Sends one message to all recipients at once (single Graph/SMTP call) rather
+// than looping per-recipient — a loop meant a burst approval of N documents
+// fanning out to M recipients each fired N×M separate Graph API calls (each
+// with its own token fetch, before token caching was added), which was enough
+// rapid-fire traffic to trip Graph/Exchange throttling and silently drop mail
+// with only a server-log line to show for it. If the batched send fails, we
+// retry once per-recipient so one bad address doesn't sink the whole batch.
 const sendMail = async ({ to, cc, subject, html, text, attachments = [], category }) => {
   let recipients = filterAlertRecipients({ recipients: normalizeRecipients(to), subject });
   let ccRecipients = filterAlertRecipients({ recipients: normalizeRecipients(cc), subject });
   recipients = recipients.filter(email => !isBlockedEmail(email, category));
   ccRecipients = ccRecipients.filter(email => !isBlockedEmail(email, category));
   if (!recipients.length) return { sent: false, reason: 'No recipients' };
+
+  if (isGraphConfigured()) {
+    try {
+      await sendViaGraph({ to: recipients, cc: ccRecipients, subject, html, text, attachments });
+      const results = recipients.map(recipient => ({ to: recipient, sent: true, provider: 'graph' }));
+      return { sent: true, results };
+    } catch (err) {
+      console.error('[mail] Graph API batch send failed, falling back to per-recipient:', err.message);
+    }
+  }
 
   const results = [];
   for (const recipient of recipients) {

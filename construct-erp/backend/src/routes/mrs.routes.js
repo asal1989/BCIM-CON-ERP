@@ -1510,9 +1510,18 @@ router.post('/:id/resend-notify', async (req, res) => {
       return res.status(404).json({ error: 'MRS not found' });
     }
     const mrsData = mrs.rows[0];
-    notifyStoresForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
-    notifyProcurementForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
-    notifyMDForNewMRS({ mrs: mrsData });
+
+    // Status-aware: an MRS sitting at approved_pm/approved_mgmt is past the
+    // "new MRS" stage and waiting on the Managing Director specifically — the
+    // MD-approval-pending mail (with items) is what's actually missing for
+    // it, not the new-MRS mail to stores/procurement.
+    if (['approved_pm', 'approved_mgmt'].includes(mrsData.status)) {
+      await notifyAfterProjectHeadApproval({ mrs: mrsData });
+    } else {
+      notifyStoresForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
+      notifyProcurementForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
+      notifyMDForNewMRS({ mrs: mrsData });
+    }
     res.json({ message: `Notifications resent for ${mrsRef(mrsData)}` });
   } catch (err) {
     res.status(500).json({ error: err.message });

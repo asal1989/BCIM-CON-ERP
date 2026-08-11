@@ -613,7 +613,7 @@ export default function MRSPage() {
 
   const resendMutation = useMutation({
     mutationFn: (id) => mrsAPI.resendNotify(id),
-    onSuccess: (_, id) => toast.success('Notification emails resent to stores & procurement teams'),
+    onSuccess: (res) => toast.success(res?.data?.message || 'Notification emails resent'),
     onError: (e) => toast.error(e?.response?.data?.error || 'Resend failed'),
   });
 
