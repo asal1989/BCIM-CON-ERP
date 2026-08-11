@@ -82,7 +82,7 @@ function Kpi3DCard({ icon: Icon, value, label, sub, iconBg, iconText, accent, ac
           style={{ transform: 'translateZ(24px)' }}>
           <Icon className={clsx('w-4.5 h-4.5', iconText)} style={{ transform: 'translateZ(4px)' }} />
         </div>
-        <div className="text-2xl font-bold text-slate-800 leading-tight tabular-nums" style={{ transform: 'translateZ(18px)' }}>{value}</div>
+        <div className="text-2xl font-bold text-black leading-tight tabular-nums" style={{ transform: 'translateZ(18px)' }}>{value}</div>
         <div className="text-xs text-slate-400 mt-0.5 font-medium" style={{ transform: 'translateZ(10px)' }}>{label}</div>
         {sub && <div className="text-[11px] text-slate-400 mt-1 truncate" style={{ transform: 'translateZ(10px)' }}>{sub}</div>}
       </motion.div>
@@ -386,7 +386,7 @@ function ExcelImportModal({ onClose, onImported }) {
                         </td>
                         <td className="px-3 py-2 max-w-[150px] truncate text-slate-600">{r.subject || '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.start_date || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-slate-800">₹{inr(r.total_value)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-black">₹{inr(r.total_value)}</td>
                         <td className="px-3 py-2">
                           <select value={r.status} onChange={e => updateRow(i, 'status', e.target.value)}
                             className="border border-slate-200 rounded px-2 py-1 text-xs outline-none">
@@ -777,7 +777,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
           <div>
-            <p className="text-[15px] font-semibold text-slate-800">{isEditing ? `Edit Work Order — ${editingWO.wo_number}` : 'Create Work Order'}</p>
+            <p className="text-[15px] font-semibold text-black">{isEditing ? `Edit Work Order — ${editingWO.wo_number}` : 'Create Work Order'}</p>
             <p className="text-xs text-slate-400 mt-0.5">{isEditing ? 'Edit draft details before submitting for approval' : 'Procurement · engage a contractor for works & services'}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
@@ -871,7 +871,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
               <div className="mx-4 mb-4 rounded-md border border-blue-100 bg-blue-50/50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <p className="text-sm font-bold text-slate-800">{(vendor.name || '').toUpperCase()}</p>
+                  <p className="text-sm font-bold text-black">{(vendor.name || '').toUpperCase()}</p>
                   {vendor.vendor_type && <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{vendor.vendor_type.replace(/_/g,' ')}</span>}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -1001,13 +1001,13 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pb-4">
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                 <p className={clsx(Z_LABEL, 'mb-1')}>Work Value</p>
-                <p className="text-sm font-mono font-bold text-slate-800">₹{inr(formTotal)}</p>
+                <p className="text-sm font-mono font-bold text-black">₹{inr(formTotal)}</p>
               </div>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                 <p className={clsx(Z_LABEL, 'mb-1')}>
                   {gstRates.length > 1 ? 'Total GST' : `GST (${gstRates[0] ?? form.gst_pct ?? 0}%)`}
                 </p>
-                <p className="text-sm font-mono font-bold text-slate-800">₹{inr(gstAmt)}</p>
+                <p className="text-sm font-mono font-bold text-black">₹{inr(gstAmt)}</p>
               </div>
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs font-medium text-amber-600 mb-1">Retention ({form.retention_pct||0}%)</p>
@@ -1427,7 +1427,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
             </div>
             <div className="text-right flex-shrink-0 pl-4 border-l border-slate-100">
               <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Contract Amount</p>
-              <p className="text-lg font-bold text-slate-800 tabular-nums">₹{inr(displayWO.contract_amount || val)}</p>
+              <p className="text-lg font-bold text-black tabular-nums">₹{inr(displayWO.contract_amount || val)}</p>
             </div>
           </div>
 
@@ -1519,7 +1519,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                         return (
                           <tr key={item.id || item._row} className="hover:bg-slate-50 transition-colors">
                             <td className="px-3 py-2.5 text-slate-900 font-medium font-mono border border-slate-200">{item._row}</td>
-                            <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px] border border-slate-200">
+                            <td className="px-3 py-2.5 font-medium text-black max-w-[280px] border border-slate-200">
                               {item.description || `Item ${item._row}`}
                               {item.remarks && <div className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.remarks}</div>}
                             </td>
@@ -1543,7 +1543,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                               </span>
                             </td>
                             <td className="px-3 py-2.5 font-mono text-right text-slate-600 border border-slate-200">{inr(rate)}</td>
-                            <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800 border border-slate-200">{inr(amount)}</td>
+                            <td className="px-3 py-2.5 font-mono text-right font-semibold text-black border border-slate-200">{inr(amount)}</td>
                           </tr>
                         );
                       })}
@@ -2281,12 +2281,12 @@ export default function WorkOrderPage() {
                             </td>
                             {/* Subject */}
                             <td className="px-5 py-3.5 max-w-[220px]">
-                              <p className="text-sm font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
+                              <p className="text-sm font-medium text-black truncate leading-tight">{wo.subject || '—'}</p>
                               {wo.tower_block && <p className="text-[10px] text-slate-400 truncate mt-0.5">{wo.tower_block}</p>}
                             </td>
                             {/* Contractor */}
                             <td className="px-5 py-3.5">
-                              <p className="font-semibold text-slate-800 truncate max-w-[140px]">{(wo.vendor_name || '—').toUpperCase()}</p>
+                              <p className="font-semibold text-black truncate max-w-[140px]">{(wo.vendor_name || '—').toUpperCase()}</p>
                               {wo.vendor_type && <p className="text-[10px] text-slate-400 capitalize mt-0.5">{wo.vendor_type.replace(/_/g,' ')}</p>}
                             </td>
                             {/* Project */}
@@ -2320,7 +2320,7 @@ export default function WorkOrderPage() {
                             </td>
                             {/* Value & Utilization */}
                             <td className="px-5 py-3.5 whitespace-nowrap">
-                              <span className="font-bold font-mono text-slate-800 text-xs">₹{inr(wo.total_value)}</span>
+                              <span className="font-bold font-mono text-black text-xs">₹{inr(wo.total_value)}</span>
                               {(() => {
                                 const val    = Number(wo.total_value || 0);
                                 const billed = Number(wo.total_billed || 0);
