@@ -53,20 +53,30 @@ async function getAccountId(client, companyId, code) {
  * @param {Array<{code: string, debit?: number, credit?: number, description?: string}>} opts.lines
  */
 async function postAutoJournal(client, { companyId, userId, entryDate, projectId, reference, narration, source, lines }) {
+  // Logged instead of only returning null — a missing COA code or an
+  // unbalanced line set used to fail completely silently (found via a 2026-06
+  // incident: two RA bills' AR/Revenue postings vanished because the '2050'
+  // account hadn't been created yet at certification time, and nothing
+  // recorded that the post never happened).
+  const bail = (reason) => {
+    console.error(`[journalAutoPost] SKIPPED — ${reason}`, { companyId, source, reference });
+    return null;
+  };
   try {
     const resolved = [];
     for (const l of lines) {
       const debit = n(l.debit), credit = n(l.credit);
       if (!(debit > 0) && !(credit > 0)) continue;
       const accountId = await getAccountId(client, companyId, l.code);
-      if (!accountId) return null; // COA not seeded for this code — skip silently
+      if (!accountId) return bail(`account code '${l.code}' not found or inactive in chart_of_accounts`);
       resolved.push({ account_id: accountId, debit, credit, description: l.description || null });
     }
-    if (resolved.length < 2) return null;
+    if (resolved.length < 2) return bail(`fewer than 2 non-zero lines (${resolved.length})`);
 
     const totalDebit  = resolved.reduce((s, l) => s + l.debit, 0);
     const totalCredit = resolved.reduce((s, l) => s + l.credit, 0);
-    if (Math.abs(totalDebit - totalCredit) > 0.01 || totalDebit === 0) return null;
+    if (Math.abs(totalDebit - totalCredit) > 0.01 || totalDebit === 0)
+      return bail(`lines do not balance (debit=${totalDebit}, credit=${totalCredit})`);
 
     const entry_no = await nextEntryNo(client, companyId, projectId);
     const r = await client.query(
@@ -85,8 +95,12 @@ async function postAutoJournal(client, { companyId, userId, entryDate, projectId
       );
     }
     return jeId;
-  } catch (_) {
-    return null; // never fail the parent transaction over auto-posting
+  } catch (err) {
+    // Never fail the parent transaction over auto-posting, but a swallowed
+    // error here is exactly what let RA bill AR/Revenue postings go missing
+    // without a trace — always log it.
+    console.error(`[journalAutoPost] FAILED — ${err.message}`, { companyId, source, reference });
+    return null;
   }
 }
 
@@ -101,7 +115,8 @@ async function postAutoJournalStandalone(opts) {
     const jeId = await postAutoJournal(client, opts);
     await client.query('COMMIT');
     return jeId;
-  } catch (_) {
+  } catch (err) {
+    console.error(`[journalAutoPostStandalone] FAILED — ${err.message}`, { source: opts?.source, reference: opts?.reference });
     await client.query('ROLLBACK').catch(() => {});
     return null;
   } finally {

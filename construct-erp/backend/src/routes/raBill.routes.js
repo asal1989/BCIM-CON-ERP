@@ -855,7 +855,12 @@ router.patch('/:id/approve', authorize('super_admin','admin','project_manager'),
           lines,
         });
       }
-    } catch (_) { /* best-effort — never block certification */ }
+    } catch (err) {
+      // Best-effort — never block certification over a GL posting failure.
+      // Must still be logged: a silently-swallowed error here is exactly how
+      // 3 RA bills' AR/Revenue postings went missing with zero trace in 2026-06.
+      console.error(`[raBill.approve] GL auto-post FAILED for ${bill.bill_number}: ${err.message}`);
+    }
 
     res.json({ data: bill });
   } catch (err) {
