@@ -1,11 +1,19 @@
 // src/routes/tqs-transmittal.routes.js
 const express = require('express');
+const path = require('path');
+const PDFDocument = require('pdfkit');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { sendMail } = require('../services/mail.service');
 
 const router = express.Router();
 router.use(authenticate);
+
+const LOGO_PATH = path.join(__dirname, '../../../frontend/public/bcim-logo.png');
+const NAVY = '#1B3A6B';
+const fmtINR = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDateShort = (d) => d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
 
 // ── Auto-create tables ─────────────────────────────────────────────────────
 async function ensureTables() {
@@ -56,10 +64,16 @@ async function ensureTables() {
   await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS tax_pct NUMERIC(5,2) DEFAULT 0`);
   await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(15,2) DEFAULT 0`);
   await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS hsn_codes TEXT`);
+  // Distinct from the creator's own `remarks` — this is the approver's note,
+  // captured via the shared Approvals inbox action (approve/reject + comments).
+  await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approval_remarks TEXT`);
+  await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approved_by UUID`);
+  await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
 }
 
 runSchemaInit('tqs_transmittals', ensureTables);
 runSchemaInit('tqs_transmittals_site_ho_cols', ensureTables);
+runSchemaInit('tqs_transmittals_approval_cols', ensureTables);
 
 // Per-project short code for transmittal numbering, same idea as the
 // existing mrs_prefix column — lets a project use a shorter/legacy code
@@ -88,6 +102,188 @@ async function nextTransmittalNumber(companyId, projectId) {
   );
   const seq = parseInt(res.rows[0].last_seq, 10) + 1;
   return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+// ── PDF attachment builder — mirrors the frontend print/PDF layout (logo,
+// navy header, 10-column invoice table, two-party sign-off) so the emailed
+// copy looks identical to what's in the app. Drawn natively with pdfkit,
+// same approach as timesheet-report.service.js. ────────────────────────────
+function buildTransmittalPdfBuffer(t) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 28 });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const items = t.items || [];
+    const totalWithoutTax = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+    const totalTax = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
+    const grandTotal = totalWithoutTax + totalTax;
+
+    const PAGE_W = doc.page.width, LEFT = 28, RIGHT = PAGE_W - 28, W = RIGHT - LEFT;
+
+    // Letterhead
+    try { doc.image(LOGO_PATH, LEFT, 24, { height: 34 }); } catch (_) {}
+    doc.font('Helvetica').fontSize(8).fillColor('#666')
+      .text('BCIM ENGINEERING PVT. LTD.', LEFT, 26, { width: W, align: 'center', characterSpacing: 1.5 });
+    doc.font('Helvetica-Bold').fontSize(15).fillColor(NAVY)
+      .text('INTERNAL INVOICES TRANSMITTAL', LEFT, 37, { width: W, align: 'center' });
+    doc.font('Helvetica').fontSize(8).fillColor('#444')
+      .text(`From: ${t.project_name || ''}`, LEFT, 54, { width: W, align: 'center' });
+    doc.moveTo(LEFT, 66).lineTo(RIGHT, 66).lineWidth(1.6).strokeColor(NAVY).stroke();
+
+    // Meta block
+    let y = 76;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000')
+      .text(`Transmittal No: `, LEFT, y, { continued: true })
+      .fillColor(NAVY).text(t.transmittal_number);
+    doc.font('Helvetica').fillColor('#000')
+      .text(`Revision: ${t.revision || 'REV.000'}    Date: ${fmtDateShort(t.transmittal_date)}`, LEFT, y + 13);
+    y += 32;
+
+    // Table
+    const COLS = [
+      { key: 'sl',     label: 'Sl No',   w: 0.04, align: 'center' },
+      { key: 'inv',    label: 'Invoice No.', w: 0.13 },
+      { key: 'date',   label: 'Dated',   w: 0.08, align: 'center' },
+      { key: 'vendor', label: 'Vendor Name', w: 0.19 },
+      { key: 'amt',    label: 'Amt w/o Tax', w: 0.11, align: 'right' },
+      { key: 'txp',    label: 'Tax %',   w: 0.06, align: 'center' },
+      { key: 'txa',    label: 'Tax Amt', w: 0.10, align: 'right' },
+      { key: 'tot',    label: 'Total',   w: 0.11, align: 'right' },
+      { key: 'hsn',    label: 'HSN',     w: 0.08, align: 'center' },
+      { key: 'rmk',    label: 'Remarks', w: 0.10 },
+    ].map(c => ({ ...c, px: W * c.w }));
+    const HDR_H = 18, RH = 15;
+
+    function drawHeader(yy) {
+      doc.rect(LEFT, yy, W, HDR_H).fill(NAVY);
+      let xx = LEFT;
+      COLS.forEach(c => {
+        doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff')
+          .text(c.label, xx + 3, yy + 5, { width: c.px - 6, align: c.align || 'left', lineBreak: false });
+        xx += c.px;
+      });
+      return yy + HDR_H;
+    }
+    function drawRow(item, idx, yy) {
+      if (idx % 2) doc.rect(LEFT, yy, W, RH).fill('#F3F6FB');
+      const vals = {
+        sl: item.sl_no ?? idx + 1, inv: item.invoice_no || '', date: fmtDateShort(item.invoice_date),
+        vendor: (item.vendor_name || '').toUpperCase(), amt: fmtINR(item.amount),
+        txp: item.tax_pct ? `${item.tax_pct}%` : '', txa: fmtINR(item.tax_amount),
+        tot: fmtINR(Number(item.amount || 0) + Number(item.tax_amount || 0)),
+        hsn: item.hsn_codes || '', rmk: item.item_remarks || '',
+      };
+      let xx = LEFT;
+      COLS.forEach(c => {
+        doc.font(c.key === 'tot' ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor('#1E293B')
+          .text(String(vals[c.key] ?? ''), xx + 3, yy + 4, { width: c.px - 6, align: c.align || 'left', lineBreak: false, ellipsis: true });
+        xx += c.px;
+      });
+      return yy + RH;
+    }
+
+    y = drawHeader(y);
+    for (let i = 0; i < items.length; i++) {
+      if (y + RH > doc.page.height - 120) { doc.addPage(); y = drawHeader(28); }
+      y = drawRow(items[i], i, y);
+    }
+    // Total row
+    doc.rect(LEFT, y, W, HDR_H).fill('#E8EDF5');
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY)
+      .text('TOTAL AMOUNT', LEFT + 3, y + 5, { width: COLS[0].px + COLS[1].px + COLS[2].px + COLS[3].px - 6, align: 'right' });
+    let xx = LEFT + COLS[0].px + COLS[1].px + COLS[2].px + COLS[3].px;
+    doc.text(fmtINR(totalWithoutTax), xx + 3, y + 5, { width: COLS[4].px - 6, align: 'right' });
+    xx += COLS[4].px + COLS[5].px;
+    doc.text(fmtINR(totalTax), xx + 3, y + 5, { width: COLS[6].px - 6, align: 'right' });
+    xx += COLS[6].px;
+    doc.text(fmtINR(grandTotal), xx + 3, y + 5, { width: COLS[7].px - 6, align: 'right' });
+    y += HDR_H + 30;
+
+    // Sign-off
+    const half = W / 2;
+    doc.moveTo(LEFT, y).lineTo(LEFT + half - 10, y).lineWidth(1.2).strokeColor(NAVY).stroke();
+    doc.moveTo(LEFT + half + 10, y).lineTo(RIGHT, y).lineWidth(1.2).strokeColor(NAVY).stroke();
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY)
+      .text(`Issued By : BCIM Engineering Pvt. Ltd (${t.project_short || t.project_name || 'Site'})`, LEFT, y + 6, { width: half - 10 })
+      .text('Received By : BCIM Engineering Pvt Ltd (HO)', LEFT + half + 10, y + 6, { width: half - 10 });
+    doc.font('Helvetica').fontSize(7.5).fillColor('#000')
+      .text(`NAME: ${t.issued_by || '_______________'}`, LEFT, y + 22, { width: half - 10 })
+      .text(`Name: ${t.received_by || '_______________'}`, LEFT + half + 10, y + 22, { width: half - 10 });
+    doc.text('Sign : _______________', LEFT, y + 34, { width: half - 10 })
+      .text('Sign : _______________', LEFT + half + 10, y + 34, { width: half - 10 });
+    doc.text(`Date: ${fmtDateShort(t.issued_date)}`, LEFT, y + 46, { width: half - 10 })
+      .text(`Date: ${t.received_date ? fmtDateShort(t.received_date) : '_______________'}`, LEFT + half + 10, y + 46, { width: half - 10 });
+
+    doc.font('Helvetica').fontSize(6.5).fillColor('#999')
+      .text('Doc.No. BCIM/FR/001/01     Rev. 01     Date: 27.8.2018', LEFT, doc.page.height - 30, { width: W, align: 'center' });
+
+    doc.end();
+  });
+}
+
+// ── Email — fires when a transmittal is sent to HO (best-effort: never
+// blocks the status change if mail fails, but always logs the real error). ──
+async function emailTransmittalToHO(t) {
+  const items = t.items || [];
+  const totalWithoutTax = items.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const totalTax = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
+  const grandTotal = totalWithoutTax + totalTax;
+
+  const rowsHtml = items.map((i, idx) => `
+    <tr>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.sl_no ?? idx + 1}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd">${i.invoice_no || ''}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd">${(i.vendor_name || '').toUpperCase()}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:right">₹${fmtINR(i.amount)}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:right">₹${fmtINR(i.tax_amount)}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:right;font-weight:600">₹${fmtINR(Number(i.amount||0)+Number(i.tax_amount||0))}</td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:13px;color:#1E293B;max-width:680px">
+      <h2 style="color:#1B3A6B;margin-bottom:4px">Invoice Transmittal Sent to HO</h2>
+      <p style="margin:0 0 12px">A new invoice transmittal has been sent from site to Head Office for approval.</p>
+      <table style="border-collapse:collapse;font-size:12px;margin-bottom:14px">
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Transmittal No</td><td style="color:#1B3A6B;font-weight:600">${t.transmittal_number}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Project</td><td>${t.project_name || '—'}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Date</td><td>${fmtDateShort(t.transmittal_date)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Issued By</td><td>${t.issued_by || '—'}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Invoices</td><td>${items.length}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;font-weight:600">Total Amount</td><td style="font-weight:700">₹${fmtINR(grandTotal)}</td></tr>
+      </table>
+      <table style="border-collapse:collapse;width:100%;font-size:12px">
+        <thead><tr style="background:#1B3A6B;color:#fff">
+          <th style="padding:5px 8px;border:1px solid #1B3A6B">Sl</th>
+          <th style="padding:5px 8px;border:1px solid #1B3A6B;text-align:left">Invoice No.</th>
+          <th style="padding:5px 8px;border:1px solid #1B3A6B;text-align:left">Vendor</th>
+          <th style="padding:5px 8px;border:1px solid #1B3A6B;text-align:right">Amt w/o Tax</th>
+          <th style="padding:5px 8px;border:1px solid #1B3A6B;text-align:right">Tax</th>
+          <th style="padding:5px 8px;border:1px solid #1B3A6B;text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <p style="margin-top:16px;font-size:11px;color:#888">Full transmittal is attached as PDF. This transmittal is awaiting your approval on the Approvals page.</p>
+    </div>`;
+
+  try {
+    const pdfBuffer = await buildTransmittalPdfBuffer(t);
+    const result = await sendMail({
+      to: 'dheenadayalan@bcim.in',
+      subject: `Invoice Transmittal Sent to HO — ${t.transmittal_number} (${t.project_name || ''})`,
+      html,
+      attachments: [{
+        filename: `${t.transmittal_number}.pdf`,
+        base64: pdfBuffer.toString('base64'),
+        contentType: 'application/pdf',
+      }],
+    });
+    console.log(`[tqs-transmittal] Email to dheenadayalan@bcim.in for ${t.transmittal_number}: ${JSON.stringify(result)}`);
+  } catch (err) {
+    console.error(`[tqs-transmittal] FAILED to email ${t.transmittal_number}: ${err.message}`);
+  }
 }
 
 // ── GET /tqs/transmittals ─────────────────────────────────────────────────
@@ -282,6 +478,10 @@ router.post('/', async (req, res) => {
 });
 
 // ── PATCH /tqs/transmittals/:id/submit ────────────────────────────────────
+// "Send to HO": flips status, then emails a PDF copy to dheenadayalan@bcim.in
+// for approval. Sent synchronously (not fire-and-forget) so the caller only
+// sees success once the email attempt is done — but a mail failure still
+// never blocks the status change, since the send itself already caught.
 router.patch('/:id/submit', async (req, res) => {
   try {
     const r = await query(
@@ -292,7 +492,15 @@ router.patch('/:id/submit', async (req, res) => {
       [req.params.id, req.user.company_id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Transmittal not found or not in draft state' });
-    res.json(r.rows[0]);
+    const transmittal = r.rows[0];
+
+    const projRes = await query(`SELECT name FROM projects WHERE id = $1`, [transmittal.project_id]);
+    const itemsRes = await query(`SELECT * FROM tqs_transmittal_items WHERE transmittal_id = $1 ORDER BY sl_no`, [transmittal.id]);
+    const full = { ...transmittal, project_name: projRes.rows[0]?.name, items: itemsRes.rows };
+
+    await emailTransmittalToHO(full); // best-effort — logs its own errors, never throws
+
+    res.json(transmittal);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

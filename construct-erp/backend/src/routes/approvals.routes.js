@@ -136,9 +136,12 @@ function roleMatchesStage(user, stage) {
 // Returns all items across all modules that need this user's action
 // ════════════════════════════════════════════════════════════════════════════
 // it@bcim.in is the system/IT admin and always gets the full feed.
+// dheenadayalan@bcim.in approves Bill Tracker HO transmittals — added instead
+// of changing their users.role (which is 'user' and used elsewhere) so this
+// stays scoped to just the approvals feed.
 // stephen@bcim.in is the MD — they must use their DB role (managing_director)
 // so that stage filtering works correctly. Do NOT add stephen here.
-const FULL_APPROVALS_EMAILS = ['it@bcim.in'];
+const FULL_APPROVALS_EMAILS = ['it@bcim.in', 'dheenadayalan@bcim.in'];
 
 router.get('/pending', loadProjectScope, async (req, res) => {
   try {
@@ -527,6 +530,33 @@ router.get('/pending', loadProjectScope, async (req, res) => {
       } catch (e) { console.error('[approvals/pending] petty cash feed failed:', e.message); }
     }
 
+    // ── 10. Bill Tracker Transmittals (Site → HO invoices) ────────────────────
+    if (['admin','super_admin'].includes(role)) {
+      try {
+        let ttSql = `
+          SELECT t.id, t.transmittal_number AS ref_no, t.transmittal_date AS doc_date,
+                 COALESCE((SELECT SUM(amount) FROM tqs_transmittal_items WHERE transmittal_id = t.id), 0) AS amount,
+                 t.status, t.created_at, 'Pending Approval' AS current_stage,
+                 'BCIM Head Office' AS party_name, p.name AS project_name,
+                 u.name AS submitted_by,
+                 CONCAT((SELECT COUNT(*) FROM tqs_transmittal_items WHERE transmittal_id = t.id), ' invoice(s)') AS extra_info,
+                 'Transmittal' AS doc_type, 'tqs_transmittal' AS entity_type,
+                 '/tqs/transmittal' AS action_url
+          FROM tqs_transmittals t
+          LEFT JOIN projects p ON p.id = t.project_id
+          LEFT JOIN users   u ON u.id = t.created_by
+          WHERE t.company_id = $1 AND t.status = 'submitted' AND t.is_deleted = FALSE`;
+        let ttParams = [cid];
+        if (!req.isGlobalRole) {
+          const ids = req.allowedProjectIds || [];
+          ttParams.push(ids);
+          ttSql += ` AND (t.project_id IS NULL OR t.project_id = ANY($${ttParams.length}::uuid[]))`;
+        }
+        const r = await query(`${ttSql} ORDER BY t.created_at ASC LIMIT 100`, ttParams);
+        items.push(...r.rows);
+      } catch (e) { console.error('[approvals/pending] transmittal feed failed:', e.message); }
+    }
+
     // ── Sort all by created_at (oldest first — most urgent) ───────────────────
     items.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
@@ -554,6 +584,7 @@ const ACTION_ENTITY_PROJECT_LOOKUP = {
   po:               { table: 'purchase_orders',                projectCol: 'project_id' },
   work_order:       { table: 'work_orders',                    projectCol: 'project_id' },
   petty_cash_entry: { table: 'stores_petty_cash_entries',      projectCol: 'project_id' },
+  tqs_transmittal:  { table: 'tqs_transmittals',                projectCol: 'project_id' },
 };
 
 router.post('/action', loadProjectScope, async (req, res) => {
@@ -879,6 +910,37 @@ router.post('/action', loadProjectScope, async (req, res) => {
              SET status='Rejected', rejected_reason=$1, updated_at=NOW()
              WHERE id=$2 AND company_id=$3`,
             [comments || 'Rejected', entity_id, CID(req)]
+          );
+        }
+        break;
+      }
+
+      case 'tqs_transmittal': {
+        const ttRes = await query(
+          `SELECT id, status FROM tqs_transmittals WHERE id=$1 AND company_id=$2 AND is_deleted = FALSE`,
+          [entity_id, CID(req)]
+        );
+        if (!ttRes.rows.length) return res.status(404).json({ error: 'Transmittal not found' });
+        const tt = ttRes.rows[0];
+        if (tt.status !== 'submitted') {
+          return res.status(400).json({ error: `Transmittal at status "${tt.status}" cannot be actioned` });
+        }
+
+        if (action === 'approve') {
+          await query(
+            `UPDATE tqs_transmittals
+             SET status='received', approved_by=$1, approved_at=NOW(),
+                 approval_remarks=$2, updated_at=NOW()
+             WHERE id=$3 AND company_id=$4`,
+            [uid, comments || null, entity_id, CID(req)]
+          );
+        } else {
+          await query(
+            `UPDATE tqs_transmittals
+             SET status='draft', approved_by=$1, approved_at=NOW(),
+                 approval_remarks=$2, updated_at=NOW()
+             WHERE id=$3 AND company_id=$4`,
+            [uid, comments || 'Rejected', entity_id, CID(req)]
           );
         }
         break;
