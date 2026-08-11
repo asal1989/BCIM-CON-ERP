@@ -135,13 +135,19 @@ function roleMatchesStage(user, stage) {
 // GET /api/v1/approvals/pending
 // Returns all items across all modules that need this user's action
 // ════════════════════════════════════════════════════════════════════════════
-// it@bcim.in is the system/IT admin and always gets the full feed.
-// dheenadayalan@bcim.in approves Bill Tracker HO transmittals — added instead
-// of changing their users.role (which is 'user' and used elsewhere) so this
-// stays scoped to just the approvals feed.
+// it@bcim.in is the system/IT admin and always gets the full feed — every
+// module, every project.
 // stephen@bcim.in is the MD — they must use their DB role (managing_director)
 // so that stage filtering works correctly. Do NOT add stephen here.
-const FULL_APPROVALS_EMAILS = ['it@bcim.in', 'dheenadayalan@bcim.in'];
+const FULL_APPROVALS_EMAILS = ['it@bcim.in'];
+
+// dheenadayalan@bcim.in approves Bill Tracker HO transmittals ONLY — added
+// instead of changing their users.role (which is 'user' and used elsewhere).
+// This must stay scoped to just the transmittal feed/action below: it must
+// NOT feed into the `role` override above, or it silently grants them every
+// other admin-only approval feed (SC bills, MRS, POs, HR items, ...) too —
+// that's exactly the bug this comment is here to prevent regressing.
+const TRANSMITTAL_APPROVAL_EMAILS = ['dheenadayalan@bcim.in'];
 
 router.get('/pending', loadProjectScope, async (req, res) => {
   try {
@@ -531,7 +537,7 @@ router.get('/pending', loadProjectScope, async (req, res) => {
     }
 
     // ── 10. Bill Tracker Transmittals (Site → HO invoices) ────────────────────
-    if (['admin','super_admin'].includes(role)) {
+    if (['admin','super_admin'].includes(role) || TRANSMITTAL_APPROVAL_EMAILS.includes(email)) {
       try {
         let ttSql = `
           SELECT t.id, t.transmittal_number AS ref_no, t.transmittal_date AS doc_date,
@@ -599,12 +605,16 @@ router.post('/action', loadProjectScope, async (req, res) => {
     const now   = new Date().toISOString();
     const role  = ROLE(req);
 
-    // FULL_APPROVALS_EMAILS members (e.g. dheenadayalan@bcim.in for Bill
-    // Tracker transmittals) see every project's items in GET /pending via a
-    // role bypass there — this must be the same bypass here, or they can see
-    // an item in their inbox but get a 403 the moment they try to act on it,
-    // since their real DB role ('user') has no project assignments.
-    const isFullApprovalsBypass = FULL_APPROVALS_EMAILS.includes(String(req.user.email || '').toLowerCase());
+    // TRANSMITTAL_APPROVAL_EMAILS (dheenadayalan@bcim.in) see every project's
+    // transmittals in GET /pending via a bypass there — this must be the same
+    // bypass here, or they can see one in their inbox but get a 403 the
+    // moment they try to act on it, since their real DB role ('user') has no
+    // project assignments. Scoped to entity_type === 'tqs_transmittal' only —
+    // this must never become a blanket project-scope bypass (see the same
+    // note on TRANSMITTAL_APPROVAL_EMAILS above).
+    const isTransmittalApprovalBypass =
+      entity_type === 'tqs_transmittal' &&
+      TRANSMITTAL_APPROVAL_EMAILS.includes(String(req.user.email || '').toLowerCase());
 
     // This endpoint used to trust entity_id blindly — a project-scoped user
     // (e.g. a Project Manager on one project) who knew/guessed another
@@ -612,7 +622,7 @@ router.post('/action', loadProjectScope, async (req, res) => {
     // filtering entirely. Verify project access up front for every entity
     // type that carries a project_id, before any mutation runs.
     const lookup = ACTION_ENTITY_PROJECT_LOOKUP[entity_type];
-    if (lookup && !req.isGlobalRole && !isFullApprovalsBypass) {
+    if (lookup && !req.isGlobalRole && !isTransmittalApprovalBypass) {
       const projRes = await query(
         `SELECT ${lookup.projectCol} AS project_id FROM ${lookup.table} WHERE id=$1`,
         [entity_id]
