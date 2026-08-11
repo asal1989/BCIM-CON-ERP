@@ -24,6 +24,14 @@ const PROJECT_INJECT_SKIP = [
   /\/quotations\/vendor-rfq/,
   /\/hr-admin\/employees/,  // HR-only endpoint; all employees visible regardless of project context
   /\/hr-admin\/onboarding/, // Onboarding Dashboard — company-wide, not project-scoped
+  // A transmittal can now bundle invoices from several projects at once
+  // (project_id is NULL on the record itself in that case) — auto-injecting
+  // whatever project happens to be selected in the header would silently
+  // filter every multi-project transmittal out of both the list and the
+  // "browse invoices" picker for anyone who has a project selected, which
+  // is the common case. The page/modal already send project_id/project_ids
+  // explicitly when a project-scoped view is actually wanted.
+  /\/tqs\/transmittals/,
 ];
 
 function shouldInjectProject(url) {

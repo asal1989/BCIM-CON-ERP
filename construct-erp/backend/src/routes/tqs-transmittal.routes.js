@@ -322,7 +322,10 @@ router.get('/', async (req, res) => {
     const params = [req.user.company_id];
     let i = 2;
 
-    if (project_id)  { conditions.push(`t.project_id = $${i++}`);                          params.push(project_id); }
+    // A multi-project transmittal has t.project_id = NULL — filtering by a
+    // single project must still surface it if that project is one of its
+    // items' sources, not just when it's the transmittal's sole project.
+    if (project_id)  { conditions.push(`(t.project_id = $${i} OR EXISTS (SELECT 1 FROM tqs_transmittal_items ti3 WHERE ti3.transmittal_id = t.id AND ti3.project_id = $${i}))`); params.push(project_id); i++; }
     if (status)      { conditions.push(`t.status = $${i++}`);                              params.push(status); }
     if (from_date)   { conditions.push(`t.transmittal_date >= $${i++}`);                   params.push(from_date); }
     if (to_date)     { conditions.push(`t.transmittal_date <= $${i++}`);                   params.push(to_date); }
