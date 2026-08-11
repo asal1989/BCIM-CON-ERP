@@ -599,13 +599,20 @@ router.post('/action', loadProjectScope, async (req, res) => {
     const now   = new Date().toISOString();
     const role  = ROLE(req);
 
+    // FULL_APPROVALS_EMAILS members (e.g. dheenadayalan@bcim.in for Bill
+    // Tracker transmittals) see every project's items in GET /pending via a
+    // role bypass there — this must be the same bypass here, or they can see
+    // an item in their inbox but get a 403 the moment they try to act on it,
+    // since their real DB role ('user') has no project assignments.
+    const isFullApprovalsBypass = FULL_APPROVALS_EMAILS.includes(String(req.user.email || '').toLowerCase());
+
     // This endpoint used to trust entity_id blindly — a project-scoped user
     // (e.g. a Project Manager on one project) who knew/guessed another
     // project's item ID could approve/reject it directly, bypassing the feed's
     // filtering entirely. Verify project access up front for every entity
     // type that carries a project_id, before any mutation runs.
     const lookup = ACTION_ENTITY_PROJECT_LOOKUP[entity_type];
-    if (lookup && !req.isGlobalRole) {
+    if (lookup && !req.isGlobalRole && !isFullApprovalsBypass) {
       const projRes = await query(
         `SELECT ${lookup.projectCol} AS project_id FROM ${lookup.table} WHERE id=$1`,
         [entity_id]
