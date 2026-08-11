@@ -2211,7 +2211,7 @@ function PayslipsTab() {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
           {[
-            { label:'Gross Earnings',    val:`₹${t.gross.toLocaleString('en-IN')}`,       color:'#1E293B' },
+            { label:'Gross Earnings',    val:`₹${t.gross.toLocaleString('en-IN')}`,       color:'#000000' },
             { label:'Total Deductions',  val:`₹${t.deductions.toLocaleString('en-IN')}`,  color:'#EF4444' },
             { label:'Net Paid',          val:`₹${t.net.toLocaleString('en-IN')}`,         color:ACCENT    },
           ].map(({ label, val, color }) => (
@@ -2726,7 +2726,7 @@ function ManagerDeskTab() {
       {rejectModal.open && (
         <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }} onClick={closeReject}>
           <div style={{ ...GCA, padding:24, width:'100%', maxWidth:360, margin:'0 16px' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize:14, fontWeight:700, color:'#1E293B', marginBottom:12 }}>Reason for Rejection</h3>
+            <h3 style={{ fontSize:14, fontWeight:700, color:'#000000', marginBottom:12 }}>Reason for Rejection</h3>
             <textarea style={{ width:'100%', borderRadius:8, border:'1px solid rgba(0,0,0,0.12)', padding:10, fontSize:13, resize:'none', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
               rows={3} placeholder="Enter reason (optional)" value={rejectReason} onChange={e => setRejectReason(e.target.value)} />
             <div style={{ marginTop:14, display:'flex', justifyContent:'flex-end', gap:8 }}>
@@ -2962,7 +2962,7 @@ function TrainingTab() {
                   return (
                     <tr key={r.id} style={{ borderBottom:'1px solid rgba(0,0,0,0.04)' }}>
                       <td style={{ padding:'10px 12px' }}>
-                        <p style={{ fontWeight:600, color:'#1E293B' }}>{r.training_name}</p>
+                        <p style={{ fontWeight:600, color:'#000000' }}>{r.training_name}</p>
                         {r.reason && <p style={{ fontSize:11, color:'#94A3B8', marginTop:2, maxWidth:220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.reason}</p>}
                       </td>
                       <td style={{ padding:'10px 12px', fontSize:12, color:'#64748B' }}>{r.category || String.fromCharCode(0x2014)}</td>
@@ -3052,7 +3052,7 @@ function AssetsTab() {
                   <span style={{ fontSize:28 }}>{ASSET_ICONS[a.category] || 'ðŸ”¦'}</span>
                   <StatusBadge value={a.status === 'assigned' ? 'approved' : a.status} />
                 </div>
-                <p style={{ fontSize:13.5, fontWeight:700, color:'#1E293B' }}>{a.asset_name}</p>
+                <p style={{ fontSize:13.5, fontWeight:700, color:'#000000' }}>{a.asset_name}</p>
                 <p style={{ fontSize:11.5, color:'#64748B', textTransform:'capitalize' }}>{String(a.category||'').replace(/_/g,' ')}</p>
                 <dl style={{ marginTop:12, display:'flex', flexDirection:'column', gap:4 }}>
                   {a.asset_code && <div style={{ display:'flex', justifyContent:'space-between' }}><dt style={{ fontSize:11, color:'#94A3B8' }}>Code</dt><dd style={{ fontSize:11, fontWeight:600, color:'#475569' }}>{a.asset_code}</dd></div>}
@@ -3328,7 +3328,7 @@ function KnowledgeTab() {
                           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                             <BookOpen size={17} style={{ color:ACCENT, flexShrink:0 }} />
                             <div>
-                              <p style={{ fontSize:13, fontWeight:600, color:'#1E293B' }}>{d.title}</p>
+                              <p style={{ fontSize:13, fontWeight:600, color:'#000000' }}>{d.title}</p>
                               <p style={{ fontSize:11, color:'#94A3B8', marginTop:1 }}>
                                 {d.policy_code ? `${d.policy_code} · ` : ''}v{d.version}
                                 {d.effective_date ? ` · ${String(d.effective_date).slice(0,10)}` : ''}
@@ -3706,7 +3706,7 @@ function EngageTab({ profile }) {
                   <>
                     <textarea rows={3} value={postBody} placeholder={`What's on your mind, ${(profile?.name||'').split(' ')[0]||'you'}? 💬`}
                       onChange={e=>setPostBody(e.target.value)}
-                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#1E293B',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box',transition:'.15s' }}
+                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#000000',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box',transition:'.15s' }}
                       onFocus={e=>{e.target.style.borderColor=T.pri;e.target.style.boxShadow=`0 0 0 3px rgba(37,99,235,.08)`;}}
                       onBlur={e=>{e.target.style.borderColor=T.bdr;e.target.style.boxShadow='';}}
                     />
@@ -3727,7 +3727,7 @@ function EngageTab({ profile }) {
                       <div>
                         <label style={{ fontSize:10.5,fontWeight:700,color:'#64748B',display:'block',marginBottom:4 }}>Appreciate</label>
                         <select value={kudosTo} onChange={e=>setKudosTo(e.target.value)}
-                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#1E293B' }}>
+                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#000000' }}>
                           <option value="">Select a colleague…</option>
                           {(colleagues.data||[]).map(c=><option key={c.id} value={c.id}>{c.name}{c.designation_name?` — ${c.designation_name}`:''}</option>)}
                         </select>
@@ -3735,14 +3735,14 @@ function EngageTab({ profile }) {
                       <div>
                         <label style={{ fontSize:10.5,fontWeight:700,color:'#64748B',display:'block',marginBottom:4 }}>Badge</label>
                         <select value={kudosBadge} onChange={e=>setKudosBadge(e.target.value)}
-                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#1E293B' }}>
+                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#000000' }}>
                           {KUDOS_BADGES.map(b=><option key={b} value={b}>{b}</option>)}
                         </select>
                       </div>
                     </div>
                     <textarea rows={2} value={kudosMsg} placeholder="Add a personal message (optional)…"
                       onChange={e=>setKudosMsg(e.target.value)}
-                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#1E293B',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box' }}
+                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#000000',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box' }}
                     />
                     <div style={{ display:'flex', justifyContent:'flex-end' }}>
                       <button disabled={!kudosTo||create.isPending} onClick={()=>create.mutate()}
