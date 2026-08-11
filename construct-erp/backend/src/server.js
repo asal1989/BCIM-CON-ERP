@@ -1295,6 +1295,9 @@ if (require.main === module) {
     const { initAbsentSummary } = require('./utils/hr-absent-summary.service');
     initAbsentSummary();
 
+    const { initMarkAbsent } = require('./utils/hr-mark-absent.service');
+    initMarkAbsent();
+
     const { initManpowerClientReport } = require('./utils/manpower-client-report.service');
     initManpowerClientReport();
 

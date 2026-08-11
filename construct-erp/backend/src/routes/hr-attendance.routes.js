@@ -1571,6 +1571,21 @@ router.post('/absent-summary/run', authorize('super_admin','admin','hr','hr_admi
 });
 
 // ═══════════════════════════════════════════════════════════
+// MARK ABSENT — backfill hr_attendance rows for employees with no
+// ESSL swipe on a given day (manual trigger; normally runs nightly)
+// POST /hr-admin/attendance/mark-absent/run
+// Body: { days? }   (defaults to the last 5 days)
+// ═══════════════════════════════════════════════════════════
+router.post('/mark-absent/run', authorize('super_admin','admin','hr','hr_admin','hr_manager'), async (req, res) => {
+  try {
+    const { runMarkAbsent } = require('../utils/hr-mark-absent.service');
+    const { days } = req.body;
+    const result = await runMarkAbsent({ days: days ? parseInt(days, 10) : undefined, manual: true });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // RECALCULATE ATTENDANCE
 // POST /hr-admin/attendance/recalculate  { from, to }
 // Re-derives status/late_minutes from stored in_time/out_time for both staff and SC workers
