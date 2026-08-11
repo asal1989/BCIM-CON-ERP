@@ -740,6 +740,13 @@ export default function App() {
               {/* Print pages — ProtectedRoute but NO Layout sidebar */}
               <Route path="/tqs/bills/:id/payment-cert"    element={<ProtectedRoute><BillTrackerPaymentCertPrint /></ProtectedRoute>} />
               <Route path="/tqs/bills/:id/ra-abstract"      element={<ProtectedRoute><QSRABillPrint /></ProtectedRoute>} />
+              {/* Was nested inside the main Layout-wrapped route group, so it
+                  showed the full app top nav (wrong title, project selector,
+                  etc.) around what should be a clean print view — moved here
+                  to match the other print pages. allowWithoutProject since a
+                  self-service employee printing their own payslip has no
+                  reason to need a selected project. */}
+              <Route path="/ess/payslip/:id" element={<ProtectedRoute allowWithoutProject><ESSPayslipPrintPage /></ProtectedRoute>} />
 
               {/* Private — All ERP module routes now under ProtectedRoute */}
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -970,7 +977,6 @@ export default function App() {
                 <Route path="hr/attendance" element={<AttendancePage />} />
                 <Route path="hr/payroll" element={<PayrollPage />} />
                 <Route path="ess" element={<ESSPortalPage />} />
-                <Route path="ess/payslip/:id" element={<ESSPayslipPrintPage />} />
 
                 {/* HR & Admin */}
                 <Route path="hr-admin" element={<RequireModule module="HR & Admin"><HRDashboardPage /></RequireModule>} />

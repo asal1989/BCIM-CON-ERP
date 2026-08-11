@@ -182,7 +182,7 @@ export function PayslipContent({ p, earnings, deductions, employerContribution }
     <div className="bg-white text-black p-6 print:shadow-none print:max-w-none text-[13px]" style={{fontFamily:'Arial,sans-serif'}}>
       {/* Company Header */}
       <div className="flex items-center justify-between pb-2">
-        <div style={{width:48}}/>
+        <img src="/bcim-logo.png" alt="BCIM" style={{ width: 48, height: 48, objectFit: 'contain' }} />
         <div className="text-center flex-1">
           <div className="text-lg font-bold">{p.company_name || 'BCIM ENGINEERING PRIVATE LIMITED'}</div>
           <div className="text-xs mt-0.5">{p.company_address || '# 11, B Wing, Divyasree Chambers, "O" Shaugnessy Road, Bangalore – 560 025, Karnataka, INDIA'}</div>
