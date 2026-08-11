@@ -325,7 +325,7 @@ function TabShell({ bg, gradient, mesh, label, title, subtitle, icon: Icon, stat
             {stats.map((s, i) => (
               <div key={s.label} style={{ padding:'14px 16px', borderRight:i<stats.length-1?'1px solid rgba(0,0,0,.06)':undefined }}>
                 <div style={{ fontSize:10.5,fontWeight:700,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:5 }}>{s.label}</div>
-                <div style={{ fontSize:20,fontWeight:800,color:s.color||'#0F172A',letterSpacing:'-.02em',fontVariantNumeric:'tabular-nums',lineHeight:1 }}>{s.value}</div>
+                <div style={{ fontSize:20,fontWeight:800,color:s.color||'#000000',letterSpacing:'-.02em',fontVariantNumeric:'tabular-nums',lineHeight:1 }}>{s.value}</div>
                 {s.sub && <div style={{ fontSize:11,color:'#64748B',marginTop:3 }}>{s.sub}</div>}
               </div>
             ))}
@@ -478,21 +478,21 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
     },
     {
       label: 'Leave Balance', bg: '#E3F5F1', fg: '#0D9488', Icon: CalendarOff,
-      body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{Number(totalBalance).toFixed(1)}</p>,
+      body: <p style={{ fontSize:24, fontWeight:700, color:'#000000', lineHeight:1 }}>{Number(totalBalance).toFixed(1)}</p>,
       sub: [casualBal>0&&`Casual ${Number(casualBal).toFixed(1)}`, earnedBal>0&&`Earned ${Number(earnedBal).toFixed(1)}`].filter(Boolean).join(' · ') || 'days available',
       cta: { label: 'View Leave', onClick: () => setActive('leave') },
     },
     {
       label: 'Latest Payslip', bg: '#FEF3D6', fg: '#B45309', Icon: BadgeIndianRupee,
       body: payroll?.month
-        ? <p style={{ fontSize:20, fontWeight:700, color:'#0F172A', lineHeight:1 }}>₹{Number(payroll.net_pay||0).toLocaleString('en-IN')}</p>
+        ? <p style={{ fontSize:20, fontWeight:700, color:'#000000', lineHeight:1 }}>₹{Number(payroll.net_pay||0).toLocaleString('en-IN')}</p>
         : <p style={{ fontSize:12, color:'#94A3B8', marginTop:4 }}>No payslip yet</p>,
       sub: payroll?.month ? `${MONTH_NAMES[(payroll.month||1)-1]} ${payroll.year} · Net pay` : 'Not processed',
       cta: payroll?.month ? { label: 'View Payslip', onClick: () => payroll.id && navigate(`/hr-admin/payroll/${payroll.id}/payslip`) } : null,
     },
     {
       label: 'My Requests', bg: '#FCE7F3', fg: '#DB2777', Icon: FolderUp,
-      body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{pendingTotal}</p>,
+      body: <p style={{ fontSize:24, fontWeight:700, color:'#000000', lineHeight:1 }}>{pendingTotal}</p>,
       sub: `Leave ${pendingLeave} · Reg. ${pendingCorr} pending`,
       cta: { label: 'View Requests', onClick: () => setActive('hr-requests') },
     },
@@ -501,7 +501,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
   /* ── design tokens (dashboard only) ── */
   const T = {
     bg:'#F8FAFC', card:'#FFFFFF', bdr:'#E5E7EB',
-    t1:'#0F172A', t2:'#334155', t3:'#64748B', t4:'#94A3B8',
+    t1:'#000000', t2:'#334155', t3:'#64748B', t4:'#94A3B8',
     pri:'#2563EB', purp:'#7C3AED', cyan:'#06B6D4',
     suc:'#22C55E', warn:'#F59E0B', dan:'#EF4444',
     sh:'0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)',
@@ -1031,7 +1031,7 @@ function ProfileTab({ profile, balances }) {
   /* ── tokens ── */
   const T = {
     bg:'#F1F5F9', card:'#FFFFFF', bdr:'#E2E8F0',
-    t1:'#0F172A', t2:'#334155', t3:'#64748B', t4:'#94A3B8',
+    t1:'#000000', t2:'#334155', t3:'#64748B', t4:'#94A3B8',
     pri:'#2563EB', purp:'#7C3AED', cyan:'#06B6D4',
     suc:'#22C55E', warn:'#F59E0B', dan:'#EF4444',
     sh:'0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)',
@@ -1990,7 +1990,7 @@ function LeaveTab({ leaveTypes }) {
             <div style={CARD_ICON(k.bg)}><k.icon size={18} color={k.color} /></div>
             <div>
               <div style={{ fontSize:10.5, fontWeight:700, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'.06em' }}>{k.label}</div>
-              <div style={{ fontSize:22, fontWeight:800, color:'#0F172A', lineHeight:1.25, fontVariantNumeric:'tabular-nums' }}>{k.value}</div>
+              <div style={{ fontSize:22, fontWeight:800, color:'#000000', lineHeight:1.25, fontVariantNumeric:'tabular-nums' }}>{k.value}</div>
             </div>
           </div>
         ))}
@@ -2035,7 +2035,7 @@ function LeaveTab({ leaveTypes }) {
           <div style={CARD_HEAD}>
             <div style={CARD_ICON('#EFF6FF')}><CalendarDays size={16} color={ACCENT} /></div>
             <div>
-              <div style={{ fontSize:13.5, fontWeight:700, color:'#0F172A' }}>Apply Leave</div>
+              <div style={{ fontSize:13.5, fontWeight:700, color:'#000000' }}>Apply Leave</div>
               <div style={{ fontSize:11, color:'#94A3B8' }}>Submit your leave request</div>
             </div>
           </div>
@@ -2079,7 +2079,7 @@ function LeaveTab({ leaveTypes }) {
             <div style={CARD_HEAD}>
               <div style={CARD_ICON('#F5F3FF')}><CalendarDays size={16} color="#7C3AED" /></div>
               <div>
-                <div style={{ fontSize:13.5, fontWeight:700, color:'#0F172A' }}>Leave Calendar</div>
+                <div style={{ fontSize:13.5, fontWeight:700, color:'#000000' }}>Leave Calendar</div>
                 <div style={{ fontSize:11, color:'#94A3B8' }}>{MONTH_NAMES[calMonth]} {calYear}</div>
               </div>
             </div>
@@ -2133,7 +2133,7 @@ function LeaveTab({ leaveTypes }) {
           <div style={CARD_HEAD}>
             <div style={CARD_ICON('#EFF6FF')}><CalendarDays size={16} color={ACCENT} /></div>
             <div>
-              <div style={{ fontSize:13.5, fontWeight:700, color:'#0F172A' }}>Leave History</div>
+              <div style={{ fontSize:13.5, fontWeight:700, color:'#000000' }}>Leave History</div>
               <div style={{ fontSize:11, color:'#94A3B8' }}>Your recent leave requests</div>
             </div>
           </div>
@@ -2193,10 +2193,10 @@ function PayslipsTab() {
       title="My Payslips"
       subtitle={`Year-to-date net pay ₹${t.net.toLocaleString('en-IN')}`}
       stats={[
-        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#000000' },
         { label: 'YTD Deductions', value: `₹${t.deductions.toLocaleString('en-IN')}`, color: '#DC2626' },
         { label: 'YTD Net', value: `₹${t.net.toLocaleString('en-IN')}`, color: '#7C3AED' },
-        { label: 'Latest Payslip', value: latest ? `${latest.month}/${latest.year}` : '--', color: '#0F172A' },
+        { label: 'Latest Payslip', value: latest ? `${latest.month}/${latest.year}` : '--', color: '#000000' },
       ]}
     >
       <div style={{ ...GCA, padding:20 }}>
@@ -2275,10 +2275,10 @@ function YtdReportsTab() {
       title="YTD Reports"
       subtitle={`Month-by-month earnings and deductions for ${year}`}
       stats={[
-        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#000000' },
         { label: 'YTD Deductions', value: `₹${t.deductions.toLocaleString('en-IN')}`, color: '#DC2626' },
         { label: 'YTD Net', value: `₹${t.net.toLocaleString('en-IN')}`, color: '#7C3AED' },
-        { label: 'Months Processed', value: months.length, color: '#0F172A' },
+        { label: 'Months Processed', value: months.length, color: '#000000' },
       ]}
     >
       <div style={{ ...GCA, padding:20 }}>
@@ -2331,10 +2331,10 @@ function ITStatementTab() {
       title="IT Statement"
       subtitle={`Annual salary & TDS summary — FY ${stmt.data?.financial_year || ''}`}
       stats={[
-        { label: 'Gross Income', value: `₹${Number(d?.total_gross||0).toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'Gross Income', value: `₹${Number(d?.total_gross||0).toLocaleString('en-IN')}`, color: '#000000' },
         { label: 'Total TDS', value: `₹${Number(d?.total_tds||0).toLocaleString('en-IN')}`, color: '#DC2626' },
         { label: 'Taxable Income', value: `₹${Number(d?.taxable_income||0).toLocaleString('en-IN')}`, color: '#7C3AED' },
-        { label: 'PAN', value: d?.pan_number || '--', color: '#0F172A' },
+        { label: 'PAN', value: d?.pan_number || '--', color: '#000000' },
       ]}
     >
       <div style={{ ...GCA, padding:20 }}>
@@ -2412,10 +2412,10 @@ function SalaryRevisionTab() {
       title="Salary Revision"
       subtitle="History of your compensation changes"
       stats={[
-        { label: 'Revisions', value: rows.length, color: '#0F172A' },
-        { label: 'Current Basic', value: latest ? `₹${Number(latest.new_basic||0).toLocaleString('en-IN')}` : '--', color: '#0F172A' },
+        { label: 'Revisions', value: rows.length, color: '#000000' },
+        { label: 'Current Basic', value: latest ? `₹${Number(latest.new_basic||0).toLocaleString('en-IN')}` : '--', color: '#000000' },
         { label: 'Current CTC', value: latest?.new_ctc ? `₹${Number(latest.new_ctc).toLocaleString('en-IN')}` : '--', color: '#7C3AED' },
-        { label: 'Last Revised', value: latest ? String(latest.effective_from).slice(0,10) : '--', color: '#0F172A' },
+        { label: 'Last Revised', value: latest ? String(latest.effective_from).slice(0,10) : '--', color: '#000000' },
       ]}
     >
       <div style={{ ...GCA, padding:20 }}>
@@ -2470,8 +2470,8 @@ function DocumentsTab({ policies, userId }) {
       title="My Documents"
       subtitle="Uploaded documents and company policy acknowledgements"
       stats={[
-        { label: 'My Documents', value: (documents.data || []).length, color: '#0F172A' },
-        { label: 'Policies', value: policies.length, color: '#0F172A' },
+        { label: 'My Documents', value: (documents.data || []).length, color: '#000000' },
+        { label: 'Policies', value: policies.length, color: '#000000' },
         { label: 'Acknowledged', value: acked.size, color: '#059669' },
         { label: 'Pending Ack.', value: pendingAcks, color: pendingAcks > 0 ? '#DC2626' : '#059669' },
       ]}
@@ -2563,7 +2563,7 @@ function HRRequestsTab({ serviceRequests }) {
       title="My HR Requests"
       subtitle="Certificates, payroll queries, corrections and general support"
       stats={[
-        { label: 'Total Requests', value: serviceRequests.length, color: '#0F172A' },
+        { label: 'Total Requests', value: serviceRequests.length, color: '#000000' },
         { label: 'Pending', value: pendingReq, color: pendingReq > 0 ? '#DC2626' : '#059669' },
         { label: 'Closed', value: closedReq, color: '#059669' },
       ]}
@@ -2869,8 +2869,8 @@ function TrainingTab() {
       title="Training & Development"
       subtitle="View your training requirements and request new training programs"
       stats={[
-        { label: 'Requirements', value: reqs.length, color: '#0F172A' },
-        { label: 'My Requests', value: myRequests.length, color: '#0F172A' },
+        { label: 'Requirements', value: reqs.length, color: '#000000' },
+        { label: 'My Requests', value: myRequests.length, color: '#000000' },
         { label: 'Pending', value: pendingCnt, color: pendingCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Completed', value: completedCnt, color: '#059669' },
       ]}
@@ -3033,7 +3033,7 @@ function AssetsTab() {
       title="My Assets"
       subtitle="Company equipment currently allocated to you"
       stats={[
-        { label: 'Active Assets', value: active.length, color: '#0F172A' },
+        { label: 'Active Assets', value: active.length, color: '#000000' },
         { label: 'Returned / Past', value: returnedCnt, color: '#64748B' },
       ]}
     >
@@ -3113,7 +3113,7 @@ function HelpdeskTab() {
       title="Helpdesk"
       subtitle="Report IT / equipment issues to the support team"
       stats={[
-        { label: 'Total Tickets', value: ticketRows.length, color: '#0F172A' },
+        { label: 'Total Tickets', value: ticketRows.length, color: '#000000' },
         { label: 'Open', value: openCnt, color: openCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Closed', value: closedCnt, color: '#059669' },
       ]}
@@ -3229,8 +3229,8 @@ function TimesheetTab() {
       subtitle="Daily hours derived from your attendance punches"
       stats={[
         { label: 'Total Hours', value: totalHours, color: '#4D7C0F' },
-        { label: 'Present Days', value: presentDays, color: '#0F172A' },
-        { label: 'Avg Hours/Day', value: avgHours, color: '#0F172A' },
+        { label: 'Present Days', value: presentDays, color: '#000000' },
+        { label: 'Avg Hours/Day', value: avgHours, color: '#000000' },
       ]}
       actions={
         <>
@@ -3299,8 +3299,8 @@ function KnowledgeTab() {
       title="Knowledge Base"
       subtitle="Company policies, guidelines and procedures"
       stats={[
-        { label: 'Published Policies', value: kbRows.length, color: '#0F172A' },
-        { label: 'Categories', value: grouped.length, color: '#0F172A' },
+        { label: 'Published Policies', value: kbRows.length, color: '#000000' },
+        { label: 'Categories', value: grouped.length, color: '#000000' },
       ]}
     >
       <div style={{ ...GCA, padding:20 }}>
@@ -3814,7 +3814,7 @@ function ReimbursementsTab() {
       title="Reimbursements"
       subtitle="Travel, food, supplies and other work expenses"
       stats={[
-        { label: 'Total Claims', value: claimRows.length, color: '#0F172A' },
+        { label: 'Total Claims', value: claimRows.length, color: '#000000' },
         { label: 'Pending Amount', value: `₹${pendingAmt.toLocaleString('en-IN')}`, color: pendingAmt > 0 ? '#DC2626' : '#059669' },
         { label: 'Paid / Approved', value: `₹${paidAmt.toLocaleString('en-IN')}`, color: '#059669' },
       ]}
@@ -3895,8 +3895,8 @@ function LoansTab() {
       title="Loans & Advances"
       subtitle="Salary advances and staff loans (subject to HR approval)"
       stats={[
-        { label: 'Total Requests', value: loanRows.length, color: '#0F172A' },
-        { label: 'Active', value: activeCnt, color: '#0F172A' },
+        { label: 'Total Requests', value: loanRows.length, color: '#000000' },
+        { label: 'Active', value: activeCnt, color: '#000000' },
         { label: 'Outstanding Balance', value: `₹${outstanding.toLocaleString('en-IN')}`, color: outstanding > 0 ? '#DC2626' : '#059669' },
       ]}
     >
