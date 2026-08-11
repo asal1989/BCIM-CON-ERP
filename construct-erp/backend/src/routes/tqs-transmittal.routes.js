@@ -15,6 +15,7 @@ async function ensureTables() {
       company_id          UUID,
       project_id          UUID,
       transmittal_number  TEXT UNIQUE NOT NULL,
+      revision            TEXT DEFAULT 'REV.000',
       transmittal_date    DATE NOT NULL,
       from_dept           TEXT DEFAULT 'QS Department',
       to_dept             TEXT DEFAULT 'Accounts Department',
@@ -43,23 +44,39 @@ async function ensureTables() {
       po_wo_date      DATE,
       vendor_name     TEXT,
       amount          NUMERIC(15,2) DEFAULT 0,
+      tax_pct         NUMERIC(5,2) DEFAULT 0,
+      tax_amount      NUMERIC(15,2) DEFAULT 0,
+      hsn_codes       TEXT,
       item_remarks    TEXT
     );
   `);
+  // Idempotent — these two columns were added after the table already existed
+  // in production for the original QS-to-Accounts flow.
+  await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS revision TEXT DEFAULT 'REV.000'`);
+  await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS tax_pct NUMERIC(5,2) DEFAULT 0`);
+  await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(15,2) DEFAULT 0`);
+  await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS hsn_codes TEXT`);
 }
 
 runSchemaInit('tqs_transmittals', ensureTables);
+runSchemaInit('tqs_transmittals_site_ho_cols', ensureTables);
 
 // ── Auto-number helper ─────────────────────────────────────────────────────
-async function nextTransmittalNumber(companyId) {
-  // MAX-based so deleting a transmittal never causes the next number to collide
+// One continuous sequence per project — "BCIM-<ProjectCode>-HO-INV-001",
+// matching the site's existing paper/Excel transmittal register so numbers
+// stay recognisable to whoever's been filing these by hand.
+async function nextTransmittalNumber(companyId, projectId) {
+  const proj = await query(`SELECT project_code FROM projects WHERE id = $1 AND company_id = $2`, [projectId, companyId]);
+  const projectCode = proj.rows[0]?.project_code || 'GEN';
+  const prefix = `BCIM-${projectCode}-HO-INV-`;
+
   const res = await query(
     `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(transmittal_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
-     FROM tqs_transmittals WHERE company_id = $1 AND transmittal_number ~ '[0-9]+$'`,
-    [companyId]
+     FROM tqs_transmittals WHERE company_id = $1 AND transmittal_number LIKE $2 || '%' AND transmittal_number ~ '[0-9]+$'`,
+    [companyId, prefix]
   );
   const seq = parseInt(res.rows[0].last_seq, 10) + 1;
-  return `BCIM-HO-QS-ACC-${String(seq).padStart(3, '0')}`;
+  return `${prefix}${String(seq).padStart(3, '0')}`;
 }
 
 // ── GET /tqs/transmittals ─────────────────────────────────────────────────
@@ -80,7 +97,7 @@ router.get('/', async (req, res) => {
       SELECT t.*,
              p.name AS project_name,
              (SELECT COUNT(*) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS bill_count,
-             (SELECT COALESCE(SUM(ti.amount),0) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS total_amount
+             (SELECT COALESCE(SUM(ti.amount + ti.tax_amount),0) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS total_amount
       FROM tqs_transmittals t
       LEFT JOIN projects p ON p.id = t.project_id
       WHERE ${conditions.join(' AND ')}
@@ -110,7 +127,10 @@ router.get('/lookup/bills', async (req, res) => {
     const rows = await query(`
       SELECT b.id, b.sl_number, b.inv_number, b.inv_date, b.po_number, b.po_date,
              b.vendor_name, b.workflow_status,
-             COALESCE(u.certified_net, b.total_amount, 0) AS amount,
+             COALESCE(b.basic_amount, 0)                                AS amount,
+             COALESCE(b.gst_amount, 0)                                  AS tax_amount,
+             COALESCE(b.cgst_pct, 0) + COALESCE(b.sgst_pct, 0) + COALESCE(b.igst_pct, 0) AS tax_pct,
+             COALESCE(b.total_amount, 0)                                AS total_amount,
              p.name AS project_name
       FROM tqs_bills b
       LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
@@ -164,27 +184,29 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      project_id, transmittal_date, from_dept, to_dept, to_person,
+      project_id, transmittal_date, revision, from_dept, to_dept, to_person,
       subject, issued_by, issued_date, remarks,
       bill_ids = [],      // array of tqs_bill_ids
-      manual_items = [],  // [{invoice_no,invoice_date,po_wo_ref,po_wo_date,vendor_name,amount,item_remarks}]
+      item_overrides = {}, // { [tqs_bill_id]: { hsn_codes, item_remarks } } — HSN isn't captured anywhere upstream
+      manual_items = [],  // [{invoice_no,invoice_date,vendor_name,amount,tax_pct,tax_amount,hsn_codes,item_remarks}]
     } = req.body;
 
     if (!transmittal_date) return res.status(400).json({ error: 'transmittal_date is required' });
+    if (!project_id) return res.status(400).json({ error: 'project_id is required — the transmittal number is scoped per project' });
 
-    const transmittal_number = await nextTransmittalNumber(req.user.company_id);
+    const transmittal_number = await nextTransmittalNumber(req.user.company_id, project_id);
 
     const result = await withTransaction(async (client) => {
       const ins = await client.query(`
         INSERT INTO tqs_transmittals
-          (company_id, project_id, transmittal_number, transmittal_date,
+          (company_id, project_id, transmittal_number, revision, transmittal_date,
            from_dept, to_dept, to_person, subject,
            issued_by, issued_date, remarks, created_by)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         RETURNING *
       `, [
-        req.user.company_id, project_id || null, transmittal_number, transmittal_date,
-        from_dept || 'QS Department', to_dept || 'Accounts Department', to_person || null, subject || null,
+        req.user.company_id, project_id, transmittal_number, revision || 'REV.000', transmittal_date,
+        from_dept || null, to_dept || 'BCIM Engineering Pvt. Ltd (HO)', to_person || null, subject || null,
         issued_by || req.user.name || null, issued_date || transmittal_date, remarks || null, req.user.id,
       ]);
       const transmittal = ins.rows[0];
@@ -194,9 +216,10 @@ router.post('/', async (req, res) => {
       if (bill_ids.length) {
         const bills = await client.query(
           `SELECT b.id, b.inv_number, b.inv_date, b.po_number, b.po_date, b.vendor_name,
-                  COALESCE(u.certified_net, b.total_amount, 0) AS amount
+                  COALESCE(b.basic_amount, 0) AS amount,
+                  COALESCE(b.gst_amount, 0)   AS tax_amount,
+                  COALESCE(b.cgst_pct, 0) + COALESCE(b.sgst_pct, 0) + COALESCE(b.igst_pct, 0) AS tax_pct
            FROM tqs_bills b
-           LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
            WHERE b.id = ANY($1::uuid[]) AND b.company_id = $2 AND b.is_deleted = FALSE`,
           [bill_ids, req.user.company_id]
         );
@@ -205,14 +228,16 @@ router.post('/', async (req, res) => {
         for (const bid of bill_ids) {
           const b = billMap[bid];
           if (!b) continue;
+          const ov = item_overrides[bid] || {};
           await client.query(`
             INSERT INTO tqs_transmittal_items
               (transmittal_id, sl_no, tqs_bill_id, invoice_no, invoice_date,
-               po_wo_ref, po_wo_date, vendor_name, amount)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               po_wo_ref, po_wo_date, vendor_name, amount, tax_pct, tax_amount, hsn_codes, item_remarks)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           `, [
             transmittal.id, sl++, b.id, b.inv_number, b.inv_date,
-            b.po_number, b.po_date, b.vendor_name, b.amount,
+            b.po_number, b.po_date, b.vendor_name, b.amount, b.tax_pct, b.tax_amount,
+            ov.hsn_codes || null, ov.item_remarks || null,
           ]);
         }
       }
@@ -222,12 +247,12 @@ router.post('/', async (req, res) => {
         await client.query(`
           INSERT INTO tqs_transmittal_items
             (transmittal_id, sl_no, invoice_no, invoice_date,
-             po_wo_ref, po_wo_date, vendor_name, amount, item_remarks)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             vendor_name, amount, tax_pct, tax_amount, hsn_codes, item_remarks)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         `, [
           transmittal.id, sl++, item.invoice_no || null, item.invoice_date || null,
-          item.po_wo_ref || null, item.po_wo_date || null, item.vendor_name || null,
-          item.amount || 0, item.item_remarks || null,
+          item.vendor_name || null, item.amount || 0, item.tax_pct || 0, item.tax_amount || 0,
+          item.hsn_codes || null, item.item_remarks || null,
         ]);
       }
 
