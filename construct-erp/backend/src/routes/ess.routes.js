@@ -1084,6 +1084,25 @@ router.get('/swipes', async (req, res) => {
        LIMIT 200`,
       [companyId, empCode, days]
     );
+
+    // Some ESSL devices never report a real OUT direction — every punch comes
+    // back tagged 'in'/'0'. If nothing in this window ever resolved to a real
+    // OUT, the device clearly isn't distinguishing punches, so infer IN/OUT by
+    // alternating punch order within each day instead of showing "IN" forever.
+    const isRealOut = d => { const v = String(d || '').toLowerCase(); return v.includes('out') || d === '1'; };
+    if (rows.length && !rows.some(r => isRealOut(r.direction))) {
+      const byDay = new Map();
+      for (const r of rows) {
+        const dayKey = new Date(r.swipe_time).toISOString().slice(0, 10);
+        if (!byDay.has(dayKey)) byDay.set(dayKey, []);
+        byDay.get(dayKey).push(r);
+      }
+      for (const dayRows of byDay.values()) {
+        const chronological = [...dayRows].sort((a, b) => new Date(a.swipe_time) - new Date(b.swipe_time));
+        chronological.forEach((r, i) => { r.direction = i % 2 === 0 ? 'in' : 'out'; });
+      }
+    }
+
     res.json({ data: rows });
   } catch (err) {
     // essl_device_logs may not exist on setups without ESSL integration
