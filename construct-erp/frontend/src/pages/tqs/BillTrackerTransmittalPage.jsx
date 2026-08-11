@@ -74,7 +74,7 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
           <div style={{ fontSize: 16, fontWeight: 900, color: NAVY, letterSpacing: 0.5, margin: '2px 0' }}>
             INTERNAL INVOICES TRANSMITTAL
           </div>
-          <div style={{ fontSize: 9, color: '#444' }}>From : {t.project_name || 'Project'}</div>
+          <div style={{ fontSize: 9, color: '#444' }}>From : {t.project_display || t.project_name || 'Project'}</div>
         </div>
         <div style={{ width: 52, flexShrink: 0 }} />
       </div>
@@ -147,7 +147,7 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
         <tbody>
           <tr>
             <td style={{ width: '50%', verticalAlign: 'top', paddingRight: '20px', borderTop: `1.5px solid ${NAVY}`, paddingTop: '10px' }}>
-              <div style={{ fontWeight: 'bold', color: NAVY }}>Issued By : BCIM Engineering Pvt. Ltd ({t.project_short || t.project_name || 'Site'})</div>
+              <div style={{ fontWeight: 'bold', color: NAVY }}>Issued By : BCIM Engineering Pvt. Ltd ({t.project_short || t.project_display || t.project_name || 'Site'})</div>
               <div style={{ marginTop: '18px' }}>NAME: {t.issued_by || '_______________'}</div>
               <div style={{ marginTop: '10px' }}>Sign : _______________</div>
               <div style={{ marginTop: '10px' }}>Date: {fmtDate(t.issued_date)}</div>
@@ -177,12 +177,12 @@ PrintTemplate.displayName = 'PrintTemplate';
 function CreateModal({ onClose, onCreated }) {
   const [projects, setProjects] = useState([]);
   const [bills, setBills] = useState([]);
-  const [selectedBills, setSelectedBills] = useState([]); // full bill objects
+  const [selectedBills, setSelectedBills] = useState([]); // full bill objects, can span multiple projects
   const [itemDetails, setItemDetails] = useState({});     // { [billId]: { hsn_codes, item_remarks } }
   const [billSearch, setBillSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState([]); // [] = browse invoices across every project
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    project_id: '',
     transmittal_date: dayjs().format('YYYY-MM-DD'),
     revision: 'REV.000',
     issued_by: '',
@@ -197,16 +197,22 @@ function CreateModal({ onClose, onCreated }) {
   }, []);
 
   const loadBills = useCallback(async () => {
-    if (!form.project_id) { setBills([]); return; }
     try {
-      const params = { project_id: form.project_id };
+      const params = {};
+      if (projectFilter.length) params.project_ids = projectFilter.join(',');
       if (billSearch) params.search = billSearch;
       const r = await tqsTransmittalAPI.lookupBills(params);
       setBills(r.data || []);
     } catch { /* ignore */ }
-  }, [form.project_id, billSearch]);
+  }, [projectFilter, billSearch]);
 
   useEffect(() => { loadBills(); }, [loadBills]);
+
+  const toggleProjectFilter = (projectId) => {
+    setProjectFilter(prev => prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId]);
+  };
+
+  const distinctSelectedProjects = [...new Set(selectedBills.map(b => b.project_id).filter(Boolean))];
 
   const toggleBill = (bill) => {
     setSelectedBills(prev =>
@@ -221,7 +227,7 @@ function CreateModal({ onClose, onCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.transmittal_date || !form.project_id) return;
+    if (!form.transmittal_date || !selectedBills.length) return;
     setSaving(true);
     try {
       const item_overrides = {};
@@ -256,19 +262,6 @@ function CreateModal({ onClose, onCreated }) {
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Meta fields */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-900 mb-1">Project *</label>
-              <select
-                required
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                value={form.project_id}
-                onChange={e => { setForm(f => ({ ...f, project_id: e.target.value })); setSelectedBills([]); }}
-              >
-                <option value="">— Select Project —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <p className="text-[10px] text-slate-400 mt-1">Transmittal number is generated per project (BCIM-&lt;code&gt;-HO-INV-XXX).</p>
-            </div>
             <div>
               <label className="block text-xs font-medium text-slate-900 mb-1">Transmittal Date *</label>
               <input
@@ -309,69 +302,95 @@ function CreateModal({ onClose, onCreated }) {
             </div>
           </div>
 
-          {/* Bill picker */}
+          {/* Bill picker — browses invoices across every project by default;
+              a transmittal can bundle invoices from more than one project in
+              one go, so there's no upfront project selector gating this. */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-medium text-gray-700">Select Invoices to Include</label>
               {selectedBills.length > 0 && (
                 <span className="text-xs text-blue-600 font-semibold">
-                  {selectedBills.length} selected — Total: ₹{fmt(totalSelected)}
+                  {selectedBills.length} selected across {distinctSelectedProjects.length || 1} project{distinctSelectedProjects.length > 1 ? 's' : ''} — Total: ₹{fmt(totalSelected)}
                 </span>
               )}
             </div>
-            {!form.project_id ? (
-              <div className="border rounded-lg py-8 text-center text-sm text-slate-400">Select a project first</div>
-            ) : (
-              <>
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search invoice no or vendor…"
-                    className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm"
-                    value={billSearch}
-                    onChange={e => setBillSearch(e.target.value)}
-                  />
-                </div>
-                <div className="border rounded-lg max-h-52 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left w-8"></th>
-                        <th className="px-3 py-2 text-left">Invoice No</th>
-                        <th className="px-3 py-2 text-left">Date</th>
-                        <th className="px-3 py-2 text-left">Vendor</th>
-                        <th className="px-3 py-2 text-right">Amount (excl. tax)</th>
-                        <th className="px-3 py-2 text-right">Tax</th>
-                        <th className="px-3 py-2 text-left">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bills.length === 0 && (
-                        <tr><td colSpan={7} className="text-center py-6 text-gray-400">No eligible invoices found</td></tr>
-                      )}
-                      {bills.map(b => {
-                        const checked = !!selectedBills.find(s => s.id === b.id);
-                        return (
-                          <tr
-                            key={b.id}
-                            className={`cursor-pointer hover:bg-blue-50 ${checked ? 'bg-blue-50' : ''}`}
-                            onClick={() => toggleBill(b)}
-                          >
-                            <td className="px-3 py-2">
-                              <input type="checkbox" readOnly checked={checked} className="accent-blue-600" />
-                            </td>
-                            <td className="px-3 py-2 font-medium">{b.inv_number || '—'}</td>
-                            <td className="px-3 py-2">{fmtDate(b.inv_date)}</td>
-                            <td className="px-3 py-2">{(b.vendor_name || '').toUpperCase() || '—'}</td>
-                            <td className="px-3 py-2 text-right">₹{fmt(b.amount)}</td>
-                            <td className="px-3 py-2 text-right">₹{fmt(b.tax_amount)}</td>
-                            <td className="px-3 py-2">
-                              <StatusBadge status={
-                                b.workflow_status === 'paid' ? 'received'
-                                : b.workflow_status === 'accounts' ? 'submitted'
-                                : 'draft'
-                              } />
+            <>
+              {distinctSelectedProjects.length > 1 && (
+                <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-2">
+                  Invoices from {distinctSelectedProjects.length} projects selected — this transmittal will use a company-wide number (BCIM-HO-INV-XXX) instead of a single project's sequence.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {projects.map(p => {
+                  const active = projectFilter.includes(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleProjectFilter(p.id)}
+                      className={`text-[11px] px-2.5 py-1 rounded-full border font-medium ${active ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-slate-600 hover:border-blue-300'}`}
+                    >
+                      {p.name}
+                    </button>
+                  );
+                })}
+                {projectFilter.length > 0 && (
+                  <button type="button" onClick={() => setProjectFilter([])} className="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-slate-400 hover:text-slate-600">
+                    Clear filter
+                  </button>
+                )}
+              </div>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search invoice no, vendor or project…"
+                  className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm"
+                  value={billSearch}
+                  onChange={e => setBillSearch(e.target.value)}
+                />
+              </div>
+              <div className="border rounded-lg max-h-52 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left w-8"></th>
+                      <th className="px-3 py-2 text-left">Invoice No</th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Project</th>
+                      <th className="px-3 py-2 text-left">Vendor</th>
+                      <th className="px-3 py-2 text-right">Amount (excl. tax)</th>
+                      <th className="px-3 py-2 text-right">Tax</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bills.length === 0 && (
+                      <tr><td colSpan={8} className="text-center py-6 text-gray-400">No eligible invoices found</td></tr>
+                    )}
+                    {bills.map(b => {
+                      const checked = !!selectedBills.find(s => s.id === b.id);
+                      return (
+                        <tr
+                          key={b.id}
+                          className={`cursor-pointer hover:bg-blue-50 ${checked ? 'bg-blue-50' : ''}`}
+                          onClick={() => toggleBill(b)}
+                        >
+                          <td className="px-3 py-2">
+                            <input type="checkbox" readOnly checked={checked} className="accent-blue-600" />
+                          </td>
+                          <td className="px-3 py-2 font-medium">{b.inv_number || '—'}</td>
+                          <td className="px-3 py-2">{fmtDate(b.inv_date)}</td>
+                          <td className="px-3 py-2 text-slate-500">{b.project_name || '—'}</td>
+                          <td className="px-3 py-2">{(b.vendor_name || '').toUpperCase() || '—'}</td>
+                          <td className="px-3 py-2 text-right">₹{fmt(b.amount)}</td>
+                          <td className="px-3 py-2 text-right">₹{fmt(b.tax_amount)}</td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={
+                              b.workflow_status === 'paid' ? 'received'
+                              : b.workflow_status === 'accounts' ? 'submitted'
+                              : 'draft'
+                            } />
                             </td>
                           </tr>
                         );
@@ -380,7 +399,6 @@ function CreateModal({ onClose, onCreated }) {
                   </table>
                 </div>
               </>
-            )}
           </div>
 
           {/* Per-item HSN / remarks — not captured anywhere upstream, so filled here */}
@@ -417,7 +435,7 @@ function CreateModal({ onClose, onCreated }) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving || !form.project_id}
+            disabled={saving || !selectedBills.length}
             className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
@@ -542,7 +560,7 @@ function DetailView({ id, onBack, onRefresh }) {
     doc.setFontSize(9);
     doc.text('BCIM ENGINEERING PVT. LTD.', 148, 21, { align: 'center' });
     doc.setTextColor(0);
-    doc.text(`From: ${t.project_name || ''}`, 282, 26, { align: 'right' });
+    doc.text(`From: ${t.project_display || t.project_name || ''}`, 282, 26, { align: 'right' });
     doc.setDrawColor(...NAVY);
     doc.setLineWidth(0.8);
     doc.line(14, 30, 282, 30);
@@ -580,7 +598,7 @@ function DetailView({ id, onBack, onRefresh }) {
 
     const y = doc.lastAutoTable.finalY + 14;
     const blocks = [
-      { label: `Issued By : BCIM Engineering Pvt. Ltd (${t.project_name || 'Site'})`, name: t.issued_by, date: t.issued_date },
+      { label: `Issued By : BCIM Engineering Pvt. Ltd (${t.project_display || t.project_name || 'Site'})`, name: t.issued_by, date: t.issued_date },
       { label: 'Received By : BCIM Engineering Pvt Ltd (HO)', name: t.received_by, date: t.received_date },
     ];
     const bw = 130, bh = 32;
@@ -658,19 +676,20 @@ function DetailView({ id, onBack, onRefresh }) {
           <div><span className="text-slate-900 font-medium text-xs">Transmittal No</span><div className="font-medium text-blue-700">{t.transmittal_number}</div></div>
           <div><span className="text-slate-900 font-medium text-xs">Revision</span><div>{t.revision || 'REV.000'}</div></div>
           <div><span className="text-slate-900 font-medium text-xs">Date</span><div>{fmtDate(t.transmittal_date)}</div></div>
-          <div><span className="text-slate-900 font-medium text-xs">Project (Site)</span><div>{t.project_name || '—'}</div></div>
+          <div><span className="text-slate-900 font-medium text-xs">Project (Site)</span><div>{t.project_display || t.project_name || '—'}</div></div>
           <div><span className="text-slate-900 font-medium text-xs">Issued By</span><div>{t.issued_by || '—'}</div></div>
           {t.received_by && <div><span className="text-slate-900 font-medium text-xs">Received By (HO)</span><div className="text-green-700 font-medium">{t.received_by} on {fmtDate(t.received_date)}</div></div>}
           {t.remarks && <div className="col-span-3"><span className="text-slate-900 font-medium text-xs">Remarks</span><div>{t.remarks}</div></div>}
         </div>
       </div>
 
-      {/* Items table */}
+      {/* Items table — a Project column shows up when this transmittal bundles
+          invoices from more than one project (t.project_id is NULL in that case). */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-100">
             <tr>
-              {['Sl No', 'Invoice No', 'Dated', 'Vendor Name', 'Amt w/o Tax (₹)', 'Tax %', 'Tax Amt (₹)', 'Total (₹)', 'HSN', 'Remarks'].map(h => (
+              {['Sl No', 'Invoice No', 'Dated', ...(!t.project_id ? ['Project'] : []), 'Vendor Name', 'Amt w/o Tax (₹)', 'Tax %', 'Tax Amt (₹)', 'Total (₹)', 'HSN', 'Remarks'].map(h => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-600">{h}</th>
               ))}
             </tr>
@@ -681,6 +700,7 @@ function DetailView({ id, onBack, onRefresh }) {
                 <td className="px-4 py-2 text-center text-gray-500">{item.sl_no ?? idx + 1}</td>
                 <td className="px-4 py-2 font-medium">{item.invoice_no || '—'}</td>
                 <td className="px-4 py-2">{fmtDate(item.invoice_date)}</td>
+                {!t.project_id && <td className="px-4 py-2 text-slate-500 text-xs">{item.project_name || '—'}</td>}
                 <td className="px-4 py-2">{(item.vendor_name || '').toUpperCase() || '—'}</td>
                 <td className="px-4 py-2 text-right">₹{fmt(item.amount)}</td>
                 <td className="px-4 py-2 text-center">{item.tax_pct ? `${item.tax_pct}%` : '—'}</td>
@@ -691,7 +711,7 @@ function DetailView({ id, onBack, onRefresh }) {
               </tr>
             ))}
             <tr className="border-t bg-gray-50 font-semibold">
-              <td colSpan={4} className="px-4 py-2.5 text-right text-sm">TOTAL AMOUNT</td>
+              <td colSpan={!t.project_id ? 5 : 4} className="px-4 py-2.5 text-right text-sm">TOTAL AMOUNT</td>
               <td className="px-4 py-2.5 text-right text-sm">₹{fmt(totalWithoutTax)}</td>
               <td></td>
               <td className="px-4 py-2.5 text-right text-sm">₹{fmt(totalTax)}</td>
@@ -841,7 +861,7 @@ export default function BillTrackerTransmittalPage() {
                 <tr key={t.id} className="border-t hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-blue-700">{t.transmittal_number}</td>
                   <td className="px-4 py-3">{fmtDate(t.transmittal_date)}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.project_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{t.project_display || t.project_name || '—'}</td>
                   <td className="px-4 py-3 text-center">{t.bill_count || 0}</td>
                   <td className="px-4 py-3 font-medium text-right">₹{fmt(t.total_amount)}</td>
                   <td className="px-4 py-3"><StatusBadge status={t.status} /></td>

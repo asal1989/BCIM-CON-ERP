@@ -15,6 +15,18 @@ const NAVY = '#1B3A6B';
 const fmtINR = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDateShort = (d) => d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
 
+// A transmittal's single project_id (and the "From: <project>" label on the
+// print/PDF/email) only tells the full story when every item came from one
+// project. Once invoices span several projects, project_id is NULL and this
+// derives a human label from the items instead.
+function projectDisplayFor(t, items) {
+  if (t.project_name) return t.project_name;
+  const names = [...new Set((items || []).map(i => i.project_name).filter(Boolean))];
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  return `Multiple Projects (${names.length})`;
+}
+
 // ── Auto-create tables ─────────────────────────────────────────────────────
 async function ensureTables() {
   await query(`
@@ -69,11 +81,21 @@ async function ensureTables() {
   await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approval_remarks TEXT`);
   await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approved_by UUID`);
   await query(`ALTER TABLE tqs_transmittals ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
+  // Per-item project — a transmittal can now bundle invoices from several
+  // projects in one go, so `tqs_transmittals.project_id` alone (which drives
+  // the per-project numbering sequence) is no longer enough to know where
+  // each line item actually came from.
+  await query(`ALTER TABLE tqs_transmittal_items ADD COLUMN IF NOT EXISTS project_id UUID`);
+  // tqs_transmittals.project_id must be nullable for a multi-project bundle
+  // (it falls back to a company-wide numbering sequence in that case) — it
+  // was already nullable by definition above, this just makes the intent
+  // explicit for anyone reading the schema later.
 }
 
 runSchemaInit('tqs_transmittals', ensureTables);
 runSchemaInit('tqs_transmittals_site_ho_cols', ensureTables);
 runSchemaInit('tqs_transmittals_approval_cols', ensureTables);
+runSchemaInit('tqs_transmittal_items_project_id', ensureTables);
 
 // Per-project short code for transmittal numbering, same idea as the
 // existing mrs_prefix column — lets a project use a shorter/legacy code
@@ -90,10 +112,16 @@ runSchemaInit('projects_transmittal_prefix', async () => {
 // than its project_code 'DQSTWR001' and matching the site's own existing
 // numbering — BCIM-DQS-HO-INV-001), falling back to project_code otherwise.
 // Same override pattern as the existing mrs_prefix column.
+// projectId is null for a transmittal whose invoices span more than one
+// project — those get a company-wide "BCIM-HO-INV-XXX" sequence instead of
+// a per-project one, since there's no single project code to scope it to.
 async function nextTransmittalNumber(companyId, projectId) {
-  const proj = await query(`SELECT project_code, transmittal_prefix FROM projects WHERE id = $1 AND company_id = $2`, [projectId, companyId]);
-  const projectCode = proj.rows[0]?.transmittal_prefix || proj.rows[0]?.project_code || 'GEN';
-  const prefix = `BCIM-${projectCode}-HO-INV-`;
+  let prefix = 'BCIM-HO-INV-';
+  if (projectId) {
+    const proj = await query(`SELECT project_code, transmittal_prefix FROM projects WHERE id = $1 AND company_id = $2`, [projectId, companyId]);
+    const projectCode = proj.rows[0]?.transmittal_prefix || proj.rows[0]?.project_code || 'GEN';
+    prefix = `BCIM-${projectCode}-HO-INV-`;
+  }
 
   const res = await query(
     `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(transmittal_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
@@ -304,14 +332,23 @@ router.get('/', async (req, res) => {
       SELECT t.*,
              p.name AS project_name,
              (SELECT COUNT(*) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS bill_count,
-             (SELECT COALESCE(SUM(ti.amount + ti.tax_amount),0) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS total_amount
+             (SELECT COALESCE(SUM(ti.amount + ti.tax_amount),0) FROM tqs_transmittal_items ti WHERE ti.transmittal_id = t.id) AS total_amount,
+             -- Distinct source projects across this transmittal's items — used to
+             -- label a multi-project bundle ("Multiple Projects (3)") when
+             -- t.project_id itself is NULL because the items don't share one project.
+             (SELECT COUNT(DISTINCT ti2.project_id) FROM tqs_transmittal_items ti2 WHERE ti2.transmittal_id = t.id AND ti2.project_id IS NOT NULL) AS item_project_count,
+             (SELECT p2.name FROM tqs_transmittal_items ti2 LEFT JOIN projects p2 ON p2.id = ti2.project_id WHERE ti2.transmittal_id = t.id AND ti2.project_id IS NOT NULL LIMIT 1) AS item_project_name_sample
       FROM tqs_transmittals t
       LEFT JOIN projects p ON p.id = t.project_id
       WHERE ${conditions.join(' AND ')}
       ORDER BY t.created_at DESC
     `, params);
 
-    res.json(rows.rows);
+    res.json(rows.rows.map(r => ({
+      ...r,
+      project_display: r.project_name
+        || (r.item_project_count > 1 ? `Multiple Projects (${r.item_project_count})` : r.item_project_name_sample || null),
+    })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -323,17 +360,23 @@ router.get('/', async (req, res) => {
 // MUST be defined before /:id or Express will swallow 'lookup' as a bill ID
 router.get('/lookup/bills', async (req, res) => {
   try {
-    const { project_id, search } = req.query;
+    const { project_id, project_ids, search } = req.query;
     const conditions = [`b.company_id = $1`, `b.is_deleted = FALSE`];
     const params = [req.user.company_id];
     let i = 2;
 
-    if (project_id) { conditions.push(`b.project_id = $${i++}`); params.push(project_id); }
-    if (search)     { conditions.push(`(b.inv_number ILIKE $${i} OR b.vendor_name ILIKE $${i})`); params.push(`%${search}%`); i++; }
+    // project_ids (comma-separated) narrows the picker to a chosen set of
+    // projects for a multi-project transmittal; plain project_id keeps the
+    // original single-project behaviour. Omitting both browses every
+    // project's eligible invoices at once.
+    const idList = project_ids ? String(project_ids).split(',').map(s => s.trim()).filter(Boolean) : null;
+    if (idList && idList.length) { conditions.push(`b.project_id = ANY($${i++}::uuid[])`); params.push(idList); }
+    else if (project_id)         { conditions.push(`b.project_id = $${i++}`); params.push(project_id); }
+    if (search)     { conditions.push(`(b.inv_number ILIKE $${i} OR b.vendor_name ILIKE $${i} OR p.name ILIKE $${i})`); params.push(`%${search}%`); i++; }
 
     const rows = await query(`
       SELECT b.id, b.sl_number, b.inv_number, b.inv_date, b.po_number, b.po_date,
-             b.vendor_name, b.workflow_status,
+             b.vendor_name, b.workflow_status, b.project_id,
              COALESCE(b.basic_amount, 0)                                AS amount,
              COALESCE(b.gst_amount, 0)                                  AS tax_amount,
              COALESCE(b.cgst_pct, 0) + COALESCE(b.sgst_pct, 0) + COALESCE(b.igst_pct, 0) AS tax_pct,
@@ -376,11 +419,14 @@ router.get('/:id', async (req, res) => {
     if (!t.rows.length) return res.status(404).json({ error: 'Not found' });
 
     const items = await query(
-      `SELECT * FROM tqs_transmittal_items WHERE transmittal_id = $1 ORDER BY sl_no`,
+      `SELECT ti.*, p.name AS project_name
+       FROM tqs_transmittal_items ti
+       LEFT JOIN projects p ON p.id = ti.project_id
+       WHERE ti.transmittal_id = $1 ORDER BY sl_no`,
       [req.params.id]
     );
 
-    res.json({ ...t.rows[0], items: items.rows });
+    res.json({ ...t.rows[0], project_display: projectDisplayFor(t.rows[0], items.rows), items: items.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -399,11 +445,41 @@ router.post('/', async (req, res) => {
     } = req.body;
 
     if (!transmittal_date) return res.status(400).json({ error: 'transmittal_date is required' });
-    if (!project_id) return res.status(400).json({ error: 'project_id is required — the transmittal number is scoped per project' });
-
-    const transmittal_number = await nextTransmittalNumber(req.user.company_id, project_id);
+    if (!project_id && !bill_ids.length) {
+      return res.status(400).json({ error: 'project_id is required when there are no invoices selected (nothing to infer the project from)' });
+    }
 
     const result = await withTransaction(async (client) => {
+      // Look up the selected bills first — a transmittal can now bundle
+      // invoices from several projects, so the transmittal's own project_id
+      // (which drives per-project numbering) is derived from what was
+      // actually picked rather than trusted from the request body:
+      //  - all selected bills share one project           -> that project
+      //  - bills span more than one project                -> NULL (company-wide numbering)
+      //  - no bills selected (manual items only)            -> the project_id the caller sent
+      let bills = [];
+      if (bill_ids.length) {
+        const billsRes = await client.query(
+          `SELECT b.id, b.project_id, b.inv_number, b.inv_date, b.po_number, b.po_date, b.vendor_name,
+                  COALESCE(b.basic_amount, 0) AS amount,
+                  COALESCE(b.gst_amount, 0)   AS tax_amount,
+                  COALESCE(b.cgst_pct, 0) + COALESCE(b.sgst_pct, 0) + COALESCE(b.igst_pct, 0) AS tax_pct
+           FROM tqs_bills b
+           WHERE b.id = ANY($1::uuid[]) AND b.company_id = $2 AND b.is_deleted = FALSE`,
+          [bill_ids, req.user.company_id]
+        );
+        bills = billsRes.rows;
+      }
+
+      const distinctBillProjectIds = [...new Set(bills.map(b => b.project_id).filter(Boolean))];
+      const effectiveProjectId = distinctBillProjectIds.length === 1
+        ? distinctBillProjectIds[0]
+        : distinctBillProjectIds.length === 0
+          ? (project_id || null)
+          : null; // spans multiple projects
+
+      const transmittal_number = await nextTransmittalNumber(req.user.company_id, effectiveProjectId);
+
       const ins = await client.query(`
         INSERT INTO tqs_transmittals
           (company_id, project_id, transmittal_number, revision, transmittal_date,
@@ -412,7 +488,7 @@ router.post('/', async (req, res) => {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         RETURNING *
       `, [
-        req.user.company_id, project_id, transmittal_number, revision || 'REV.000', transmittal_date,
+        req.user.company_id, effectiveProjectId, transmittal_number, revision || 'REV.000', transmittal_date,
         from_dept || null, to_dept || 'BCIM Engineering Pvt. Ltd (HO)', to_person || null, subject || null,
         issued_by || req.user.name || null, issued_date || transmittal_date, remarks || null, req.user.id,
       ]);
@@ -420,29 +496,20 @@ router.post('/', async (req, res) => {
 
       // Build items from selected bills
       let sl = 1;
-      if (bill_ids.length) {
-        const bills = await client.query(
-          `SELECT b.id, b.inv_number, b.inv_date, b.po_number, b.po_date, b.vendor_name,
-                  COALESCE(b.basic_amount, 0) AS amount,
-                  COALESCE(b.gst_amount, 0)   AS tax_amount,
-                  COALESCE(b.cgst_pct, 0) + COALESCE(b.sgst_pct, 0) + COALESCE(b.igst_pct, 0) AS tax_pct
-           FROM tqs_bills b
-           WHERE b.id = ANY($1::uuid[]) AND b.company_id = $2 AND b.is_deleted = FALSE`,
-          [bill_ids, req.user.company_id]
-        );
+      if (bills.length) {
         // preserve the order the user sent
-        const billMap = Object.fromEntries(bills.rows.map(b => [b.id, b]));
+        const billMap = Object.fromEntries(bills.map(b => [b.id, b]));
         for (const bid of bill_ids) {
           const b = billMap[bid];
           if (!b) continue;
           const ov = item_overrides[bid] || {};
           await client.query(`
             INSERT INTO tqs_transmittal_items
-              (transmittal_id, sl_no, tqs_bill_id, invoice_no, invoice_date,
+              (transmittal_id, sl_no, tqs_bill_id, project_id, invoice_no, invoice_date,
                po_wo_ref, po_wo_date, vendor_name, amount, tax_pct, tax_amount, hsn_codes, item_remarks)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
           `, [
-            transmittal.id, sl++, b.id, b.inv_number, b.inv_date,
+            transmittal.id, sl++, b.id, b.project_id || null, b.inv_number, b.inv_date,
             b.po_number, b.po_date, b.vendor_name, b.amount, b.tax_pct, b.tax_amount,
             ov.hsn_codes || null, ov.item_remarks || null,
           ]);
@@ -453,21 +520,24 @@ router.post('/', async (req, res) => {
       for (const item of manual_items) {
         await client.query(`
           INSERT INTO tqs_transmittal_items
-            (transmittal_id, sl_no, invoice_no, invoice_date,
+            (transmittal_id, sl_no, project_id, invoice_no, invoice_date,
              vendor_name, amount, tax_pct, tax_amount, hsn_codes, item_remarks)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         `, [
-          transmittal.id, sl++, item.invoice_no || null, item.invoice_date || null,
+          transmittal.id, sl++, item.project_id || effectiveProjectId || null, item.invoice_no || null, item.invoice_date || null,
           item.vendor_name || null, item.amount || 0, item.tax_pct || 0, item.tax_amount || 0,
           item.hsn_codes || null, item.item_remarks || null,
         ]);
       }
 
       const items = await client.query(
-        `SELECT * FROM tqs_transmittal_items WHERE transmittal_id = $1 ORDER BY sl_no`,
+        `SELECT ti.*, p.name AS project_name
+         FROM tqs_transmittal_items ti
+         LEFT JOIN projects p ON p.id = ti.project_id
+         WHERE ti.transmittal_id = $1 ORDER BY sl_no`,
         [transmittal.id]
       );
-      return { ...transmittal, items: items.rows };
+      return { ...transmittal, project_display: projectDisplayFor(transmittal, items.rows), items: items.rows };
     });
 
     res.status(201).json(result);
@@ -495,8 +565,19 @@ router.patch('/:id/submit', async (req, res) => {
     const transmittal = r.rows[0];
 
     const projRes = await query(`SELECT name FROM projects WHERE id = $1`, [transmittal.project_id]);
-    const itemsRes = await query(`SELECT * FROM tqs_transmittal_items WHERE transmittal_id = $1 ORDER BY sl_no`, [transmittal.id]);
-    const full = { ...transmittal, project_name: projRes.rows[0]?.name, items: itemsRes.rows };
+    const itemsRes = await query(
+      `SELECT ti.*, p.name AS project_name
+       FROM tqs_transmittal_items ti
+       LEFT JOIN projects p ON p.id = ti.project_id
+       WHERE ti.transmittal_id = $1 ORDER BY sl_no`,
+      [transmittal.id]
+    );
+    const projectName = projRes.rows[0]?.name;
+    const full = {
+      ...transmittal,
+      project_name: projectName || projectDisplayFor({ project_name: projectName }, itemsRes.rows),
+      items: itemsRes.rows,
+    };
 
     await emailTransmittalToHO(full); // best-effort — logs its own errors, never throws
 
