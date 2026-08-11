@@ -1915,7 +1915,6 @@ function LeaveTab({ leaveTypes }) {
   const qc      = useQueryClient();
   const balances = useQuery({ queryKey: ['ess-leave-balances'],  queryFn: () => essAPI.leaveBalances().then(unwrap) });
   const requests = useQuery({ queryKey: ['ess-leave-requests'],  queryFn: () => essAPI.leaveRequests().then(unwrap) });
-  const attQ      = useQuery({ queryKey: ['ess-leave-attendance'], queryFn: () => essAPI.attendance().then(unwrap) });
   const summaryQ  = useQuery({ queryKey: ['ess-leave-summary'],    queryFn: () => essAPI.summary().then(r => r.data.data) });
   const [leave, setLeave] = useState({ leave_type_id: '', from_date: today(), to_date: today(), reason: '' });
   const refresh = () => ['ess-leave-balances','ess-leave-requests','ess-summary','ess-leave-requests-dash'].forEach(k => qc.invalidateQueries({ queryKey: [k] }));
@@ -1947,6 +1946,14 @@ function LeaveTab({ leaveTypes }) {
   for (let d = 1; d <= daysInMonth; d++) calCells.push(d);
   const fmtCell = (d) => `${calYear}-${String(calMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
+  // Was previously fetched with no month/year params at all, so it silently
+  // always returned the SERVER's current month no matter which month the
+  // calendar was navigated to — prev/next month never showed real data.
+  const attQ = useQuery({
+    queryKey: ['ess-leave-attendance', calYear, calMonth],
+    queryFn: () => essAPI.attendance({ month: calMonth + 1, year: calYear }).then(unwrap),
+  });
+
   const attendanceMap = useMemo(() => {
     const m = {};
     for (const row of (attQ.data || [])) {
@@ -1958,6 +1965,16 @@ function LeaveTab({ leaveTypes }) {
   const leaveDateSet = useMemo(() => {
     const s = new Set();
     leaveReqs.filter(r => r.status === 'approved').forEach(r => {
+      const d = new Date(r.from_date), end = new Date(r.to_date);
+      while (d <= end) { s.add(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
+    });
+    return s;
+  }, [leaveReqs]);
+  // Pending (not-yet-approved) leave requests previously showed nothing at
+  // all on the calendar — no visual trace until an admin approved them.
+  const pendingLeaveDateSet = useMemo(() => {
+    const s = new Set();
+    leaveReqs.filter(r => r.status === 'pending').forEach(r => {
       const d = new Date(r.from_date), end = new Date(r.to_date);
       while (d <= end) { s.add(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
     });
@@ -2110,15 +2127,18 @@ function LeaveTab({ leaveTypes }) {
                   const isToday   = ds === todayStr;
                   const isHoliday = holidaySet.has(ds);
                   const isLeave   = leaveDateSet.has(ds);
+                  const isPending = !isLeave && pendingLeaveDateSet.has(ds);
                   const status    = attendanceMap[ds];
                   const isAbsent  = status === 'A';
-                  let bg = '#fff', fg = '#334155', fw = 400;
+                  let bg = '#fff', fg = '#334155', fw = 400, border = undefined;
                   if (isToday)        { bg = 'linear-gradient(135deg,#4F46E5,#7C3AED)'; fg = '#fff'; fw = 700; }
                   else if (isLeave)   { bg = '#F5F3FF'; fg = '#7C3AED'; }
+                  else if (isPending) { bg = '#fff'; fg = '#7C3AED'; border = '1.5px dashed #C4B5FD'; }
                   else if (isHoliday) { bg = '#FFF7ED'; fg = '#D97706'; }
                   else if (isAbsent)  { bg = '#FDF2F8'; fg = '#DB2777'; }
                   return (
-                    <div key={day} style={{ background:isToday?undefined:bg, backgroundImage:isToday?bg:undefined, minHeight:34, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:fw, color:fg }}>
+                    <div key={day} title={isPending ? 'Leave requested — pending approval' : undefined}
+                      style={{ background:isToday?undefined:bg, backgroundImage:isToday?bg:undefined, border, minHeight:34, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:fw, color:fg, boxSizing:'border-box' }}>
                       {day}
                     </div>
                   );
@@ -2126,9 +2146,9 @@ function LeaveTab({ leaveTypes }) {
               </div>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:8, paddingTop:2, flexShrink:0 }}>
-              {[['Present','#059669'],['Absent','#DB2777'],['Leave','#7C3AED'],['Holiday','#D97706'],['Today','#4F46E5']].map(([l,c]) => (
+              {[['Present','#059669'],['Absent','#DB2777'],['Leave','#7C3AED'],['Pending Leave','#7C3AED',true],['Holiday','#D97706'],['Today','#4F46E5']].map(([l,c,dashed]) => (
                 <div key={l} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'#64748B', whiteSpace:'nowrap' }}>
-                  <div style={{ width:7, height:7, borderRadius:'50%', background:c, flexShrink:0 }} />{l}
+                  <div style={{ width:7, height:7, borderRadius:'50%', background:dashed?'transparent':c, border:dashed?`1.5px dashed ${c}`:undefined, flexShrink:0 }} />{l}
                 </div>
               ))}
             </div>
