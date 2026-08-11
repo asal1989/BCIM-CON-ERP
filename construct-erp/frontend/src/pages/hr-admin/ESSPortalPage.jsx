@@ -359,10 +359,19 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
   const todayStr   = today();
   const quote      = QUOTES[now.getDate() % QUOTES.length];
 
+  /* calendar state (declared before attQ so the query can depend on it) */
+  const [calYear,  setCalYear]  = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); };
+  const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); };
+
   /* attendance data for calendar + today's status */
+  // Was previously fetched with no month/year params — same bug as
+  // AttendanceTab/LeaveTab: navigating months never fetched real data for
+  // that month, so past days rendered as false Absent.
   const attQ = useQuery({
-    queryKey: ['ess-attendance-dash'],
-    queryFn:  () => essAPI.attendance().then(unwrap),
+    queryKey: ['ess-attendance-dash', calYear, calMonth],
+    queryFn:  () => essAPI.attendance({ month: calMonth + 1, year: calYear }).then(unwrap),
   });
 
   /* team-today: on-leave / birthdays (HR-only) + next holiday (everyone) */
@@ -390,11 +399,6 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
     queryFn:  () => essAPI.leaveRequests().then(unwrap),
   });
 
-  /* calendar state */
-  const [calYear,  setCalYear]  = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); };
-  const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); };
   const firstDay    = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const cells = [];
@@ -1034,7 +1038,14 @@ function ProfilePhotoAvatar({ profile, size = 80, editable = false }) {
 }
 
 function ProfileTab({ profile, balances }) {
-  const p = profile || {};
+  // `profile` (from the dashboard summary) is deliberately stripped of PII —
+  // no DOB/bank/PAN/UAN/address/emergency-contact fields, per the backend's
+  // own comment on GET /ess/summary. Those live behind a dedicated endpoint
+  // that nothing in the frontend was calling, so this whole tab's Contact &
+  // Bank / Statutory sections, and several Overview rows, always rendered
+  // empty even when the data existed. Merge the full profile in over it.
+  const fullQ = useQuery({ queryKey: ['ess-profile-full'], queryFn: () => essAPI.profileFull().then(r => r.data.data) });
+  const p = { ...(profile || {}), ...(fullQ.data || {}) };
   const [activeTab, setActiveTab] = useState('overview');
 
   /* ── tokens ── */
@@ -1375,7 +1386,14 @@ function AttendanceTab({ leaveTypes }) {
   const [bulkDateInput, setBulkDateInput] = useState(today());
 
   /* ── queries ── */
-  const attendance  = useQuery({ queryKey: ['ess-attendance'],  queryFn: () => essAPI.attendance().then(unwrap) });
+  // Was previously fetched with no month/year params, so navigating the
+  // calendar to any other month re-rendered the SAME current-month data —
+  // every past working day in that other month then fell into the "no
+  // record found" branch and rendered as a false Absent.
+  const attendance  = useQuery({
+    queryKey: ['ess-attendance', calYear, calMonth],
+    queryFn: () => essAPI.attendance({ month: calMonth + 1, year: calYear }).then(unwrap),
+  });
   const corrections = useQuery({ queryKey: ['ess-corrections'], queryFn: () => essAPI.attendanceCorrections().then(unwrap) });
   const swipes      = useQuery({ queryKey: ['ess-swipes', swipeDays], queryFn: () => essAPI.swipes({ days: swipeDays }).then(unwrap) });
   const balQ        = useQuery({ queryKey: ['ess-leave-balances'], queryFn: () => essAPI.leaveBalances().then(unwrap) });
@@ -2269,7 +2287,7 @@ function PayslipsTab() {
             )},
             { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
             { key: 'actions', label: 'Payslip', render: r => (
-              <button onClick={() => navigate(`/hr-admin/payroll/${r.id}/payslip`)}
+              <button onClick={() => navigate(`/ess/payslip/${r.id}`)}
                 style={{ display:'inline-flex', alignItems:'center', gap:4, borderRadius:8, padding:'5px 12px', fontSize:11.5, fontWeight:600, color:'#fff', background:ACCENT, border:'none', cursor:'pointer' }}>
                 <Printer size={12} /> Print
               </button>
@@ -2662,12 +2680,15 @@ function ManagerDeskTab() {
   const leaves      = useQuery({ queryKey: ['ess-manager-leaves'],      queryFn: () => essAPI.managerLeaveRequests({ status: 'pending' }).then(unwrap), retry: false });
   const corrections = useQuery({ queryKey: ['ess-manager-corrections'], queryFn: () => essAPI.managerCorrections({ status: 'pending' }).then(unwrap), retry: false });
   const evaluations = useQuery({ queryKey: ['ess-manager-evaluations'], queryFn: () => essAPI.managerEvaluations().then(unwrap), retry: false });
+  const trainingReqs = useQuery({ queryKey: ['ess-manager-training'], queryFn: () => essAPI.managerTrainingRequests({ status: 'pending' }).then(unwrap), retry: false });
+  const trainingApproved = useQuery({ queryKey: ['ess-manager-training-approved'], queryFn: () => essAPI.managerTrainingRequests({ status: 'approved' }).then(unwrap), retry: false });
   const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
   const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
-  const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); qc.invalidateQueries({ queryKey: ['ess-manager-evaluations'] }); };
+  const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); qc.invalidateQueries({ queryKey: ['ess-manager-evaluations'] }); qc.invalidateQueries({ queryKey: ['ess-manager-training'] }); qc.invalidateQueries({ queryKey: ['ess-manager-training-approved'] }); };
   const leaveAction      = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerLeaveAction(id, action, rejection_reason ? { rejection_reason } : {}),      onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
   const correctionAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerCorrectionAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
   const evaluationAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerEvaluationAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
+  const trainingAction   = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerTrainingRequestAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
 
   // Bulk-approve selected attendance corrections — the backend action endpoint
   // is per-id, so this just fires the same approve mutation for every checked row.
@@ -2698,6 +2719,7 @@ function ManagerDeskTab() {
     if (type === 'leave')      leaveAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
     if (type === 'correction') correctionAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
     if (type === 'evaluation') evaluationAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
+    if (type === 'training')   trainingAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
     closeReject();
   };
 
@@ -2711,8 +2733,9 @@ function ManagerDeskTab() {
   const pendingLeaveCnt = (leaves.data || []).length;
   const pendingCorrCnt  = (corrections.data || []).length;
   const pendingEvalCnt  = (evaluations.data || []).length;
+  const pendingTrainingCnt = (trainingReqs.data || []).length;
 
-  if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403 && evaluations.error?.response?.status === 403) {
+  if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403 && evaluations.error?.response?.status === 403 && trainingReqs.error?.response?.status === 403) {
     return (
       <TabShell
         bg="#ECFEFF"
@@ -2750,6 +2773,7 @@ function ManagerDeskTab() {
         { label: 'Pending Leave', value: pendingLeaveCnt, color: pendingLeaveCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Pending Corrections', value: pendingCorrCnt, color: pendingCorrCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Pending Evaluations', value: pendingEvalCnt, color: pendingEvalCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Pending Training', value: pendingTrainingCnt, color: pendingTrainingCnt > 0 ? '#DC2626' : '#059669' },
       ]}
     >
       {rejectModal.open && (
@@ -2839,6 +2863,45 @@ function ManagerDeskTab() {
           rows={evaluations.data || []}
         />
       </div>
+
+      <div style={{ ...GCA, padding:20 }}>
+        <span style={STA}>Training Requests</span>
+        <p style={{ fontSize:11.5, color:'#64748B', marginBottom:14 }}>Pending training requests from your team</p>
+        <Table
+          columns={[
+            { key: 'employee_name',   label: 'Employee' },
+            { key: 'training_name',   label: 'Training'  },
+            { key: 'category',        label: 'Category', render: r => r.category || '—' },
+            { key: 'preferred_date',  label: 'Preferred Date', render: r => r.preferred_date ? String(r.preferred_date).slice(0,10) : '—' },
+            { key: 'reason',          label: 'Reason', render: r => r.reason || '—' },
+            { key: 'actions', label: 'Action', render: r => (
+              <ActionButtons onApprove={() => trainingAction.mutate({ id: r.id, action: 'approve' })} onReject={() => openReject('training', r.id)} />
+            )},
+          ]}
+          rows={trainingReqs.data || []}
+        />
+      </div>
+
+      {(trainingApproved.data || []).length > 0 && (
+        <div style={{ ...GCA, padding:20 }}>
+          <span style={STA}>Approved Training — Mark Completed</span>
+          <p style={{ fontSize:11.5, color:'#64748B', marginBottom:14 }}>Training that's been approved — mark complete once the employee has attended</p>
+          <Table
+            columns={[
+              { key: 'employee_name',   label: 'Employee' },
+              { key: 'training_name',   label: 'Training'  },
+              { key: 'preferred_date',  label: 'Preferred Date', render: r => r.preferred_date ? String(r.preferred_date).slice(0,10) : '—' },
+              { key: 'actions', label: 'Action', render: r => (
+                <button onClick={() => trainingAction.mutate({ id: r.id, action: 'complete' })}
+                  style={{ background:'rgba(37,99,235,0.08)', border:'1px solid rgba(37,99,235,0.2)', borderRadius:6, padding:'3px 10px', fontSize:11.5, fontWeight:600, color:'#1D4ED8', cursor:'pointer' }}>
+                  Mark Completed
+                </button>
+              )},
+            ]}
+            rows={trainingApproved.data || []}
+          />
+        </div>
+      )}
     </TabShell>
   );
 }
@@ -3504,7 +3567,7 @@ function EngageCard({ post }) {
 
 function EngageTab({ profile }) {
   const qc = useQueryClient();
-  const [filter,    setFilter]    = useState('');
+  const [filter,    setFilter]    = useState({});
   const [mode,      setMode]      = useState('post');
   const [sideNav,   setSideNav]   = useState('feed');
   const [postBody,  setPostBody]  = useState('');
@@ -3514,7 +3577,7 @@ function EngageTab({ profile }) {
   const [kudosMsg,  setKudosMsg]  = useState('');
 
   /* ── queries ── */
-  const feed       = useQuery({ queryKey: ['ess-engage', filter], queryFn: () => essAPI.engageFeed(filter ? { type: filter } : {}).then(unwrap) });
+  const feed       = useQuery({ queryKey: ['ess-engage', filter], queryFn: () => essAPI.engageFeed(filter).then(unwrap) });
   const colleagues = useQuery({ queryKey: ['ess-colleagues'], queryFn: () => essAPI.colleagues().then(unwrap), enabled: mode === 'kudos' });
   const teamQ      = useQuery({ queryKey: ['ess-team-today'],  queryFn: () => essAPI.teamToday().then(r => r.data.data) });
 
@@ -3538,7 +3601,6 @@ function EngageTab({ profile }) {
   const hour      = new Date().getHours();
   const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const feedArr   = feed.data || [];
-  const pinnedArr = feedArr.filter(p => p.is_pinned);
   const kudosCnt  = feedArr.filter(p => p.type === 'kudos').length;
 
   /* ── design tokens ── */
@@ -3554,15 +3616,19 @@ function EngageTab({ profile }) {
   const AVATAR_COLS = ['#6366F1','#8B5CF6','#EC4899','#F59E0B','#10B981','#2563EB','#EF4444','#06B6D4'];
 
   /* ── left sidebar nav items ── */
+  // 'polls' was removed — there's no poll type in the schema (CHECK
+  // constraint only allows 'post'/'kudos') and no UI to create one, so its
+  // count and filter could never be real. Announcements/Events now actually
+  // filter by group_name (a real field posts already carry via POST_GROUPS)
+  // instead of silently sending the same {type:'post'} as every other tab.
   const NAV = [
     { id:'feed',        label:'My Feed',      count:0         },
     { id:'announce',    label:'Announcements',count:feedArr.filter(p=>p.group_name==='Company News').length||0 },
     { id:'recognition', label:'Recognition',  count:kudosCnt  },
-    { id:'events',      label:'Events',       count:0         },
-    { id:'polls',       label:'Polls',        count:feedArr.filter(p=>p.type==='poll').length||0 },
+    { id:'events',      label:'Events',       count:feedArr.filter(p=>p.group_name==='Events').length||0 },
   ];
 
-  const filterForNav = { feed:'', announce:'post', recognition:'kudos', events:'post', polls:'post' };
+  const filterForNav = { feed:{}, announce:{ group_name:'Company News' }, recognition:{ type:'kudos' }, events:{ group_name:'Events' } };
 
   return (
     <div style={{ display:'flex', background:T.bg, minHeight:'100%', gap:0, position:'relative' }}>
@@ -3586,7 +3652,7 @@ function EngageTab({ profile }) {
           {NAV.map(n => {
             const active = sideNav === n.id;
             return (
-              <button key={n.id} onClick={() => { setSideNav(n.id); setFilter(filterForNav[n.id]||''); }}
+              <button key={n.id} onClick={() => { setSideNav(n.id); setFilter(filterForNav[n.id]||{}); }}
                 style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:12, border:'none', cursor:'pointer', textAlign:'left', width:'100%', transition:'.15s',
                   background: active ? 'linear-gradient(135deg,rgba(79,70,229,.12),rgba(124,58,237,.08))' : 'transparent',
                   color: active ? T.t2 : '#64748B' }}
@@ -3599,23 +3665,6 @@ function EngageTab({ profile }) {
             );
           })}
         </div>
-
-        {/* Pinned */}
-        {pinnedArr.length > 0 && (
-          <div style={{ ...Card(), padding:'12px 14px' }}>
-            <div style={{ fontSize:9.5, fontWeight:800, color:T.t4, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:8 }}>Pinned</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-              {pinnedArr.slice(0, 3).map(p => (
-                <div key={p.id} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
-                  <div style={{ width:6, height:6, borderRadius:'50%', background:T.t3, flexShrink:0, marginTop:5 }} />
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, lineHeight:1.3 }}>{(p.body||'').slice(0,40)}{(p.body||'').length>40?'…':''}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Birthdays */}
         {birthdaysToday.length > 0 && (
@@ -3788,13 +3837,16 @@ function EngageTab({ profile }) {
 
         {/* Filter pills */}
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          {[['','All Activities'],['post','Posts'],['kudos','Kudos']].map(([v,label])=>(
-            <button key={v} onClick={()=>setFilter(v)}
-              style={{ padding:'6px 16px',borderRadius:20,fontSize:12.5,fontWeight:600,border:`1px solid ${filter===v?T.pri:T.bdr}`,cursor:'pointer',transition:'.15s',
-                background:filter===v?T.pri:T.card,color:filter===v?'#fff':'#64748B' }}>
-              {label}
-            </button>
-          ))}
+          {[['','All Activities'],['post','Posts'],['kudos','Kudos']].map(([v,label])=>{
+            const active = (filter.type || '') === v && !filter.group_name;
+            return (
+              <button key={v} onClick={()=>{ setSideNav('feed'); setFilter(v ? { type: v } : {}); }}
+                style={{ padding:'6px 16px',borderRadius:20,fontSize:12.5,fontWeight:600,border:`1px solid ${active?T.pri:T.bdr}`,cursor:'pointer',transition:'.15s',
+                  background:active?T.pri:T.card,color:active?'#fff':'#64748B' }}>
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Feed */}
@@ -3912,8 +3964,13 @@ function LoansTab() {
     onError:    (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
   const loanRows = loans.data || [];
-  const outstanding = loanRows.reduce((s,l) => s + Number(l.balance_amount||0), 0);
-  const activeCnt = loanRows.filter(l => l.status === 'disbursed').length;
+  // 'disbursed' is never actually written by the backend — approval sets
+  // status='approved' and disburses in the same step, so that's the real
+  // "active loan" status. Outstanding balance must also exclude
+  // pending/rejected requests — balance_amount is seeded to the full
+  // requested amount at submission time, before anything is disbursed.
+  const outstanding = loanRows.filter(l => l.status === 'approved').reduce((s,l) => s + Number(l.balance_amount||0), 0);
+  const activeCnt = loanRows.filter(l => l.status === 'approved').length;
   return (
     <TabShell
       bg="#F0FDFA"
@@ -3964,7 +4021,7 @@ function LoansTab() {
             { key: 'requested_date', label: 'Requested', render: r => String(r.requested_date||'').slice(0,10) },
             { key: 'loan_type',   label: 'Type', render: r => <span className="capitalize">{r.loan_type}</span> },
             { key: 'amount',      label: 'Amount', render: r => `₹${Number(r.amount||0).toLocaleString('en-IN')}` },
-            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'disbursed' || Number(r.balance_amount) ? `₹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
+            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'approved' ? `₹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
             { key: 'status',      label: 'Status', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={loans.data || []}

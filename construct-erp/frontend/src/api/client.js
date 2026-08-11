@@ -2506,6 +2506,7 @@ export const hrAdvancedAPI = {
 
 export const essAPI = {
   summary:              (params)       => api.get('/ess/summary', { params }),
+  profileFull:          ()             => api.get('/ess/profile/full'),
   attendance:           (params)       => api.get('/ess/attendance', { params }),
   attendanceCorrections:()             => api.get('/ess/attendance/corrections'),
   createCorrection:     (data)         => api.post('/ess/attendance/corrections', data),
@@ -2523,6 +2524,8 @@ export const essAPI = {
   managerCorrectionAction:(id, action, data = {}) => api.patch(`/ess/manager/attendance-corrections/${id}/${action}`, data),
   managerEvaluations:   (params)       => api.get('/ess/manager/evaluations', { params }),
   managerEvaluationAction:(id, action, data = {}) => api.patch(`/ess/manager/evaluations/${id}/${action}`, data),
+  managerTrainingRequests:   (params)       => api.get('/ess/manager/training-requests', { params }),
+  managerTrainingRequestAction:(id, action, data = {}) => api.patch(`/ess/manager/training-requests/${id}/${action}`, data),
   assetLookup:          (code)         => api.get('/ess/assets/lookup', { params: { code } }),
   notifications:        ()             => api.get('/ess/notifications'),
   documents:            ()             => api.get('/ess/documents'),

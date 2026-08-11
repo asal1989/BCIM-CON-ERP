@@ -36,6 +36,13 @@ const managerRoles = [
   'ceo',
   'manager',
 ];
+// Roles that legitimately see/act on requests company-wide (HR function or
+// senior leadership). Everyone else in managerRoles (project_manager,
+// project_head, department_head, manager) is a LINE manager and must be
+// scoped to their own direct reports only — this was previously missing on
+// the leave-request and attendance-correction manager endpoints, letting any
+// manager-role user approve/reject any employee's request company-wide.
+const HR_WIDE_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'managing_director', 'md', 'ceo'];
 
 // Separate migration so it runs even if 'ess-mobile' was already applied
 runSchemaInit('employee-profiles-add-company-id-v2', async () => {
@@ -592,20 +599,38 @@ router.get('/payslips', async (req, res) => {
   }
 });
 
+// Self-scoped mirror of hr-payroll.routes.js's :id/payslip — same shape
+// (including the "Master" entitled-salary columns PayslipContent renders
+// alongside the pro-rated "Actual" figures) so the same print component can
+// be reused, but WHERE-scoped to the caller's own user_id, never another
+// employee's, and only for a payslip that's actually been approved/paid.
 router.get('/payslips/:id', async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT p.*, u.name AS employee_name, u.employee_code, u.email,
               ep.pan_number, ep.uan_number, ep.bank_name, ep.bank_account_number, ep.bank_ifsc,
-              ep.date_of_joining, dep.name AS department_name, des.name AS designation_name,
-              c.name AS company_name
+              ep.date_of_joining, ep.work_location, dep.name AS department_name, des.name AS designation_name,
+              c.name AS company_name,
+              m.basic AS m_basic, m.vda AS m_da, m.hra AS m_hra,
+              m.conveyance_allowance AS m_conveyance_allowance, m.medical AS m_medical,
+              m.washing_allowance AS m_washing_allowance, m.lta AS m_lta,
+              m.mobile_allowance AS m_mobile_allowance, m.project_allowance AS m_project_allowance,
+              m.city_special_allowance AS m_city_special_allowance,
+              m.accommodation_allowance AS m_accommodation_allowance, m.food_allowance AS m_food_allowance,
+              m.transport_allowance AS m_transport_allowance, m.special_allowance AS m_special_allowance,
+              m.incentive AS m_incentive, m.gross_monthly AS m_gross_monthly
        FROM hr_monthly_payroll p
        JOIN users u ON u.id = p.user_id
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        LEFT JOIN hr_departments dep ON dep.id = ep.department_id
        LEFT JOIN hr_designations des ON des.id = ep.designation_id
        LEFT JOIN companies c ON c.id = p.company_id
-       WHERE p.id = $1 AND p.company_id = $2 AND p.user_id = $3 AND p.status IN ('approved','paid')`,
+       LEFT JOIN hr_employee_salaries m ON m.user_id = p.user_id
+         AND m.effective_from <= make_date(p.year, p.month, 1) + INTERVAL '1 month' - INTERVAL '1 day'
+         AND (m.effective_to IS NULL OR m.effective_to >= make_date(p.year, p.month, 1))
+       WHERE p.id = $1 AND p.company_id = $2 AND p.user_id = $3 AND p.status IN ('approved','paid')
+       ORDER BY m.effective_from DESC
+       LIMIT 1`,
       [req.params.id, ownCompany(req), ownUser(req)]
     );
     if (!rows.length) return res.status(404).json({ error: 'Payslip not found' });
@@ -693,17 +718,23 @@ router.get('/salary-revisions', async (req, res) => {
 router.get('/manager/leave-requests', requireManager, async (req, res) => {
   try {
     const status = req.query.status || 'pending';
+    const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+    const isHrWide = HR_WIDE_ROLES.includes(role);
+    const params = [ownCompany(req), status];
+    if (!isHrWide) params.push(req.user.id);
     const { rows } = await query(
       `SELECT lr.*, u.name AS employee_name, u.employee_code,
               lt.name AS leave_type_name, lt.code AS leave_code
        FROM hr_leave_requests lr
        JOIN users u ON u.id = lr.user_id
        JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+       ${isHrWide ? '' : 'LEFT JOIN employee_profiles ep ON ep.user_id = lr.user_id'}
        WHERE lr.company_id = $1
          AND ($2::text = 'all' OR lr.status = $2::text)
+         ${isHrWide ? '' : 'AND ep.reporting_manager_id = $3'}
        ORDER BY lr.applied_at DESC
        LIMIT 200`,
-      [ownCompany(req), status]
+      params
     );
     res.json({ data: rows });
   } catch (err) {
@@ -717,20 +748,32 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
     return res.status(400).json({ error: 'Invalid leave action' });
   }
 
+  const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+  const isHrWide = HR_WIDE_ROLES.includes(role);
+
   const client = await require('../config/database').pool.connect();
   try {
     await client.query('BEGIN');
+    // Line managers may only act on their own direct reports' requests — see
+    // HR_WIDE_ROLES comment above. Scoped via a subquery so it applies to the
+    // exact same row the UPDATE targets, not a separate pre-check.
     const { rows } = await client.query(
-      `UPDATE hr_leave_requests
+      `UPDATE hr_leave_requests lr
        SET status = $1,
            actioned_by = $2,
            actioned_at = NOW(),
            rejection_reason = CASE WHEN $1 = 'rejected' THEN $3 ELSE rejection_reason END
-       WHERE id = $4 AND company_id = $5 AND status = 'pending'
+       WHERE lr.id = $4 AND lr.company_id = $5 AND lr.status = 'pending'
+         ${isHrWide ? '' : `AND EXISTS (
+           SELECT 1 FROM employee_profiles ep
+           WHERE ep.user_id = lr.user_id AND ep.reporting_manager_id = $6
+         )`}
        RETURNING *`,
-      [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req)]
+      isHrWide
+        ? [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req)]
+        : [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req), req.user.id]
     );
-    if (!rows.length) throw new Error('Pending leave request not found');
+    if (!rows.length) throw new Error('Pending leave request not found, or not one of your direct reports');
 
     const leave = rows[0];
     if (action === 'approve') {
@@ -798,15 +841,21 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
 router.get('/manager/attendance-corrections', requireManager, async (req, res) => {
   try {
     const status = req.query.status || 'pending';
+    const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+    const isHrWide = HR_WIDE_ROLES.includes(role);
+    const params = [ownCompany(req), status];
+    if (!isHrWide) params.push(req.user.id);
     const { rows } = await query(
       `SELECT cr.*, u.name AS employee_name, u.employee_code
        FROM hr_attendance_correction_requests cr
        JOIN users u ON u.id = cr.user_id
+       ${isHrWide ? '' : 'LEFT JOIN employee_profiles ep ON ep.user_id = cr.user_id'}
        WHERE cr.company_id = $1
          AND ($2::text = 'all' OR cr.status = $2::text)
+         ${isHrWide ? '' : 'AND ep.reporting_manager_id = $3'}
        ORDER BY cr.created_at DESC
        LIMIT 200`,
-      [ownCompany(req), status]
+      params
     );
     res.json({ data: rows });
   } catch (err) {
@@ -820,19 +869,28 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
     return res.status(400).json({ error: 'Invalid correction action' });
   }
 
+  const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+  const isHrWide = HR_WIDE_ROLES.includes(role);
+
   const client = await require('../config/database').pool.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `UPDATE hr_attendance_correction_requests
+      `UPDATE hr_attendance_correction_requests cr
        SET status = $1,
            actioned_by = $2,
            actioned_at = NOW(),
            rejection_reason = CASE WHEN $1 = 'rejected' THEN $3 ELSE rejection_reason END,
            updated_at = NOW()
-       WHERE id = $4 AND company_id = $5 AND status = 'pending'
+       WHERE cr.id = $4 AND cr.company_id = $5 AND cr.status = 'pending'
+         ${isHrWide ? '' : `AND EXISTS (
+           SELECT 1 FROM employee_profiles ep
+           WHERE ep.user_id = cr.user_id AND ep.reporting_manager_id = $6
+         )`}
        RETURNING *`,
-      [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req)]
+      isHrWide
+        ? [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req)]
+        : [action === 'approve' ? 'approved' : 'rejected', ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req), req.user.id]
     );
     if (!rows.length) throw new Error('Pending correction request not found');
 
@@ -983,10 +1041,26 @@ router.patch('/manager/evaluations/:id/:action', requireManager, async (req, res
   }
   try {
     const { rows: existing } = await query(
-      `SELECT id, status FROM hr_performance_evaluations WHERE id=$1 AND company_id=$2`,
+      `SELECT e.id, e.status, ep.reporting_manager_id
+       FROM hr_performance_evaluations e
+       LEFT JOIN employee_profiles ep ON ep.user_id = e.employee_id
+       WHERE e.id=$1 AND e.company_id=$2`,
       [req.params.id, ownCompany(req)]
     );
     if (!existing.length) return res.status(404).json({ error: 'Evaluation not found' });
+
+    // Same audience rule GET /manager/evaluations already enforces: only the
+    // employee's own reporting manager may act at 'self_submitted', and every
+    // later stage requires the role that actually owns that stage. This was
+    // previously missing here entirely, letting any manager-role user push
+    // any evaluation through any stage.
+    const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+    const roleStatuses = EVAL_STAGE_AUDIENCE[role] || [];
+    const isOwnReportee  = existing[0].status === 'self_submitted' && existing[0].reporting_manager_id === req.user.id;
+    const isAllowedStage = roleStatuses.includes(existing[0].status);
+    if (!isOwnReportee && !isAllowedStage) {
+      return res.status(403).json({ error: 'You are not authorized to act on this evaluation at its current stage' });
+    }
 
     if (action === 'reject') {
       const { rows } = await query(
@@ -1437,6 +1511,70 @@ router.post('/training/requests', async (req, res) => {
   }
 });
 
+// Previously nothing anywhere in the codebase ever moved a training request
+// off 'pending' — no approve/reject/complete endpoint existed at all, so
+// requests just sat there forever. Scoped the same way as
+// /manager/leave-requests: HR-wide roles see/act on everything, line
+// managers only their own direct reports.
+router.get('/manager/training-requests', requireManager, async (req, res) => {
+  try {
+    const status = req.query.status || 'pending';
+    const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+    const isHrWide = HR_WIDE_ROLES.includes(role);
+    const params = [ownCompany(req), status];
+    if (!isHrWide) params.push(req.user.id);
+    const { rows } = await query(
+      `SELECT t.*, u.name AS employee_name, u.employee_code
+       FROM ess_training_requests t
+       JOIN users u ON u.id = t.user_id
+       ${isHrWide ? '' : 'LEFT JOIN employee_profiles ep ON ep.user_id = t.user_id'}
+       WHERE t.company_id = $1
+         AND ($2::text = 'all' OR t.status = $2::text)
+         ${isHrWide ? '' : 'AND ep.reporting_manager_id = $3'}
+       ORDER BY t.created_at DESC
+       LIMIT 200`,
+      params
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const TRAINING_NEXT_STATUS = { approve: 'approved', reject: 'rejected', complete: 'completed' };
+router.patch('/manager/training-requests/:id/:action', requireManager, async (req, res) => {
+  const { action } = req.params;
+  const nextStatus = TRAINING_NEXT_STATUS[action];
+  if (!nextStatus) return res.status(400).json({ error: 'Invalid training-request action' });
+
+  const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+  const isHrWide = HR_WIDE_ROLES.includes(role);
+  // approve/reject only apply to a pending request; complete only applies to
+  // an already-approved one.
+  const fromStatus = action === 'complete' ? 'approved' : 'pending';
+
+  try {
+    const { rows } = await query(
+      `UPDATE ess_training_requests t
+       SET status = $1, actioned_by = $2, actioned_at = NOW(),
+           rejection_reason = CASE WHEN $1 = 'rejected' THEN $3 ELSE rejection_reason END
+       WHERE t.id = $4 AND t.company_id = $5 AND t.status = $6
+         ${isHrWide ? '' : `AND EXISTS (
+           SELECT 1 FROM employee_profiles ep
+           WHERE ep.user_id = t.user_id AND ep.reporting_manager_id = $7
+         )`}
+       RETURNING *`,
+      isHrWide
+        ? [nextStatus, ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req), fromStatus]
+        : [nextStatus, ownUser(req), req.body.rejection_reason || null, req.params.id, ownCompany(req), fromStatus, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: `No ${fromStatus} request found (or not one of your direct reports)` });
+    res.json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════
 //  ENGAGE — social feed (posts + kudos), reactions & comments
 // ═══════════════════════════════════════════════════════════════
@@ -1556,10 +1694,16 @@ router.get('/engage/celebrations', async (req, res) => {
 
 router.get('/engage', async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, group_name } = req.query;
     const params = [ownCompany(req), ownUser(req)];
-    let typeFilter = '';
-    if (type === 'post' || type === 'kudos') { typeFilter = ' AND p.type = $3'; params.push(type); }
+    let extraFilter = '';
+    if (type === 'post' || type === 'kudos') { params.push(type); extraFilter += ` AND p.type = $${params.length}`; }
+    // Previously only `type` was ever filterable — the Announcements/Events
+    // sidebar links sent {type:'post'} regardless of what they claimed to
+    // filter, showing the identical unfiltered post list for both. Posts
+    // already carry a real group_name (POST_GROUPS on the frontend), so this
+    // just exposes the filter the create-post form already writes.
+    if (group_name) { params.push(group_name); extraFilter += ` AND p.group_name = $${params.length}`; }
     const { rows } = await query(
       `SELECT p.id, p.type, p.body, p.group_name, p.kudos_badge, p.created_at,
               a.name AS author_name, a.employee_code AS author_code,
@@ -1575,7 +1719,7 @@ router.get('/engage', async (req, res) => {
          LEFT JOIN ess_post_reactions r ON r.post_id = p.id
          LEFT JOIN ess_post_comments  c ON c.post_id = p.id
          LEFT JOIN ess_post_reactions mr ON mr.post_id = p.id AND mr.user_id = $2
-        WHERE p.company_id = $1${typeFilter}
+        WHERE p.company_id = $1${extraFilter}
         GROUP BY p.id, a.name, a.employee_code, ep.profile_photo_url, k.name
         ORDER BY p.created_at DESC
         LIMIT 100`,

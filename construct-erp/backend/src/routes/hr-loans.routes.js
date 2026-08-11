@@ -114,8 +114,11 @@ router.patch('/:id/approve', async (req, res) => {
 
 router.patch('/:id/reject', async (req, res) => {
   try {
+    // balance_amount is seeded to the full requested amount at submission
+    // time (nothing was ever disbursed yet) — must be zeroed on rejection or
+    // the ESS "Outstanding Balance" total keeps counting it forever.
     const { rows } = await query(
-      `UPDATE hr_loans SET status='rejected', approved_by=$1, approved_at=NOW()
+      `UPDATE hr_loans SET status='rejected', approved_by=$1, approved_at=NOW(), balance_amount=0
        WHERE id=$2 AND company_id=$3 AND status='pending' RETURNING *`,
       [req.user.id, req.params.id, req.user.company_id]
     );

@@ -392,6 +392,7 @@ const HRChecklistPage       = lazy(() => import('./pages/hr-admin/HRChecklistPag
 const HROpsChecklistPage    = lazy(() => import('./pages/hr-admin/HROpsChecklistPage'));
 const HRPayrollReportsPage  = lazy(() => import('./pages/hr-admin/PayrollReportsPage'));
 const ESSPortalPage           = lazy(() => import('./pages/hr-admin/ESSPortalPage'));
+const ESSPayslipPrintPage     = lazy(() => import('./pages/hr-admin/ESSPayslipPrintPage'));
 const HRShiftManagementPage   = lazy(() => import('./pages/hr-admin/ShiftManagementPage'));
 const HRFnFSettlementPage     = lazy(() => import('./pages/hr-admin/FnFSettlementPage'));
 const HRExitManagementPage    = lazy(() => import('./pages/hr-admin/ExitManagementPage'));
@@ -969,6 +970,7 @@ export default function App() {
                 <Route path="hr/attendance" element={<AttendancePage />} />
                 <Route path="hr/payroll" element={<PayrollPage />} />
                 <Route path="ess" element={<ESSPortalPage />} />
+                <Route path="ess/payslip/:id" element={<ESSPayslipPrintPage />} />
 
                 {/* HR & Admin */}
                 <Route path="hr-admin" element={<RequireModule module="HR & Admin"><HRDashboardPage /></RequireModule>} />

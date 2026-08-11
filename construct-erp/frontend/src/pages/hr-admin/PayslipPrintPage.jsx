@@ -40,6 +40,48 @@ const amountInWords = (amount) => {
   return `Rupees ${numToWords(rupees)} Only`;
 };
 
+// Shared with ESSPayslipPrintPage (the self-service view) so both render the
+// exact same layout from the exact same field-mapping logic.
+export function buildPayslipSections(p) {
+  const earnings = [
+    { label:'BASIC',                          master:p.m_basic,                     actual:p.basic },
+    { label:'DA',                             master:p.m_da,                        actual:p.da },
+    { label:'HRA',                            master:p.m_hra,                       actual:p.hra },
+    { label:'CONVEYANCE',                     master:p.m_conveyance_allowance,       actual:p.conveyance_allowance },
+    { label:'WASHING ALLOWANCE',              master:p.m_washing_allowance,          actual:p.washing_allowance },
+    { label:'LEAVE TRAVEL ALLOWANCE',         master:p.m_lta,                        actual:p.lta },
+    { label:'MEDICAL ALLOWANCE',              master:p.m_medical,                    actual:p.medical },
+    { label:'MOBILE ALLOWANCE',               master:p.m_mobile_allowance,           actual:p.mobile_allowance },
+    { label:'PROJECT OFFICE SPECIAL ALLOW',   master:p.m_project_allowance,          actual:p.project_allowance },
+    { label:'CITY SPECIAL ALLOWANCE',         master:p.m_city_special_allowance,     actual:p.city_special_allowance },
+    { label:'SPECIAL ALLOWANCE',              master:p.m_special_allowance,          actual:p.special_allowance },
+    { label:'ACCOMMODATION ALLOWANCE',        master:p.m_accommodation_allowance,    actual:p.accommodation_allowance },
+    { label:'FOOD ALLOWANCE',                 master:p.m_food_allowance,             actual:p.food_allowance },
+    { label:'TRANSPORT ALLOWANCE',             master:p.m_transport_allowance,        actual:p.transport_allowance },
+    { label:'INCENTIVE',                      master:p.m_incentive,                  actual:p.incentive },
+    { label:'OTHER EARNINGS',                 master:0,                              actual:p.other_earnings },
+  ].filter(e => parseFloat(e.master) > 0 || parseFloat(e.actual) > 0);
+
+  const deductions = [
+    { label:'PF',                value:p.pf_employee },
+    { label:'PROF TAX',          value:p.pt },
+    { label:'TDS',               value:p.tds },
+    { label:'LOAN',              value:p.loan_deduction },
+    { label:'SALARY ADVANCE',    value:p.advance_deduction },
+    { label:'MESS DEDUCTION',    value:p.mess_deduction },
+    { label:'ACCOMMODATION DEDUCTION', value:p.accommodation_deduction },
+    { label:'OTHER DEDUCTIONS',  value:p.other_deductions },
+  ].filter(d => parseFloat(d.value) > 0);
+
+  const employerContribution = [
+    { label:'Employer PF',  value:p.pf_employer },
+    { label:'ESI Employer', value:p.esi_employer },
+    { label:'Gratuity',     value:p.gratuity },
+  ].filter(e => parseFloat(e.value) > 0);
+
+  return { earnings, deductions, employerContribution };
+}
+
 export default function PayslipPrintPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -82,43 +124,7 @@ export default function PayslipPrintPage() {
   // Earnings: Master (entitled, unprorated — from hr_employee_salaries at the
   // time of this payroll month) vs Actual (pro-rated for attendance/LOP — from
   // hr_monthly_payroll itself). Mirrors the real BCIM payslip layout exactly.
-  const earnings = [
-    { label:'BASIC',                          master:p.m_basic,                     actual:p.basic },
-    { label:'DA',                             master:p.m_da,                        actual:p.da },
-    { label:'HRA',                            master:p.m_hra,                       actual:p.hra },
-    { label:'CONVEYANCE',                     master:p.m_conveyance_allowance,       actual:p.conveyance_allowance },
-    { label:'WASHING ALLOWANCE',              master:p.m_washing_allowance,          actual:p.washing_allowance },
-    { label:'LEAVE TRAVEL ALLOWANCE',         master:p.m_lta,                        actual:p.lta },
-    { label:'MEDICAL ALLOWANCE',              master:p.m_medical,                    actual:p.medical },
-    { label:'MOBILE ALLOWANCE',               master:p.m_mobile_allowance,           actual:p.mobile_allowance },
-    { label:'PROJECT OFFICE SPECIAL ALLOW',   master:p.m_project_allowance,          actual:p.project_allowance },
-    { label:'CITY SPECIAL ALLOWANCE',         master:p.m_city_special_allowance,     actual:p.city_special_allowance },
-    { label:'SPECIAL ALLOWANCE',              master:p.m_special_allowance,          actual:p.special_allowance },
-    { label:'ACCOMMODATION ALLOWANCE',        master:p.m_accommodation_allowance,    actual:p.accommodation_allowance },
-    { label:'FOOD ALLOWANCE',                 master:p.m_food_allowance,             actual:p.food_allowance },
-    { label:'TRANSPORT ALLOWANCE',             master:p.m_transport_allowance,        actual:p.transport_allowance },
-    { label:'INCENTIVE',                      master:p.m_incentive,                  actual:p.incentive },
-    // No master figure for this line — it's whatever the pro-rated gross didn't
-    // account for elsewhere, not a configured entitlement.
-    { label:'OTHER EARNINGS',                 master:0,                              actual:p.other_earnings },
-  ].filter(e => parseFloat(e.master) > 0 || parseFloat(e.actual) > 0);
-
-  const deductions = [
-    { label:'PF',                value:p.pf_employee },
-    { label:'PROF TAX',          value:p.pt },
-    { label:'TDS',               value:p.tds },
-    { label:'LOAN',              value:p.loan_deduction },
-    { label:'SALARY ADVANCE',    value:p.advance_deduction },
-    { label:'MESS DEDUCTION',    value:p.mess_deduction },
-    { label:'ACCOMMODATION DEDUCTION', value:p.accommodation_deduction },
-    { label:'OTHER DEDUCTIONS',  value:p.other_deductions },
-  ].filter(d => parseFloat(d.value) > 0);
-
-  const employerContribution = [
-    { label:'Employer PF',  value:p.pf_employer },
-    { label:'ESI Employer', value:p.esi_employer },
-    { label:'Gratuity',     value:p.gratuity },
-  ].filter(e => parseFloat(e.value) > 0);
+  const { earnings, deductions, employerContribution } = buildPayslipSections(p);
 
   return (
     <>
@@ -166,7 +172,7 @@ export default function PayslipPrintPage() {
 // Days/LOP on the left, Employee No/Bank/PAN/UAN on the right), then a single
 // Master|Actual earnings table beside a right-hand deductions column, a totals
 // row, Net Pay, and the amount in words.
-function PayslipContent({ p, earnings, deductions, employerContribution }) {
+export function PayslipContent({ p, earnings, deductions, employerContribution }) {
   const totalEarningsMaster = earnings.reduce((s, e) => s + (parseFloat(e.master) || 0), 0);
   const totalEarningsActual = earnings.reduce((s, e) => s + (parseFloat(e.actual) || 0), 0);
   const totalDeductions = deductions.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
