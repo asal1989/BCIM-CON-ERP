@@ -5,7 +5,7 @@ import {
   Plus, CreditCard, CheckCircle2, Search, X, Banknote,
   FileCheck2, TrendingDown, TrendingUp, Clock,
   ArrowRight, ChevronDown, Building2, Receipt, Wallet,
-  IndianRupee, FileSignature, RefreshCw,
+  IndianRupee, FileSignature, RefreshCw, Trash2,
 } from 'lucide-react';
 import api, { projectAPI, raBillAPI, tqsBillsAPI, vendorAPI, tqsVendorsAPI, vendorQSCertificationAPI, procurementAdvanceAPI } from '../../api/client';
 import dayjs from 'dayjs';
@@ -572,7 +572,10 @@ export default function PaymentsPage() {
         }
       />
 
-      <div className="p-6 space-y-5 max-w-7xl mx-auto">
+      {/* Wide container — this register's tables carry 8-9 data columns, which
+          overflowed the old max-w-7xl (1280px) cap and pushed Date/Status/actions
+          off-screen behind a horizontal scrollbar most users never noticed. */}
+      <div className="p-6 space-y-5 max-w-[1700px] mx-auto">
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -629,47 +632,54 @@ export default function PaymentsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    {['Payment #', 'Vendor / Payee', 'Project', 'Type', 'Amount', 'TDS', 'Net Paid', 'Mode', 'Date', 'Status', ''].map((h, i) => (
-                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Amount','TDS','Net Paid'].includes(h) ? 'text-right' : '')}>{h}</th>
+                    {/* "Type" dropped — payment_type already prints as the subtitle
+                        under the payee name, so it cost a column to say the same
+                        thing twice. "Mode" folded under the date for the same reason. */}
+                    {['Payment #', 'Vendor / Payee', 'Project', 'Amount', 'TDS', 'Net Paid', 'Date / Mode', 'Status', ''].map((h, i) => (
+                      <th key={i} className={clsx('px-3 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Amount','TDS','Net Paid'].includes(h) ? 'text-right' : '')}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map(p => (
                     <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-medium whitespace-nowrap">
+                      <td className="px-3 py-3 font-mono text-xs text-indigo-600 font-medium whitespace-nowrap">
                         {p.payment_number || p.id?.slice(0, 8).toUpperCase()}
                         {(p.pc_number) && <div className="text-[10px] text-indigo-400 mt-0.5">PC: {p.pc_number}</div>}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900 font-medium text-sm">{p.entity_name || p.payee_name}</div>
-                        <div className="text-[11px] text-slate-900 font-medium mt-0.5">{p.payment_type || p.payee_type}</div>
+                      <td className="px-3 py-3 min-w-[150px]">
+                        <div className="font-medium text-slate-900 text-sm">{p.entity_name || p.payee_name}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 capitalize">{p.payment_type || p.payee_type}</div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-900 whitespace-nowrap">{p.project_name}</td>
-                      <td className="px-4 py-3">
-                        <span className="bg-slate-100 text-slate-900 text-[10px] font-medium px-2 py-0.5 rounded capitalize">{p.payment_type || '—'}</span>
+                      <td className="px-3 py-3 text-xs text-slate-700">{p.project_name}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm font-medium text-black whitespace-nowrap">{inr(p.amount)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs text-red-500 whitespace-nowrap">{(p.tds_deducted || p.tds_amount) > 0 ? inr(p.tds_deducted || p.tds_amount) : '—'}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm font-medium text-emerald-600 whitespace-nowrap">{inr(p.net_amount || p.net_paid)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="text-xs text-slate-900 font-medium">{p.payment_date ? dayjs(p.payment_date).format('DD MMM YYYY') : '—'}</div>
+                        {p.payment_mode && <div className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{p.payment_mode}</div>}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-medium text-black">{inr(p.amount)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-red-500">{(p.tds_deducted || p.tds_amount) > 0 ? inr(p.tds_deducted || p.tds_amount) : '—'}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-medium text-emerald-600">{inr(p.net_amount || p.net_paid)}</td>
-                      <td className="px-4 py-3"><span className="text-[11px] bg-slate-100 text-slate-900 px-2 py-0.5 rounded font-medium">{p.payment_mode}</span></td>
-                      <td className="px-4 py-3 text-xs text-slate-900 font-medium whitespace-nowrap">{p.payment_date ? dayjs(p.payment_date).format('DD MMM YYYY') : '—'}</td>
-                      <td className="px-4 py-3"><StatusPill status={p.status} /></td>
-                      <td className="px-4 py-3 text-right">
-                        <button onClick={() => { if (window.confirm('Delete this payment record?')) deleteMut.mutate(p.id); }} className="text-[11px] text-red-400 hover:text-red-600 font-medium">Delete</button>
+                      <td className="px-3 py-3"><StatusPill status={p.status} /></td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          onClick={() => { if (window.confirm('Delete this payment record?')) deleteMut.mutate(p.id); }}
+                          title="Delete payment record"
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
-                  {filtered.length === 0 && <tr><td colSpan={11} className="py-16 text-center text-sm text-slate-400">No payment records found</td></tr>}
+                  {filtered.length === 0 && <tr><td colSpan={9} className="py-16 text-center text-sm text-slate-400">No payment records found</td></tr>}
                 </tbody>
                 {filtered.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50 border-t border-slate-200">
-                      <td colSpan={4} className="px-4 py-3 text-xs font-medium text-slate-600">{filtered.length} records</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium text-black">{inr(filtered.reduce((s, p) => s + Number(p.amount || 0), 0))}</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium text-red-500">{inr(filtered.reduce((s, p) => s + Number(p.tds_deducted || p.tds_amount || 0), 0))}</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium text-emerald-600">{inr(filtered.reduce((s, p) => s + Number(p.net_amount || p.net_paid || 0), 0))}</td>
-                      <td colSpan={4} />
+                      <td colSpan={3} className="px-3 py-3 text-xs font-medium text-slate-600">{filtered.length} records</td>
+                      <td className="px-3 py-3 text-right font-mono font-medium text-black whitespace-nowrap">{inr(filtered.reduce((s, p) => s + Number(p.amount || 0), 0))}</td>
+                      <td className="px-3 py-3 text-right font-mono font-medium text-red-500 whitespace-nowrap">{inr(filtered.reduce((s, p) => s + Number(p.tds_deducted || p.tds_amount || 0), 0))}</td>
+                      <td className="px-3 py-3 text-right font-mono font-medium text-emerald-600 whitespace-nowrap">{inr(filtered.reduce((s, p) => s + Number(p.net_amount || p.net_paid || 0), 0))}</td>
+                      <td colSpan={3} />
                     </tr>
                   </tfoot>
                 )}
@@ -710,7 +720,7 @@ export default function PaymentsPage() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     {['Cert No.', 'RA Bill', 'Vendor', 'Project', 'Net Payable', 'Paid', 'Due', 'Status', 'Action'].map((h, i) => (
-                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-600 text-left whitespace-nowrap',
+                      <th key={i} className={clsx('px-3 py-3 text-[11px] font-medium text-slate-600 text-left whitespace-nowrap',
                         ['Net Payable','Paid','Due'].includes(h) ? 'text-right' : '',
                         h === 'Action' ? 'text-center' : '')}>{h}</th>
                     ))}
@@ -734,25 +744,25 @@ export default function PaymentsPage() {
                     const partial = paid > 0 && due > 0.5;
                     return (
                       <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-medium whitespace-nowrap">
+                        <td className="px-3 py-3 font-mono text-xs text-indigo-600 font-medium whitespace-nowrap">
                           {c.cert_number}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap">
+                        <td className="px-3 py-3 font-mono text-xs text-slate-700 whitespace-nowrap">
                           {c.ra_bill_number || '—'}
                           {c.is_final_bill && <span className="ml-1 bg-red-100 text-red-700 text-[9px] font-bold px-1 py-0.5 rounded">FINAL</span>}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           <div className="font-medium text-black text-sm">{c.vendor_name}</div>
                           <div className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{c.order_type} · {c.order_number || '—'}</div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{c.project_name || '—'}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-bold text-slate-900">{inr(net)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-slate-500">{paid > 0 ? inr(paid) : '—'}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-extrabold text-emerald-700">{inr(due)}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3 text-xs text-slate-700 whitespace-nowrap">{c.project_name || '—'}</td>
+                        <td className="px-3 py-3 text-right font-mono text-sm font-bold text-slate-900">{inr(net)}</td>
+                        <td className="px-3 py-3 text-right font-mono text-xs text-slate-500">{paid > 0 ? inr(paid) : '—'}</td>
+                        <td className="px-3 py-3 text-right font-mono text-sm font-extrabold text-emerald-700">{inr(due)}</td>
+                        <td className="px-3 py-3">
                           <StatusPill status={partial ? 'partial' : c.status} />
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-3 py-3 text-center">
                           <button
                             onClick={() => setPayCert(c)}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 mx-auto shadow-sm"
@@ -797,7 +807,7 @@ export default function PaymentsPage() {
                     {['Bill #', 'Project / Client', 'Date', 'Net Payable', 'Client TDS',
                       raBillFilter === 'paid' ? 'Amount Received' : 'Status',
                       raBillFilter === 'paid' ? 'Payment Ref' : 'Certified By', ''].map((h, i) => (
-                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Net Payable','Client TDS','Amount Received'].includes(h) ? 'text-right' : '')}>{h}</th>
+                      <th key={i} className={clsx('px-3 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Net Payable','Client TDS','Amount Received'].includes(h) ? 'text-right' : '')}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -807,23 +817,23 @@ export default function PaymentsPage() {
                     const isPaid = b.status === 'paid';
                     return (
                       <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3"><div className={clsx('font-mono text-xs font-semibold', isPaid ? 'text-emerald-700' : 'text-violet-700')}>{b.bill_number}</div></td>
-                        <td className="px-4 py-3"><div className="font-medium text-black">{b.project_name}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.contractor_name}</div></td>
-                        <td className="px-4 py-3 text-xs text-slate-900 font-medium whitespace-nowrap">{b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—'}</td>
-                        <td className="px-4 py-3 text-right font-mono text-sm font-medium text-black">{inr(b.net_payable)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-red-500">{inr(split.clientTds)}</td>
+                        <td className="px-3 py-3"><div className={clsx('font-mono text-xs font-semibold', isPaid ? 'text-emerald-700' : 'text-violet-700')}>{b.bill_number}</div></td>
+                        <td className="px-3 py-3"><div className="font-medium text-black">{b.project_name}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.contractor_name}</div></td>
+                        <td className="px-3 py-3 text-xs text-slate-900 font-medium whitespace-nowrap">{b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—'}</td>
+                        <td className="px-3 py-3 text-right font-mono text-sm font-medium text-black">{inr(b.net_payable)}</td>
+                        <td className="px-3 py-3 text-right font-mono text-xs text-red-500">{inr(split.clientTds)}</td>
                         {isPaid ? (
                           <>
-                            <td className="px-4 py-3 text-right font-mono text-sm font-medium text-emerald-600">{inr(b.amount_received || split.amountReceived)}</td>
-                            <td className="px-4 py-3"><div className="font-mono text-xs font-medium text-slate-700">{b.payment_ref || '—'}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.payment_mode} · {b.payment_date ? dayjs(b.payment_date).format('DD MMM YYYY') : '—'}</div></td>
+                            <td className="px-3 py-3 text-right font-mono text-sm font-medium text-emerald-600">{inr(b.amount_received || split.amountReceived)}</td>
+                            <td className="px-3 py-3"><div className="font-mono text-xs font-medium text-slate-700">{b.payment_ref || '—'}</div><div className="text-[11px] text-slate-900 font-medium mt-0.5">{b.payment_mode} · {b.payment_date ? dayjs(b.payment_date).format('DD MMM YYYY') : '—'}</div></td>
                           </>
                         ) : (
                           <>
-                            <td className="px-4 py-3"><span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded text-[11px] font-semibold">Certified</span></td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{b.certified_by_name || '—'}</td>
+                            <td className="px-3 py-3"><span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded text-[11px] font-semibold">Certified</span></td>
+                            <td className="px-3 py-3 text-xs text-slate-500">{b.certified_by_name || '—'}</td>
                           </>
                         )}
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           {!isPaid && (
                             <button onClick={() => { setPayBill(b); setPayForm(EMPTY_PAY_FORM); }}
                               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors whitespace-nowrap">
