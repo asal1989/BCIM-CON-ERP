@@ -1868,6 +1868,7 @@ export const analyticsAPI = {
   global:     ()             => api.get('/analytics/global'),
   executive:  (params)       => api.get('/analytics/executive', { params }),
   project360: (id, params)   => api.get(`/analytics/project-360/${id}`, { params }),
+  costToCompletion: (id, params) => api.get(`/analytics/cost-to-completion/${id}`, { params }),
 };
 
 export const approvalsAPI = {

@@ -120,6 +120,7 @@ const BankReconciliationPage = lazy(() => import('./pages/finance/BankReconcilia
 const PaymentRunPage         = lazy(() => import('./pages/finance/PaymentRunPage'));
 const ChequeTrackerPage      = lazy(() => import('./pages/finance/ChequeTrackerPage'));
 const ControlDashboardPage   = lazy(() => import('./pages/finance/ControlDashboardPage'));
+const CostToCompletionPage   = lazy(() => import('./pages/finance/CostToCompletionPage'));
 const ManagementMISPage      = lazy(() => import('./pages/finance/ManagementMISPage'));
 const VendorList                = lazy(() => import('./pages/procurement/VendorList'));
 const VendorProjectMappingPage  = lazy(() => import('./pages/procurement/VendorProjectMappingPage'));
@@ -829,6 +830,7 @@ export default function App() {
                 <Route path="accounts/reports/management-mis" element={<RequireModule module="Finance"><ManagementMISPage /></RequireModule>} />
                 <Route path="accounts/reports/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
                 <Route path="accounts/reports/budget" element={<RequireModule module="Finance"><BudgetPage /></RequireModule>} />
+                <Route path="project-controls/cost-to-completion" element={<RequireModule module="Finance"><CostToCompletionPage /></RequireModule>} />
                 {/* Taxes */}
                 <Route path="accounts/taxes/summary" element={<RequireModule module="Finance"><TaxSummaryPage /></RequireModule>} />
                 <Route path="accounts/taxes/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />

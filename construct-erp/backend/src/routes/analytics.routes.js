@@ -982,4 +982,229 @@ router.get('/project-360/:project_id', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// GET /analytics/cost-to-completion/:project_id
+// Standalone Cost to Completion statement — Approved Budget -> Actual ->
+// Committed -> Estimate to Complete (ETC) -> Estimate at Completion (EAC) ->
+// Variance, for one project.
+//
+// Reuses the same 5-bucket cost split (Materials/Labour/Equipment/Subcontract/
+// Others), physical-progress calc, approved-variations query, S-curve, and
+// risk/exception feed already built for Project 360 — see that endpoint above
+// for the original sourcing notes on each of those.
+//
+// What's genuinely new here: "Committed Cost". No table in this ERP tracks
+// "approved but not yet billed" anywhere else, so this endpoint computes it
+// directly — approved Purchase Orders minus what's been billed against each
+// specific PO (tqs_bills.po_id), and active/approved SC Work Orders minus
+// what's been billed against each specific WO (sc_bills.wo_id). Both are real
+// FK-backed links, not text matches. Plain (non-SC) `work_orders` has no
+// reliable billed-against-this-WO link in the schema (tqs_bills.wo_number is
+// a free-text field, not a FK) — its commitment is deliberately left out
+// rather than approximated from an unreliable match. Equipment/Labour/Others
+// have no PO/WO concept at all, so their committed figure is honestly 0, not
+// estimated.
+//
+// ETC/EAC methodology: this ERP's real EVM engine (evm.service.js) needs
+// activities to carry manually-entered planned_value/earned_value/actual_cost
+// — confirmed empty for nearly every project (see project-360's `evmTracked`
+// check above). Building this screen on that would show "not tracked"
+// everywhere. Instead, Earned Value is derived from the same real,
+// auto-computed physical-progress % this ERP already has (BOQ measurement
+// value certified / total BOQ value) applied to Approved Budget:
+//   EV = Physical Progress% x Approved Budget
+//   CPI = EV / Actual Cost
+//   ETC = (Approved Budget - EV) / CPI      (standard EAC-forecast formula,
+//   EAC = Actual Cost + ETC                  just fed by a progress-based EV
+//   Variance = Approved Budget - EAC         proxy instead of a manual one)
+// Falls back to a flat "budget minus actual" remaining-cost estimate when CPI
+// can't be computed yet (e.g. a project with 0 actual cost so far).
+router.get('/cost-to-completion/:project_id', async (req, res) => {
+  try {
+    const projectId = req.params.project_id;
+    if (!userCanAccessProject(req, projectId)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const { date_from: dateFrom, date_to: dateTo } = req.query;
+
+    const projectInfo = await query(
+      `SELECT * FROM projects WHERE id = $1 AND company_id = $2`,
+      [projectId, req.user.company_id]
+    );
+    if (!projectInfo.rows.length) return res.status(404).json({ error: 'Project not found' });
+    const project = projectInfo.rows[0];
+
+    const safeQuery = async (sql, params) => {
+      try { return await query(sql, params); } catch (e) { console.error('[cost-to-completion] sub-query failed:', e.message); return { rows: [] }; }
+    };
+
+    const [
+      materialCostRes, assetCostRes, laborCostRes, subConRes, pettyCashRes,
+      physicalProgressRes, budgetRes, variationsRes,
+      poCommittedRes, poBilledRes, scWoCommittedRes, scWoBilledRes,
+      raBillsMonthlyRes, baselineRes,
+      riskRes, lowStockRes, openRfisRes, openNcrsRes, openIncidentsRes,
+    ] = await Promise.all([
+      safeQuery(`SELECT COALESCE(SUM(net_amount),0) total FROM invoices WHERE project_id=$1 AND status IN ('authorized','verified','paid')`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(total_cost),0) fuel, COALESCE((SELECT SUM(units_worked*hourly_rate) FROM asset_usage_logs ul JOIN assets a ON ul.asset_id=a.id WHERE ul.project_id=$1),0) rental FROM asset_fuel_logs WHERE project_id=$1`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(w.daily_rate * CASE WHEN a.status='present' THEN 1 WHEN a.status='half_day' THEN 0.5 ELSE 0 END),0) total FROM attendance a JOIN workers w ON a.worker_id=w.id WHERE a.project_id=$1`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(gross_amount),0) total FROM sc_bills WHERE project_id=$1 AND status IN ('submitted','under_review','approved','paid')`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(amount),0) total FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved'`, [projectId]),
+      safeQuery(`SELECT SUM(quantity*rate) total_boq_value, SUM(COALESCE((SELECT SUM(net_quantity) FROM measurements m WHERE m.boq_item_id=bi.id AND m.status='pm_approved'),0)*rate) physical_certified_value FROM boq_items bi WHERE project_id=$1 AND is_active=true`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(budget_amount),0) total FROM project_costhead_budgets WHERE project_id=$1`, [projectId]),
+      safeQuery(
+        `SELECT COALESCE(SUM(v), 0) approved_variations FROM (
+           SELECT COALESCE(SUM(a.value_impact),0) v FROM po_amendments a
+             JOIN purchase_orders po ON po.id = a.po_id WHERE po.project_id=$1 AND a.status='approved'
+           UNION ALL
+           SELECT COALESCE(SUM(a.value_impact),0) v FROM wo_amendments a
+             JOIN work_orders wo ON wo.id = a.wo_id WHERE wo.project_id=$1 AND a.status='approved'
+         ) x`, [projectId]),
+      // Committed — Purchase Orders (Materials bucket)
+      safeQuery(`SELECT COALESCE(SUM(grand_total),0) total FROM purchase_orders WHERE project_id=$1 AND status IN ('approved','fully_received')`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(b.total_amount),0) total FROM tqs_bills b JOIN purchase_orders po ON po.id=b.po_id WHERE po.project_id=$1 AND b.is_deleted=FALSE`, [projectId]),
+      // Committed — SC Work Orders (Subcontract bucket)
+      safeQuery(`SELECT COALESCE(SUM(contract_amount),0) total FROM sc_work_orders WHERE project_id=$1 AND status IN ('active','approved')`, [projectId]),
+      safeQuery(`SELECT COALESCE(SUM(b.gross_amount),0) total FROM sc_bills b JOIN sc_work_orders wo ON wo.id=b.wo_id WHERE wo.project_id=$1 AND b.status <> 'draft'`, [projectId]),
+      safeQuery(`SELECT to_char(bill_date,'YYYY-MM') AS ym, SUM(net_payable) v FROM ra_bills WHERE project_id=$1 AND status IN ('certified','authorized','verified','paid') AND bill_date IS NOT NULL GROUP BY 1`, [projectId]),
+      safeQuery(`SELECT ba.planned_start, ba.planned_value FROM planning_baselines pb JOIN baseline_activities ba ON ba.baseline_id = pb.id WHERE pb.project_id=$1 AND pb.is_active=true`, [projectId]),
+      safeQuery(`SELECT r.id, r.risk_title, r.category, r.risk_level, r.status, r.due_date, r.owner FROM risk_register r WHERE r.project_id=$1 AND r.status='open' ORDER BY r.risk_score DESC, r.created_at DESC LIMIT 8`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM inventory WHERE project_id=$1 AND closing_stock <= COALESCE(NULLIF(reorder_level,0), minimum_level)`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM quality_rfis WHERE project_id=$1 AND status NOT IN ('closed','approved','completed')`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM quality_ncrs WHERE project_id=$1 AND status NOT IN ('verified','closed','completed')`, [projectId]),
+      safeQuery(`SELECT COUNT(*) c FROM incidents WHERE project_id=$1 AND status NOT IN ('closed','resolved')`, [projectId]),
+    ]);
+
+    const materialsTotal = toNumber(materialCostRes.rows[0]?.total);
+    const equipmentTotal = toNumber(assetCostRes.rows[0]?.fuel) + toNumber(assetCostRes.rows[0]?.rental);
+    const laborTotal     = toNumber(laborCostRes.rows[0]?.total);
+    const subConTotal    = toNumber(subConRes.rows[0]?.total);
+    const othersTotal    = toNumber(pettyCashRes.rows[0]?.total);
+    const totalActual    = materialsTotal + equipmentTotal + laborTotal + subConTotal + othersTotal;
+
+    const totalBudget    = toNumber(budgetRes.rows[0]?.total);
+    const contractValue  = toNumber(project.contract_value);
+    const approvedVariations = toNumber(variationsRes.rows[0]?.approved_variations);
+
+    const poCommitted = Math.max(toNumber(poCommittedRes.rows[0]?.total) - toNumber(poBilledRes.rows[0]?.total), 0);
+    const scCommitted = Math.max(toNumber(scWoCommittedRes.rows[0]?.total) - toNumber(scWoBilledRes.rows[0]?.total), 0);
+    const totalCommitted = poCommitted + scCommitted;
+
+    const physicalProgress = physicalProgressRes.rows[0] || {};
+    const progressPct = toNumber(physicalProgress.total_boq_value) > 0
+      ? (toNumber(physicalProgress.physical_certified_value) / toNumber(physicalProgress.total_boq_value)) * 100
+      : 0;
+
+    // Earned Value proxy (see file header note) — physical progress applied to budget.
+    const earnedValue = (progressPct / 100) * totalBudget;
+    const cpi = totalActual > 0 ? earnedValue / totalActual : null;
+    const costProgressPct = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
+
+    const remainingBudget = Math.max(totalBudget - totalActual, 0);
+    const etc = (cpi && cpi > 0) ? Math.max((totalBudget - earnedValue) / cpi, 0) : remainingBudget;
+    const eac = totalActual + etc;
+    const variance = totalBudget - eac; // positive = under budget, negative = overrun
+
+    // Per-bucket breakdown — budget allocated proportionally by each bucket's
+    // share of total actual spend (project_costhead_budgets is keyed by the
+    // ~20 granular BOQ heads, not these 5 buckets — Budget Control remains
+    // the source of truth for per-cost-head detail; this is a proportional
+    // summary, same approach Project 360 uses for its topVariance table).
+    // Committed is real (not proportional) for Materials/Subcontract; 0
+    // elsewhere, since no PO/WO commitment concept exists for those buckets.
+    const buckets = [
+      { name: 'Labour',       actual: laborTotal,     committed: 0 },
+      { name: 'Materials',    actual: materialsTotal, committed: poCommitted },
+      { name: 'Plant & Machinery', actual: equipmentTotal, committed: 0 },
+      { name: 'Subcontract',  actual: subConTotal,    committed: scCommitted },
+      { name: 'Overheads',    actual: othersTotal,    committed: 0 },
+    ].map(b => {
+      const budget = totalActual > 0 ? totalBudget * (b.actual / totalActual) : 0;
+      const bucketEtc = totalBudget > 0 ? etc * (budget / totalBudget) : 0;
+      const bucketEac = b.actual + bucketEtc;
+      return { ...b, budget, etc: bucketEtc, eac: bucketEac, variance: budget - bucketEac };
+    });
+
+    // Monthly trend — Budget (flat reference or time-phased baseline) vs
+    // Actual (monthly certified RA bills) vs Forecast (this endpoint's own
+    // EAC, shown as a flat line at the latest EAC — no time-phased forecast
+    // data exists in this ERP, same honesty constraint Project 360 applies).
+    const months = buildMonthSeries(dateFrom, dateTo);
+    const monthlyActual = {};
+    for (const row of (raBillsMonthlyRes.rows || [])) monthlyActual[row.ym] = toNumber(row.v);
+    const monthlyPlanned = {};
+    let hasBaseline = false;
+    for (const row of (baselineRes.rows || [])) {
+      if (!row.planned_start) continue;
+      hasBaseline = true;
+      const key = String(row.planned_start).slice(0, 7);
+      monthlyPlanned[key] = (monthlyPlanned[key] || 0) + toNumber(row.planned_value);
+    }
+    let cumActual = 0, cumPlanned = 0;
+    const monthlyTrend = months.map((m, i) => {
+      cumActual += monthlyActual[m.key] || 0;
+      cumPlanned += hasBaseline ? (monthlyPlanned[m.key] || 0) : (totalBudget / months.length);
+      const point = {
+        month: m.label,
+        budget: Number((cumPlanned / 100000).toFixed(2)),
+        actual: Number((cumActual / 100000).toFixed(2)),
+      };
+      if (i === months.length - 1) point.forecast = Number((eac / 100000).toFixed(2));
+      return point;
+    });
+
+    const riskAlerts = [
+      ...riskRes.rows.map(r => ({
+        type: 'risk', severity: r.risk_level, label: r.risk_title, category: r.category,
+        due_date: r.due_date, owner: r.owner,
+      })),
+    ];
+    const lowStockCount = parseInt(lowStockRes.rows[0]?.c || 0, 10);
+    if (lowStockCount > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${lowStockCount} material(s) at/below reorder level`, to: '/stores/inventory' });
+    const openRfisCount = parseInt(openRfisRes.rows[0]?.c || 0, 10);
+    if (openRfisCount > 0) riskAlerts.push({ type: 'exception', severity: 'low', label: `${openRfisCount} open inspection(s)`, to: '/quality/rfi' });
+    const openNcrsCount = parseInt(openNcrsRes.rows[0]?.c || 0, 10);
+    if (openNcrsCount > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${openNcrsCount} open NCR(s)`, to: '/quality/ncr' });
+    const openIncidentsCount = parseInt(openIncidentsRes.rows[0]?.c || 0, 10);
+    if (openIncidentsCount > 0) riskAlerts.push({ type: 'exception', severity: 'high', label: `${openIncidentsCount} open safety incident(s)`, to: '/safety/incidents' });
+    // Overrun/overspend risks derived from this screen's own numbers.
+    if (variance < 0) riskAlerts.unshift({ type: 'exception', severity: 'high', label: `Projected cost overrun of ₹${Math.round(Math.abs(variance)).toLocaleString('en-IN')} at completion` });
+    buckets.forEach(b => {
+      if (b.budget > 0 && b.actual > b.budget * 1.05) {
+        const pct = (((b.actual - b.budget) / b.budget) * 100).toFixed(0);
+        riskAlerts.push({ type: 'exception', severity: 'medium', label: `${b.name} spend ${pct}% above its allocated share of budget` });
+      }
+    });
+
+    res.json({
+      data: {
+        project: {
+          id: project.id, name: project.name, project_code: project.project_code,
+          client_name: project.client_name, status: project.status,
+          start_date: project.start_date, end_date: project.end_date,
+        },
+        contract_value: contractValue,
+        approved_variations: approvedVariations,
+        revised_contract_value: contractValue + approvedVariations,
+        approved_budget: totalBudget,
+        actual_cost: totalActual,
+        committed_cost: totalCommitted,
+        committed_detail: { purchase_orders: poCommitted, sc_work_orders: scCommitted },
+        remaining_cost: etc,
+        estimated_final_cost: eac,
+        projected_variance: variance,
+        cost_completion_pct: costProgressPct,
+        physical_progress_pct: progressPct,
+        cpi,
+        buckets,
+        monthlyTrend,
+        riskAlerts,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

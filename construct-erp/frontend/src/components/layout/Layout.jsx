@@ -454,6 +454,9 @@ const navGroups = [
     { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
     { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
   ]},
+  { label: 'Project Controls', items: [
+    { to: '/project-controls/cost-to-completion', icon: Target, label: 'Cost to Completion' },
+  ]},
   { label: 'Bill Tracker', items: [
     { to: '/tqs',                       icon: LayoutDashboard, label: 'Bill Tracker Dashboard' },
     { to: '/tqs/bills',                 icon: FileText,        label: 'Bills' },
@@ -592,6 +595,7 @@ const GROUP_COLORS = {
   'Accounts':          '#10B981',
   'HR & Admin':        '#7C3AED',
   'Setup & Tools':     '#78716C',
+  'Project Controls':  '#0B2E59',
   'Bill Tracker':      '#6366F1',
   'Quality (QA/QC)':   '#3B82F6',
   'HSE & Safety':      '#EF4444',
