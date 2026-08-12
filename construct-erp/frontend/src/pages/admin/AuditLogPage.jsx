@@ -120,7 +120,7 @@ export default function AuditLogPage() {
     queryFn: () => auditLogAPI.actions().then(r => r.data?.data || []),
   });
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['audit-log', filters, page],
     queryFn: () => auditLogAPI.list({ ...filters, page, page_size: 50 }).then(r => r.data),
     staleTime: 0,
@@ -193,6 +193,19 @@ export default function AuditLogPage() {
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           {isLoading ? (
             <div className="p-5 space-y-2">{[1, 2, 3, 4, 5].map(n => <div key={n} className="h-10 bg-slate-100 rounded-lg animate-pulse" />)}</div>
+          ) : isError ? (
+            // Previously a failed request (403 from a non-admin role, a 500,
+            // a network error) rendered identically to a genuine empty
+            // result — logs defaulted to [] either way, so a real failure
+            // was indistinguishable from "nothing happened yet". Surface it.
+            <div className="py-16 text-center">
+              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <History className="w-7 h-7 text-red-300" />
+              </div>
+              <p className="text-red-600 font-semibold text-sm">Couldn't load audit log entries</p>
+              <p className="text-xs text-slate-400 mt-1">{error?.response?.data?.error || error?.message || 'Unknown error'}</p>
+              <button onClick={() => refetch()} className="mt-3 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100">Retry</button>
+            </div>
           ) : logs.length === 0 ? (
             <div className="py-16 text-center">
               <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
