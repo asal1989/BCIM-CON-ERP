@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 
     const rowsRes = await query(
       `SELECT al.id, al.action, al.table_name, al.record_id, al.old_values, al.new_values,
-              al.ip_address, al.created_at, u.name AS user_name, u.role AS user_role
+              al.ip_address, al.created_at, al.source, u.name AS user_name, u.role AS user_role
        FROM audit_logs al
        LEFT JOIN users u ON u.id = al.user_id
        WHERE ${conditions.join(' AND ')}

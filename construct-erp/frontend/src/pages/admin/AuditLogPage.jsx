@@ -54,7 +54,12 @@ function LogRow({ log }) {
           {log.user_role && <p className="text-[10px] text-slate-400">{log.user_role}</p>}
         </td>
         <td className="px-3 py-2.5">
-          <span className={clsx('inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-full', colors.bg, colors.text)}>{log.action}</span>
+          <div className="flex items-center gap-1.5">
+            <span className={clsx('inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-full', colors.bg, colors.text)}>{log.action}</span>
+            {log.source === 'auto' && (
+              <span title="Automatically captured — coarse, no before/after diff" className="inline-block text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">auto</span>
+            )}
+          </div>
         </td>
         <td className="px-3 py-2.5 text-xs font-mono text-slate-600">{log.table_name || '—'}</td>
         <td className="px-3 py-2.5 text-[10px] font-mono text-slate-400 truncate max-w-[140px]">{log.record_id || '—'}</td>

@@ -101,6 +101,7 @@ const usersRoutes  = require('./routes/users.routes');
 const licenseRoutes = require('./routes/license.routes');
 const materialReconRoutes = require('./routes/materialRecon.routes');
 const analyticsRoutes     = require('./routes/analytics.routes');
+const costForecastRoutes  = require('./routes/cost-forecast.routes');
 const variationRoutes          = require('./routes/variation.routes');
 const variationStatementRoutes = require('./routes/variation-statement.routes');
 const normsRoutes         = require('./routes/norms.routes');
@@ -392,6 +393,15 @@ app.use('/api/', limiter);
 // Auth-specific limiter (brute-force protection)
 // Auth rate limiter removed — private office ERP, shared IP causes false lockouts
 
+// Generic audit-log capture — coarse fallback for every mutating route that
+// doesn't call the precise logAudit() helper directly (see
+// middleware/auditCapture.js for why: raw SQL everywhere means there's no
+// ORM hook to derive old/new diffs from automatically). Mounted once, before
+// all route registration below, so it wraps every module with zero per-route
+// changes.
+const auditCapture = require('./middleware/auditCapture');
+app.use('/api/v1', auditCapture);
+
 // ============================================
 // HEALTH CHECK
 // ============================================
@@ -520,6 +530,7 @@ app.use(`${API}/bookings`, bookingRoutes);
 // Reports & Strategic Analytics
 app.use(`${API}/reports`, reportRoutes);
 app.use(`${API}/analytics`, analyticsRoutes);
+app.use(`${API}/analytics/cost-to-completion`, costForecastRoutes);
 
 // File upload
 app.use(`${API}/upload`, uploadRoutes);

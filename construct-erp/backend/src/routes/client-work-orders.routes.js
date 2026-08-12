@@ -122,7 +122,7 @@ router.post('/', async (req, res) => {
         notes?.trim() || null, req.user.id,
       ]
     );
-    await logAudit(req, 'client_work_orders', rows[0].id, 'create', null, rows[0]);
+    await logAudit(req, { action: 'create', tableName: 'client_work_orders', recordId: rows[0].id, newValues: rows[0] });
     res.status(201).json({ data: rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -180,7 +180,7 @@ router.put('/:id', async (req, res) => {
         notes?.trim() || null, company_id,
       ]
     );
-    await logAudit(req, 'client_work_orders', req.params.id, 'update', old[0], rows[0]);
+    await logAudit(req, { action: 'update', tableName: 'client_work_orders', recordId: req.params.id, oldValues: old[0], newValues: rows[0] });
     res.json({ data: rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

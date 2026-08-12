@@ -13,6 +13,14 @@ runSchemaInit('audit_logs_company_scope', async () => {
   await query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record ON audit_logs(table_name, record_id)`);
 });
 
+// 'manual' = written by an explicit logAudit() call with a real old/new diff;
+// 'auto' = written by the generic auditCapture middleware as a coarse
+// fallback for the ~98% of mutating routes that don't call logAudit directly.
+runSchemaInit('audit_logs_source_column', async () => {
+  await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_source ON audit_logs(source)`);
+});
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
@@ -28,6 +36,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
  * @param {object} [opts.newValues] - new state
  */
 async function logAudit(req, { action, tableName, recordId, oldValues, newValues }) {
+  // Marks this request as already having its own precise audit entry, so the
+  // generic auditCapture middleware (which runs on res 'finish', after this
+  // has had a chance to run) skips it instead of writing a duplicate coarse
+  // row. Set unconditionally, even if the insert below fails — a route that
+  // called logAudit() has already declared "I handle my own logging."
+  if (req) req._auditLogged = true;
   try {
     const safeRecordId = recordId && UUID_RE.test(recordId) ? recordId : null;
     if (recordId && !safeRecordId) {
