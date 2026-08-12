@@ -14,7 +14,7 @@ import {
   Briefcase, UploadCloud, Upload, ChevronUp, Flag, CalendarDays, GanttChartSquare, Hammer,
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
-  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
+  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound, Boxes,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
   RefreshCw, Shuffle, Globe, Database, CloudSun,
   UserPlus, GraduationCap, Timer, FileCheck2, Contact, Award,
@@ -88,6 +88,7 @@ const navGroups = [
     { to: '/procurement/po-amendments',    icon: FileSignature, label: 'PO Amendments' },
     { to: '/procurement/po-register',      icon: ClipboardList, label: 'PO Register' },
     { to: '/procurement/boq-budget',      icon: BarChart3,     label: 'BOQ Budget Breakdown' },
+    { to: '/procurement/bom',             icon: Boxes,         label: 'Bill of Materials (BOM)' },
     // ── Work Orders ──
     { to: '/procurement/work-orders',      icon: Hammer,        label: 'Work Orders' },
     { to: '/procurement/wo-amendments',    icon: FileSignature, label: 'WO Amendments' },

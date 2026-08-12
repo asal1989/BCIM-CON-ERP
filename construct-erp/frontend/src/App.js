@@ -64,6 +64,7 @@ const BOQPage                  = lazy(() => import('./pages/qs/BOQPage'));
 const BOQMappingPage           = lazy(() => import('./pages/qs/BOQMappingPage'));
 const BOQDashboardPage         = lazy(() => import('./pages/qs/BOQDashboardPage'));
 const BOQBudgetBreakdownPage   = lazy(() => import('./pages/qs/BOQBudgetBreakdownPage'));
+const BOMPage                  = lazy(() => import('./pages/procurement/BOMPage'));
 const MeasurementPage     = lazy(() => import('./pages/qs/MeasurementPage'));
 const MeasurementBookPage = lazy(() =>
   import('./pages/qs/mb/MeasurementBook').then(m => ({ default: m.MeasurementBookPage }))
@@ -934,6 +935,7 @@ export default function App() {
                 <Route path="procurement/bid-opportunities/:id" element={<RequireModule module="Procurement"><BidOpportunityDetailPage /></RequireModule>} />
                 <Route path="procurement/budget-control" element={<RequireBudgetAccess><BudgetPage /></RequireBudgetAccess>} />
                 <Route path="procurement/boq-budget"    element={<RequireBudgetAccess><BOQBudgetBreakdownPage /></RequireBudgetAccess>} />
+                <Route path="procurement/bom" element={<RequireModule module="Procurement"><BOMPage /></RequireModule>} />
 
                 {/* Stores */}
                 <Route path="stores" element={<RequireModule module="Stores"><StoresDashboard /></RequireModule>} />

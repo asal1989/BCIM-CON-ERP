@@ -1095,6 +1095,11 @@ export const normsAPI = {
   delete: (id)     => api.delete(`/norms/${id}`),
 };
 
+export const bomAPI = {
+  get:    (projectId) => api.get(`/procurement/bom/${projectId}`),
+  export: (projectId) => api.get(`/procurement/bom/${projectId}/export`, { responseType: 'blob' }),
+};
+
 export const ppeAPI = {
   list:   (params) => api.get('/ppe', { params }),
   issue:  (data)   => api.post('/ppe', data),
