@@ -160,64 +160,88 @@ function buildTransmittalPdfBuffer(t) {
     const grandTotal = totalWithoutTax + totalTax;
 
     const PAGE_W = doc.page.width, LEFT = 28, RIGHT = PAGE_W - 28, W = RIGHT - LEFT;
+    const BORDER = '#D9E2EF', CARD_BG = '#F7FAFD', MUTED = '#6B7C93', ROW_ALT = '#F5F8FC';
+    const projectLabel = t.project_display || t.project_name || 'Project';
 
-    // Letterhead
-    try { doc.image(LOGO_PATH, LEFT, 24, { height: 34 }); } catch (_) {}
-    doc.font('Helvetica').fontSize(8).fillColor('#666')
-      .text('BCIM ENGINEERING PVT. LTD.', LEFT, 26, { width: W, align: 'center', characterSpacing: 1.5 });
-    doc.font('Helvetica-Bold').fontSize(15).fillColor(NAVY)
-      .text('INTERNAL INVOICES TRANSMITTAL', LEFT, 37, { width: W, align: 'center' });
-    doc.font('Helvetica').fontSize(8).fillColor('#444')
-      .text(`From: ${t.project_name || ''}`, LEFT, 54, { width: W, align: 'center' });
-    doc.moveTo(LEFT, 66).lineTo(RIGHT, 66).lineWidth(1.6).strokeColor(NAVY).stroke();
+    // ── Letterhead ──
+    try { doc.image(LOGO_PATH, LEFT, 26, { height: 26 }); } catch (_) {}
+    doc.font('Helvetica-Bold').fontSize(6).fillColor('#2C5490')
+      .text(projectLabel.toUpperCase(), LEFT, 55, { width: 140, characterSpacing: 0.8 });
 
-    // Meta block
-    let y = 76;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000')
-      .text(`Transmittal No: `, LEFT, y, { continued: true })
-      .fillColor(NAVY).text(t.transmittal_number);
-    doc.font('Helvetica').fillColor('#000')
-      .text(`Revision: ${t.revision || 'REV.000'}    Date: ${fmtDateShort(t.transmittal_date)}`, LEFT, y + 13);
-    y += 32;
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(NAVY)
+      .text('INTERNAL INVOICES TRANSMITTAL', LEFT, 32, { width: W, align: 'center' });
+    doc.rect(LEFT + W / 2 - 55, 52, 110, 2).fill(NAVY);
 
-    // Table
+    doc.font('Helvetica').fontSize(6.5).fillColor(MUTED)
+      .text('From : BCIM Engineering Pvt. Ltd', RIGHT - 150, 30, { width: 150, align: 'right' });
+    doc.font('Helvetica-Bold').fillColor('#2C5490')
+      .text(projectLabel, RIGHT - 150, 39, { width: 150, align: 'right' });
+
+    doc.rect(LEFT, 64, W, 1.4).fill(NAVY);
+
+    // ── Meta cards ──
+    let y = 74;
+    const CARD_H = 26, GAP = 8, CARD_W = (W - GAP * 2) / 3;
+    [
+      ['TRANSMITTAL NO.', t.transmittal_number],
+      ['TRANSMITTAL REVISION', t.revision || 'REV.000'],
+      ['TRANSMITTAL DATE', fmtDateShort(t.transmittal_date)],
+    ].forEach(([label, value], i) => {
+      const x = LEFT + i * (CARD_W + GAP);
+      doc.roundedRect(x, y, CARD_W, CARD_H, 3).fillAndStroke(CARD_BG, BORDER);
+      doc.font('Helvetica-Bold').fontSize(5.5).fillColor(MUTED)
+        .text(label, x + 9, y + 6, { width: CARD_W - 18, characterSpacing: 0.4 });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(NAVY)
+        .text(String(value || '—'), x + 9, y + 14, { width: CARD_W - 18, lineBreak: false, ellipsis: true });
+    });
+    y += CARD_H + 12;
+
+    // ── Table ──
     const COLS = [
-      { key: 'sl',     label: 'Sl No',   w: 0.04, align: 'center' },
-      { key: 'inv',    label: 'Invoice No.', w: 0.13 },
-      { key: 'date',   label: 'Dated',   w: 0.08, align: 'center' },
-      { key: 'vendor', label: 'Vendor Name', w: 0.19 },
-      { key: 'amt',    label: 'Amt w/o Tax', w: 0.11, align: 'right' },
-      { key: 'txp',    label: 'Tax %',   w: 0.06, align: 'center' },
-      { key: 'txa',    label: 'Tax Amt', w: 0.10, align: 'right' },
-      { key: 'tot',    label: 'Total',   w: 0.11, align: 'right' },
-      { key: 'hsn',    label: 'HSN',     w: 0.08, align: 'center' },
-      { key: 'rmk',    label: 'Remarks', w: 0.10 },
+      { key: 'sl',     label: 'Sl No',        w: 0.04, align: 'center' },
+      { key: 'inv',    label: 'Invoice No.',  w: 0.12 },
+      { key: 'date',   label: 'Dated',        w: 0.08, align: 'center' },
+      { key: 'vendor', label: 'Vendor Name',  w: 0.19 },
+      { key: 'amt',    label: 'Invoice Amount\nwithout Tax', w: 0.11, align: 'right' },
+      { key: 'txp',    label: 'Tax %',        w: 0.06, align: 'center' },
+      { key: 'txa',    label: 'Tax Amount',   w: 0.10, align: 'right' },
+      { key: 'tot',    label: 'Total Amount', w: 0.11, align: 'right' },
+      { key: 'hsn',    label: 'HSN Codes',    w: 0.09, align: 'center' },
+      { key: 'rmk',    label: 'Remarks',      w: 0.10 },
     ].map(c => ({ ...c, px: W * c.w }));
-    const HDR_H = 18, RH = 15;
+    const HDR_H = 22, RH = 15;
 
     function drawHeader(yy) {
       doc.rect(LEFT, yy, W, HDR_H).fill(NAVY);
       let xx = LEFT;
       COLS.forEach(c => {
-        doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff')
-          .text(c.label, xx + 3, yy + 5, { width: c.px - 6, align: c.align || 'left', lineBreak: false });
+        doc.font('Helvetica-Bold').fontSize(6).fillColor('#fff')
+          .text(c.label, xx + 3, yy + (c.label.includes('\n') ? 5 : 8), { width: c.px - 6, align: c.align || 'left' });
         xx += c.px;
       });
       return yy + HDR_H;
     }
     function drawRow(item, idx, yy) {
-      if (idx % 2) doc.rect(LEFT, yy, W, RH).fill('#F3F6FB');
+      if (idx % 2) doc.rect(LEFT, yy, W, RH).fill(ROW_ALT);
+      // Column separators, matching the print template's light cell borders.
+      let bx = LEFT;
+      COLS.forEach(c => { bx += c.px; doc.rect(bx - 0.3, yy, 0.3, RH).fill(BORDER); });
+      doc.rect(LEFT, yy + RH - 0.3, W, 0.3).fill(BORDER);
+
       const vals = {
-        sl: item.sl_no ?? idx + 1, inv: item.invoice_no || '', date: fmtDateShort(item.invoice_date),
-        vendor: (item.vendor_name || '').toUpperCase(), amt: fmtINR(item.amount),
-        txp: item.tax_pct ? `${item.tax_pct}%` : '', txa: fmtINR(item.tax_amount),
+        sl: item.sl_no ?? idx + 1, inv: item.invoice_no || '–', date: fmtDateShort(item.invoice_date),
+        vendor: (item.vendor_name || '').toUpperCase() || '–', amt: fmtINR(item.amount),
+        txp: item.tax_pct ? `${item.tax_pct}%` : '–', txa: fmtINR(item.tax_amount),
         tot: fmtINR(Number(item.amount || 0) + Number(item.tax_amount || 0)),
-        hsn: item.hsn_codes || '', rmk: item.item_remarks || '',
+        hsn: item.hsn_codes || '–', rmk: item.item_remarks || '–',
       };
       let xx = LEFT;
       COLS.forEach(c => {
-        doc.font(c.key === 'tot' ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor('#1E293B')
-          .text(String(vals[c.key] ?? ''), xx + 3, yy + 4, { width: c.px - 6, align: c.align || 'left', lineBreak: false, ellipsis: true });
+        const bold = c.key === 'tot';
+        const muted = c.key === 'sl' || c.key === 'hsn' || c.key === 'rmk';
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(7)
+          .fillColor(bold ? NAVY : muted ? MUTED : '#0F172A')
+          .text(String(vals[c.key] ?? ''), xx + 3, yy + 4.5, { width: c.px - 6, align: c.align || 'left', lineBreak: false, ellipsis: true });
         xx += c.px;
       });
       return yy + RH;
@@ -225,38 +249,49 @@ function buildTransmittalPdfBuffer(t) {
 
     y = drawHeader(y);
     for (let i = 0; i < items.length; i++) {
-      if (y + RH > doc.page.height - 120) { doc.addPage(); y = drawHeader(28); }
+      if (y + RH > doc.page.height - 130) { doc.addPage(); y = drawHeader(28); }
       y = drawRow(items[i], i, y);
     }
-    // Total row
-    doc.rect(LEFT, y, W, HDR_H).fill('#E8EDF5');
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY)
-      .text('TOTAL AMOUNT', LEFT + 3, y + 5, { width: COLS[0].px + COLS[1].px + COLS[2].px + COLS[3].px - 6, align: 'right' });
-    let xx = LEFT + COLS[0].px + COLS[1].px + COLS[2].px + COLS[3].px;
-    doc.text(fmtINR(totalWithoutTax), xx + 3, y + 5, { width: COLS[4].px - 6, align: 'right' });
+
+    // ── Total row (navy bar, matching the print template) ──
+    doc.rect(LEFT, y, W, HDR_H).fill(NAVY);
+    const w4 = COLS[0].px + COLS[1].px + COLS[2].px + COLS[3].px;
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+      .text('TOTAL AMOUNT', LEFT + 3, y + 7, { width: w4 - 9, align: 'right', characterSpacing: 0.5 });
+    let xx = LEFT + w4;
+    doc.text(fmtINR(totalWithoutTax), xx + 3, y + 7, { width: COLS[4].px - 6, align: 'right' });
     xx += COLS[4].px + COLS[5].px;
-    doc.text(fmtINR(totalTax), xx + 3, y + 5, { width: COLS[6].px - 6, align: 'right' });
+    doc.text(fmtINR(totalTax), xx + 3, y + 7, { width: COLS[6].px - 6, align: 'right' });
     xx += COLS[6].px;
-    doc.text(fmtINR(grandTotal), xx + 3, y + 5, { width: COLS[7].px - 6, align: 'right' });
-    y += HDR_H + 30;
+    doc.text(fmtINR(grandTotal), xx + 3, y + 7, { width: COLS[7].px - 6, align: 'right' });
+    y += HDR_H + 20;
 
-    // Sign-off
-    const half = W / 2;
-    doc.moveTo(LEFT, y).lineTo(LEFT + half - 10, y).lineWidth(1.2).strokeColor(NAVY).stroke();
-    doc.moveTo(LEFT + half + 10, y).lineTo(RIGHT, y).lineWidth(1.2).strokeColor(NAVY).stroke();
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY)
-      .text(`Issued By : BCIM Engineering Pvt. Ltd (${t.project_short || t.project_name || 'Site'})`, LEFT, y + 6, { width: half - 10 })
-      .text('Received By : BCIM Engineering Pvt Ltd (HO)', LEFT + half + 10, y + 6, { width: half - 10 });
-    doc.font('Helvetica').fontSize(7.5).fillColor('#000')
-      .text(`NAME: ${t.issued_by || '_______________'}`, LEFT, y + 22, { width: half - 10 })
-      .text(`Name: ${t.received_by || '_______________'}`, LEFT + half + 10, y + 22, { width: half - 10 });
-    doc.text('Sign : _______________', LEFT, y + 34, { width: half - 10 })
-      .text('Sign : _______________', LEFT + half + 10, y + 34, { width: half - 10 });
-    doc.text(`Date: ${fmtDateShort(t.issued_date)}`, LEFT, y + 46, { width: half - 10 })
-      .text(`Date: ${t.received_date ? fmtDateShort(t.received_date) : '_______________'}`, LEFT + half + 10, y + 46, { width: half - 10 });
+    // ── Sign-off cards ──
+    const BOX_H = 62, BOX_W = (W - 12) / 2;
+    if (y + BOX_H > doc.page.height - 40) { doc.addPage(); y = 40; }
+    [
+      { title: `Issued By : BCIM Engineering Pvt. Ltd (${t.project_short || projectLabel})`, name: t.issued_by, date: t.issued_date },
+      { title: 'Received By : BCIM Engineering Pvt. Ltd (HO)', name: t.received_by, date: t.received_date },
+    ].forEach((b, idx) => {
+      const x = LEFT + idx * (BOX_W + 12);
+      doc.roundedRect(x, y, BOX_W, BOX_H, 3).stroke(BORDER);
+      doc.rect(x + 0.5, y + 0.5, BOX_W - 1, 15).fill(CARD_BG);
+      doc.font('Helvetica-Bold').fontSize(7).fillColor(NAVY)
+        .text(b.title, x + 8, y + 5, { width: BOX_W - 16, lineBreak: false, ellipsis: true });
 
-    doc.font('Helvetica').fontSize(6.5).fillColor('#999')
-      .text('Doc.No. BCIM/FR/001/01     Rev. 01     Date: 27.8.2018', LEFT, doc.page.height - 30, { width: W, align: 'center' });
+      [['NAME', b.name], ['SIGN', ''], ['DATE', b.date ? fmtDateShort(b.date) : '']].forEach(([label, value], li) => {
+        const ly = y + 24 + li * 12;
+        doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(label, x + 8, ly, { lineBreak: false });
+        doc.rect(x + 38, ly + 8, BOX_W - 46, 0.4).fill(BORDER);
+        if (value) {
+          doc.font('Helvetica-Bold').fontSize(7).fillColor('#0F172A')
+            .text(String(value), x + 40, ly, { width: BOX_W - 50, lineBreak: false, ellipsis: true });
+        }
+      });
+    });
+
+    doc.font('Helvetica').fontSize(6).fillColor('#94A3B8')
+      .text('Doc.No. BCIM/FR/001/01     ·     Rev. 01     ·     Date: 27.8.2018', LEFT, doc.page.height - 28, { width: W, align: 'center' });
 
     doc.end();
   });

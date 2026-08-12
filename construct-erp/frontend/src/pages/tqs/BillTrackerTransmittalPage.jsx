@@ -50,6 +50,84 @@ async function loadBcimLogoBase64() {
 // TRANSMITTAL" Excel format exactly (title, header block, 10-column table,
 // two-party sign-off, doc-control footer line).
 // ═════════════════════════════════════════════════════════════════════════════
+const NAVY      = '#1B3A6B';
+const NAVY_SOFT = '#2C5490';
+const ROW_ALT   = '#F5F8FC';
+const CARD_BG   = '#F7FAFD';
+const BORDER    = '#D9E2EF';
+
+// Small stroke icons for the meta/sign-off cards. Inline SVG rather than the
+// lucide React components used elsewhere — this subtree gets serialized into a
+// print window, where an icon font/component that fails to resolve would leave
+// a blank box on a document people sign.
+const IconDoc = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
+  </svg>
+);
+const IconRevision = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+  </svg>
+);
+const IconCalendar = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+  </svg>
+);
+const IconUser = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+function MetaCard({ icon, label, value }) {
+  return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', gap: 9,
+      border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG, padding: '8px 11px',
+    }}>
+      <div style={{
+        width: 24, height: 24, borderRadius: 5, background: '#E7EFF9',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>{icon}</div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 7.5, color: '#6B7C93', fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: 10, color: NAVY, fontWeight: 700, whiteSpace: 'nowrap' }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function SignOffCard({ title, name, date }) {
+  const Line = ({ label, value }) => (
+    <div style={{ display: 'flex', gap: 6, marginTop: 7, fontSize: 9 }}>
+      <span style={{ color: '#6B7C93', width: 34, flexShrink: 0 }}>{label}</span>
+      <span style={{ flex: 1, borderBottom: `1px solid ${BORDER}`, paddingBottom: 1, color: '#0F172A', fontWeight: value ? 600 : 400, minHeight: 12 }}>
+        {value || ''}
+      </span>
+    </div>
+  );
+  return (
+    <div style={{ flex: 1, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ background: CARD_BG, borderBottom: `1px solid ${BORDER}`, padding: '6px 11px', fontSize: 8.5, fontWeight: 700, color: NAVY }}>
+        {title}
+      </div>
+      <div style={{ padding: '9px 11px 11px', display: 'flex', gap: 10 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 14, background: '#E7EFF9',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}><IconUser /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Line label="NAME" value={name} />
+          <Line label="SIGN" value="" />
+          <Line label="DATE" value={date} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const PrintTemplate = React.forwardRef(({ t }, ref) => {
   if (!t) return null;
   const items = t.items || [];
@@ -57,114 +135,136 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
   const totalTax         = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
   const grandTotal        = totalWithoutTax + totalTax;
 
-  const NAVY = '#1B3A6B';
+  const projectLabel = t.project_display || t.project_name || 'Project';
+
+  // Column widths sum to 100% — fixed layout so a long vendor name can't push
+  // the amount columns off the page (browsers clip rather than scale on print).
+  const COLS = [
+    { h: 'Sl No',                        w: '4%',  align: 'center' },
+    { h: 'Invoice No.',                  w: '12%', align: 'left'   },
+    { h: 'Dated',                        w: '8%',  align: 'center' },
+    { h: 'Vendor Name',                  w: '19%', align: 'left'   },
+    { h: 'Invoice Amount\nwithout Tax',  w: '11%', align: 'right'  },
+    { h: 'Tax %',                        w: '6%',  align: 'center' },
+    { h: 'Tax Amount',                   w: '10%', align: 'right'  },
+    { h: 'Total Amount',                 w: '11%', align: 'right'  },
+    { h: 'HSN Codes',                    w: '9%',  align: 'center' },
+    { h: 'Remarks',                      w: '10%', align: 'left'   },
+  ];
+
+  const cell = (align, extra = {}) => ({
+    border: `1px solid ${BORDER}`, padding: '4px 6px', textAlign: align,
+    fontSize: 8.5, color: '#0F172A', wordBreak: 'break-word', ...extra,
+  });
 
   return (
-    <div ref={ref} style={{ fontFamily: 'Arial, sans-serif', fontSize: '10px', padding: '20px 24px', color: '#000' }}>
+    <div ref={ref} style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 10, padding: '14px 16px', color: '#0F172A' }}>
+      {/* Landscape + force background printing — the navy header bar and zebra
+          rows are structural here, not decoration, so they must survive the
+          browser's default "don't print backgrounds" behaviour. */}
+      <style>{`
+        @page { size: A4 landscape; margin: 9mm; }
+        @media print {
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
+        }
+      `}</style>
 
-      {/* Letterhead — logo + company name, same convention as every other
-          print template in the app (ReportPrintKit's ReportPrintHeader). */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: `3px solid ${NAVY}`, paddingBottom: 10, marginBottom: 14 }}>
-        <img src="/bcim-logo.png" alt="BCIM Engineering"
-          style={{ height: 52, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 9, fontWeight: 600, color: '#555', letterSpacing: 2, textTransform: 'uppercase' }}>
-            BCIM Engineering Pvt. Ltd.
+      {/* Letterhead */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, paddingBottom: 9 }}>
+        <div style={{ flexShrink: 0, width: 150 }}>
+          <img src="/bcim-logo.png" alt="BCIM Engineering" style={{ height: 40, width: 'auto', objectFit: 'contain' }} />
+          <div style={{ fontSize: 7.5, fontWeight: 700, color: NAVY_SOFT, letterSpacing: 1.1, textTransform: 'uppercase', marginTop: 2 }}>
+            {projectLabel}
           </div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: NAVY, letterSpacing: 0.5, margin: '2px 0' }}>
+        </div>
+
+        <div style={{ flex: 1, textAlign: 'center', paddingTop: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: NAVY, letterSpacing: 0.6 }}>
             INTERNAL INVOICES TRANSMITTAL
           </div>
-          <div style={{ fontSize: 9, color: '#444' }}>From : {t.project_display || t.project_name || 'Project'}</div>
+          <div style={{ width: 132, height: 2.5, background: NAVY, margin: '5px auto 0', borderRadius: 2 }} />
         </div>
-        <div style={{ width: 52, flexShrink: 0 }} />
+
+        <div style={{ flexShrink: 0, width: 150, textAlign: 'right', fontSize: 7.5, color: '#6B7C93', paddingTop: 4, lineHeight: 1.5 }}>
+          <div>From : BCIM Engineering Pvt. Ltd</div>
+          <div style={{ fontWeight: 700, color: NAVY_SOFT }}>{projectLabel}</div>
+        </div>
+      </div>
+      <div style={{ height: 1.5, background: NAVY, marginBottom: 11 }} />
+
+      {/* Meta cards */}
+      <div style={{ display: 'flex', gap: 9, marginBottom: 12 }}>
+        <MetaCard icon={<IconDoc />}      label="Transmittal No."      value={t.transmittal_number} />
+        <MetaCard icon={<IconRevision />} label="Transmittal Revision" value={t.revision || 'REV.000'} />
+        <MetaCard icon={<IconCalendar />} label="Transmittal Date"     value={fmtDate(t.transmittal_date)} />
       </div>
 
-      {/* Header meta block */}
-      <table style={{ borderCollapse: 'collapse', marginBottom: '12px', fontSize: '10px' }}>
-        <tbody>
-          <tr>
-            <td style={{ padding: '2px 8px 2px 0', fontWeight: 'bold' }}>Transmittal No :</td>
-            <td style={{ padding: '2px 0', fontWeight: 'bold', color: NAVY }}>{t.transmittal_number}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '2px 8px 2px 0', fontWeight: 'bold' }}>Transmittal Revision :</td>
-            <td style={{ padding: '2px 0' }}>{t.revision || 'REV.000'}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '2px 8px 2px 0', fontWeight: 'bold' }}>Transmittal Date :</td>
-            <td style={{ padding: '2px 0' }}>{fmtDate(t.transmittal_date)}</td>
-          </tr>
-        </tbody>
-      </table>
-
       {/* Invoice table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>{COLS.map((c) => <col key={c.h} style={{ width: c.w }} />)}</colgroup>
         <thead>
           <tr>
-            {['Sl No', 'Invoice No.', 'Dated', 'Vendor Name', 'Invoice Amount\nwithout Tax', 'Tax %', 'Tax Amount', 'Total Amount', 'HSN Codes', 'Remarks']
-              .map((h) => (
-                <th key={h} style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '5px 6px', textAlign: 'center', fontWeight: 'bold', fontSize: '9px', whiteSpace: 'pre-line' }}>
-                  {h}
-                </th>
-              ))}
+            {COLS.map((c) => (
+              <th key={c.h} style={{
+                background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '6px 6px',
+                textAlign: 'center', fontWeight: 700, fontSize: 8, whiteSpace: 'pre-line', lineHeight: 1.3,
+              }}>{c.h}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={item.id || idx} style={{ background: idx % 2 ? '#F3F6FB' : '#fff' }}>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.sl_no ?? idx + 1}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{item.invoice_no || ''}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{fmtDate(item.invoice_date)}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{(item.vendor_name || '').toUpperCase()}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right' }}>{fmt(item.amount)}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.tax_pct ? `${item.tax_pct}%` : ''}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right' }}>{fmt(item.tax_amount)}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'right', fontWeight: 'bold' }}>{fmt(totalOf(item))}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'center' }}>{item.hsn_codes || ''}</td>
-              <td style={{ border: '1px solid #bbb', padding: '3px 6px' }}>{item.item_remarks || ''}</td>
+            <tr key={item.id || idx} style={{ background: idx % 2 ? ROW_ALT : '#fff' }}>
+              <td style={cell('center', { color: '#6B7C93' })}>{item.sl_no ?? idx + 1}</td>
+              <td style={cell('left')}>{item.invoice_no || '–'}</td>
+              <td style={cell('center')}>{fmtDate(item.invoice_date)}</td>
+              <td style={cell('left')}>{(item.vendor_name || '').toUpperCase() || '–'}</td>
+              <td style={cell('right')}>{fmt(item.amount)}</td>
+              <td style={cell('center')}>{item.tax_pct ? `${item.tax_pct}%` : '–'}</td>
+              <td style={cell('right')}>{fmt(item.tax_amount)}</td>
+              <td style={cell('right', { fontWeight: 700, color: NAVY })}>{fmt(totalOf(item))}</td>
+              <td style={cell('center', { color: '#6B7C93' })}>{item.hsn_codes || '–'}</td>
+              <td style={cell('left', { color: '#6B7C93' })}>{item.item_remarks || '–'}</td>
             </tr>
           ))}
-          {/* Total */}
-          <tr style={{ background: '#E8EDF5', fontWeight: 'bold' }}>
-            <td colSpan={4} style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>TOTAL AMOUNT</td>
-            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(totalWithoutTax)}</td>
-            <td style={{ border: '1px solid #999', padding: '6px' }}></td>
-            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(totalTax)}</td>
-            <td style={{ border: '1px solid #999', padding: '6px', textAlign: 'right', color: NAVY }}>{fmt(grandTotal)}</td>
-            <td colSpan={2} style={{ border: '1px solid #999', padding: '6px' }}></td>
+          <tr>
+            <td colSpan={4} style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: 9, letterSpacing: 0.5 }}>
+              TOTAL AMOUNT
+            </td>
+            <td style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '7px 6px', textAlign: 'right', fontWeight: 700, fontSize: 9 }}>{fmt(totalWithoutTax)}</td>
+            <td style={{ background: NAVY, border: `1px solid ${NAVY}` }} />
+            <td style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '7px 6px', textAlign: 'right', fontWeight: 700, fontSize: 9 }}>{fmt(totalTax)}</td>
+            <td style={{ background: NAVY, color: '#fff', border: `1px solid ${NAVY}`, padding: '7px 6px', textAlign: 'right', fontWeight: 700, fontSize: 9 }}>{fmt(grandTotal)}</td>
+            <td colSpan={2} style={{ background: NAVY, border: `1px solid ${NAVY}` }} />
           </tr>
         </tbody>
       </table>
 
       {t.remarks && (
-        <div style={{ marginTop: '8px', fontSize: '10px' }}>
-          <strong>Remarks:</strong> {t.remarks}
+        <div style={{ marginTop: 9, fontSize: 8.5, color: '#0F172A' }}>
+          <strong style={{ color: NAVY }}>Remarks : </strong>{t.remarks}
         </div>
       )}
 
-      {/* Sign-off — Issued By (Site) / Received By (HO), matching the source form exactly */}
-      <table style={{ width: '100%', marginTop: '34px', borderCollapse: 'collapse', fontSize: '10px' }}>
-        <tbody>
-          <tr>
-            <td style={{ width: '50%', verticalAlign: 'top', paddingRight: '20px', borderTop: `1.5px solid ${NAVY}`, paddingTop: '10px' }}>
-              <div style={{ fontWeight: 'bold', color: NAVY }}>Issued By : BCIM Engineering Pvt. Ltd ({t.project_short || t.project_display || t.project_name || 'Site'})</div>
-              <div style={{ marginTop: '18px' }}>NAME: {t.issued_by || '_______________'}</div>
-              <div style={{ marginTop: '10px' }}>Sign : _______________</div>
-              <div style={{ marginTop: '10px' }}>Date: {fmtDate(t.issued_date)}</div>
-            </td>
-            <td style={{ width: '50%', verticalAlign: 'top', borderTop: `1.5px solid ${NAVY}`, paddingTop: '10px' }}>
-              <div style={{ fontWeight: 'bold', color: NAVY }}>Received By : BCIM Engineering Pvt Ltd (HO)</div>
-              <div style={{ marginTop: '18px' }}>Name: {t.received_by || '_______________'}</div>
-              <div style={{ marginTop: '10px' }}>Sign : _______________</div>
-              <div style={{ marginTop: '10px' }}>Date: {t.received_date ? fmtDate(t.received_date) : '_______________'}</div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      {/* Sign-off */}
+      <div style={{ display: 'flex', gap: 14, marginTop: 20 }}>
+        <SignOffCard
+          title={`Issued By : BCIM Engineering Pvt. Ltd (${t.project_short || projectLabel})`}
+          name={t.issued_by}
+          date={t.issued_date ? fmtDate(t.issued_date) : ''}
+        />
+        <SignOffCard
+          title="Received By : BCIM Engineering Pvt. Ltd (HO)"
+          name={t.received_by}
+          date={t.received_date ? fmtDate(t.received_date) : ''}
+        />
+      </div>
 
       {/* Doc control footer */}
-      <div style={{ marginTop: '24px', paddingTop: '6px', borderTop: '1px solid #ccc', textAlign: 'center', fontSize: '8px', color: '#666' }}>
-        Doc.No. BCIM/FR/001/01 &nbsp;&nbsp;&nbsp; Rev. 01 &nbsp;&nbsp;&nbsp; Date: 27.8.2018
+      <div style={{ marginTop: 16, paddingTop: 5, borderTop: `1px solid ${BORDER}`, textAlign: 'center', fontSize: 7, color: '#94A3B8' }}>
+        Doc.No. BCIM/FR/001/01 &nbsp;&nbsp;·&nbsp;&nbsp; Rev. 01 &nbsp;&nbsp;·&nbsp;&nbsp; Date: 27.8.2018
       </div>
     </div>
   );
@@ -560,76 +660,142 @@ function DetailView({ id, onBack, onRefresh }) {
     const totalTax = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
     const grandTotal = totalWithoutTax + totalTax;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const NAVY = [27, 58, 107]; // #1B3A6B, matches the print template / ReportPrintKit
+    // RGB twins of the print template's palette, so the downloaded PDF and the
+    // browser print look like the same document.
+    const NAVY_RGB   = [27, 58, 107];   // #1B3A6B
+    const BORDER_RGB = [217, 226, 239]; // #D9E2EF
+    const CARD_RGB   = [247, 250, 253]; // #F7FAFD
+    const MUTED_RGB  = [107, 124, 147]; // #6B7C93
+    const projectLabel = t.project_display || t.project_name || 'Project';
 
+    const L = 14, R = 283, W = R - L;
+
+    // ── Letterhead ──
     const logo = await loadBcimLogoBase64();
-    if (logo) doc.addImage(logo, 'PNG', 14, 8, 20, 20, undefined, 'FAST');
-
-    doc.setTextColor(...NAVY);
-    doc.setFontSize(15);
+    if (logo) doc.addImage(logo, 'PNG', L, 9, 26, 13, undefined, 'FAST');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...NAVY_RGB);
     doc.setFont(undefined, 'bold');
-    doc.text('INTERNAL INVOICES TRANSMITTAL', 148, 15, { align: 'center' });
-    doc.setTextColor(80);
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(9);
-    doc.text('BCIM ENGINEERING PVT. LTD.', 148, 21, { align: 'center' });
-    doc.setTextColor(0);
-    doc.text(`From: ${t.project_display || t.project_name || ''}`, 282, 26, { align: 'right' });
-    doc.setDrawColor(...NAVY);
-    doc.setLineWidth(0.8);
-    doc.line(14, 30, 282, 30);
+    doc.text(projectLabel.toUpperCase(), L, 26, { maxWidth: 60 });
 
-    doc.text(`Transmittal No: ${t.transmittal_number}   Revision: ${t.revision || 'REV.000'}   Date: ${fmtDate(t.transmittal_date)}`, 14, 37);
+    doc.setFontSize(16);
+    doc.text('INTERNAL INVOICES TRANSMITTAL', 148, 17, { align: 'center' });
+    doc.setFillColor(...NAVY_RGB);
+    doc.rect(129, 19.5, 38, 0.9, 'F');
+
+    doc.setFontSize(6.5);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(...MUTED_RGB);
+    doc.text('From : BCIM Engineering Pvt. Ltd', R, 13, { align: 'right' });
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...NAVY_RGB);
+    doc.text(projectLabel, R, 16.5, { align: 'right', maxWidth: 70 });
+
+    doc.setFillColor(...NAVY_RGB);
+    doc.rect(L, 29, W, 0.6, 'F');
+
+    // ── Meta cards ──
+    const cardY = 32.5, cardH = 11, gap = 3.5, cardW = (W - gap * 2) / 3;
+    [
+      ['TRANSMITTAL NO.', t.transmittal_number],
+      ['TRANSMITTAL REVISION', t.revision || 'REV.000'],
+      ['TRANSMITTAL DATE', fmtDate(t.transmittal_date)],
+    ].forEach(([label, value], i) => {
+      const x = L + i * (cardW + gap);
+      doc.setFillColor(...CARD_RGB);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, cardY, cardW, cardH, 1.5, 1.5, 'FD');
+      doc.setFontSize(5.5);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(...MUTED_RGB);
+      doc.text(label, x + 4, cardY + 4.2);
+      doc.setFontSize(8.5);
+      doc.setTextColor(...NAVY_RGB);
+      doc.text(String(value || '—'), x + 4, cardY + 8.6, { maxWidth: cardW - 8 });
+    });
 
     autoTable(doc, {
-      startY: 41,
-      head: [['Sl No', 'Invoice No.', 'Dated', 'Vendor Name', 'Amt w/o Tax', 'Tax %', 'Tax Amt', 'Total', 'HSN', 'Remarks']],
+      startY: cardY + cardH + 4,
+      margin: { left: L, right: 297 - R },
+      head: [['Sl No', 'Invoice No.', 'Dated', 'Vendor Name', 'Invoice Amount\nwithout Tax', 'Tax %', 'Tax Amount', 'Total Amount', 'HSN Codes', 'Remarks']],
       body: [
         ...items.map((i, idx) => [
           i.sl_no ?? idx + 1,
-          i.invoice_no || '',
+          i.invoice_no || '–',
           fmtDate(i.invoice_date),
-          (i.vendor_name || '').toUpperCase(),
+          (i.vendor_name || '').toUpperCase() || '–',
           fmt(i.amount),
-          i.tax_pct ? `${i.tax_pct}%` : '',
+          i.tax_pct ? `${i.tax_pct}%` : '–',
           fmt(i.tax_amount),
           fmt(totalOf(i)),
-          i.hsn_codes || '',
-          i.item_remarks || '',
+          i.hsn_codes || '–',
+          i.item_remarks || '–',
         ]),
-        [{ content: 'TOTAL AMOUNT', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
-          { content: fmt(totalWithoutTax), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
-          '',
-          { content: fmt(totalTax), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
-          { content: fmt(grandTotal), styles: { fontStyle: 'bold', halign: 'right', textColor: NAVY } },
-          '', ''],
+        [
+          { content: 'TOTAL AMOUNT', colSpan: 4, styles: { fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', halign: 'right' } },
+          { content: fmt(totalWithoutTax), styles: { fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', halign: 'right' } },
+          { content: '', styles: { fillColor: NAVY_RGB } },
+          { content: fmt(totalTax), styles: { fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', halign: 'right' } },
+          { content: fmt(grandTotal), styles: { fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', halign: 'right' } },
+          { content: '', colSpan: 2, styles: { fillColor: NAVY_RGB } },
+        ],
       ],
-      styles: { fontSize: 7.5, cellPadding: 1.8 },
-      headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [243, 246, 251] },
-      columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 4: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
+      styles: { fontSize: 7, cellPadding: 1.6, lineColor: BORDER_RGB, lineWidth: 0.15, textColor: [15, 23, 42] },
+      headStyles: { fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 6.5, halign: 'center', valign: 'middle' },
+      alternateRowStyles: { fillColor: [245, 248, 252] },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 11, textColor: MUTED_RGB },
+        2: { halign: 'center', cellWidth: 20 },
+        4: { halign: 'right' },
+        5: { halign: 'center', cellWidth: 13 },
+        6: { halign: 'right' },
+        7: { halign: 'right', fontStyle: 'bold', textColor: NAVY_RGB },
+        8: { halign: 'center', textColor: MUTED_RGB },
+        9: { textColor: MUTED_RGB },
+      },
     });
 
-    const y = doc.lastAutoTable.finalY + 14;
-    const blocks = [
-      { label: `Issued By : BCIM Engineering Pvt. Ltd (${t.project_display || t.project_name || 'Site'})`, name: t.issued_by, date: t.issued_date },
-      { label: 'Received By : BCIM Engineering Pvt Ltd (HO)', name: t.received_by, date: t.received_date },
-    ];
-    const bw = 130, bh = 32;
-    blocks.forEach((b, idx) => {
-      const x = 14 + idx * (bw + 8);
-      doc.setFontSize(8);
+    // ── Sign-off cards ──
+    let y = doc.lastAutoTable.finalY + 8;
+    const bw = (W - 6) / 2, bh = 26;
+    if (y + bh > 200) { doc.addPage(); y = 20; }
+    [
+      { title: `Issued By : BCIM Engineering Pvt. Ltd (${t.project_short || projectLabel})`, name: t.issued_by, date: t.issued_date },
+      { title: 'Received By : BCIM Engineering Pvt. Ltd (HO)', name: t.received_by, date: t.received_date },
+    ].forEach((b, idx) => {
+      const x = L + idx * (bw + 6);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, y, bw, bh, 1.5, 1.5, 'D');
+      doc.setFillColor(...CARD_RGB);
+      doc.rect(x + 0.2, y + 0.2, bw - 0.4, 6, 'F');
+      doc.setFontSize(6.5);
       doc.setFont(undefined, 'bold');
-      doc.text(b.label, x, y);
+      doc.setTextColor(...NAVY_RGB);
+      doc.text(b.title, x + 3, y + 4.2, { maxWidth: bw - 6 });
+
       doc.setFont(undefined, 'normal');
-      doc.text(`Name: ${b.name || '_______________'}`, x, y + 10);
-      doc.text('Sign: _______________', x, y + 18);
-      doc.text(`Date: ${b.date ? fmtDate(b.date) : '_______________'}`, x, y + 26);
+      doc.setFontSize(6.5);
+      [['NAME', b.name], ['SIGN', ''], ['DATE', b.date ? fmtDate(b.date) : '']].forEach(([label, value], li) => {
+        const ly = y + 11 + li * 5;
+        doc.setTextColor(...MUTED_RGB);
+        doc.text(label, x + 3, ly);
+        doc.setDrawColor(...BORDER_RGB);
+        doc.setLineWidth(0.2);
+        doc.line(x + 13, ly + 0.8, x + bw - 3, ly + 0.8);
+        if (value) {
+          doc.setTextColor(15, 23, 42);
+          doc.setFont(undefined, 'bold');
+          doc.text(String(value), x + 14, ly, { maxWidth: bw - 18 });
+          doc.setFont(undefined, 'normal');
+        }
+      });
     });
 
-    doc.setFontSize(7);
-    doc.setTextColor(120);
-    doc.text('Doc.No. BCIM/FR/001/01     Rev. 01     Date: 27.8.2018', 148, 200, { align: 'center' });
+    doc.setFontSize(6);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Doc.No. BCIM/FR/001/01     ·     Rev. 01     ·     Date: 27.8.2018', 148, y + bh + 6, { align: 'center' });
 
     doc.save(`Transmittal_${t.transmittal_number}.pdf`);
   };
