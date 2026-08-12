@@ -630,7 +630,7 @@ router.patch('/entries/:id/status', authenticate, async (req, res) => {
       const ref   = entry.invoice_no || `SPC-${entry.sl_no}`;
       const lines = [{ code: expCode, debit: basic, description: `${cat} — ${entry.supplier} (${ref})` }];
       if (gst > 0) lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
-      lines.push({ code: '1000', credit: total, description: `Petty cash paid — ${entry.supplier} (${ref})` });
+      lines.push({ code: '1050', credit: total, description: `Petty cash paid — ${entry.supplier} (${ref})` });
 
       try {
         const jeId = await postAutoJournalStandalone({
@@ -715,7 +715,7 @@ router.post('/advances', authenticate, async (req, res) => {
        description || 'SALARY ADVANCE', n(amount), remarks || null, req.user.id]
     );
     const adv = r.rows[0];
-    // Auto-post JV: Dr Advance to Vendors/Staff (1150), Cr Cash in Hand (1000)
+    // Auto-post JV: Dr Advance to Vendors/Staff (1150), Cr Petty Cash (Project Sites) (1050)
     try {
       const jeId = await postAutoJournalStandalone({
         companyId: req.user.company_id,
@@ -727,7 +727,7 @@ router.post('/advances', authenticate, async (req, res) => {
         source:    'auto_stores_petty_cash',
         lines: [
           { code: '1150', debit:  n(amount), description: `Advance to ${payee_name} — ${description || 'SALARY ADVANCE'}` },
-          { code: '1000', credit: n(amount), description: `Cash paid — advance to ${payee_name}` },
+          { code: '1050', credit: n(amount), description: `Cash paid — advance to ${payee_name}` },
         ],
       });
       if (jeId) {
@@ -812,7 +812,7 @@ router.post('/receipts', authenticate, async (req, res) => {
        received_by || null, voucher_no || null, remarks || null, req.user.id]
     );
     const rec = r.rows[0];
-    // Auto-post JV: Dr Cash in Hand (1000), Cr Bank Accounts (1010) — replenishment from bank
+    // Auto-post JV: Dr Petty Cash (Project Sites) (1050), Cr Bank Accounts (1010) — replenishment from bank
     try {
       const jeId = await postAutoJournalStandalone({
         companyId: req.user.company_id,
@@ -823,7 +823,7 @@ router.post('/receipts', authenticate, async (req, res) => {
         narration: `Petty cash receipt — ${received_by || 'HO'}${voucher_no ? ' (' + voucher_no + ')' : ''}`,
         source:    'auto_stores_petty_cash',
         lines: [
-          { code: '1000', debit:  n(amount), description: `Cash received — ${received_by || 'HO'}${voucher_no ? ' (' + voucher_no + ')' : ''}` },
+          { code: '1050', debit:  n(amount), description: `Cash received — ${received_by || 'HO'}${voucher_no ? ' (' + voucher_no + ')' : ''}` },
           { code: '1010', credit: n(amount), description: `Bank transfer to petty cash${voucher_no ? ' — ' + voucher_no : ''}` },
         ],
       });

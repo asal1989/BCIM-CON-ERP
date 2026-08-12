@@ -913,7 +913,7 @@ router.post('/action', loadProjectScope, async (req, res) => {
             const ref     = fe.invoice_no || `SPC-${fe.sl_no}`;
             const lines   = [{ code: expCode, debit: basic, description: `${cat} — ${fe.supplier} (${ref})` }];
             if (gst > 0) lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
-            lines.push({ code: '1000', credit: total, description: `Petty cash paid — ${fe.supplier} (${ref})` });
+            lines.push({ code: '1050', credit: total, description: `Petty cash paid — ${fe.supplier} (${ref})` });
             postAutoJournalStandalone({
               companyId: CID(req), userId: uid,
               entryDate: fe.entry_date, projectId: fe.project_id || undefined,

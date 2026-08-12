@@ -62,6 +62,75 @@ async function resolveGrinClearingCode(companyId, grnId) {
   }
 }
 
+// Re-posts the auto_tqs_bill journal voucher for a bill from its *current*
+// row data, but only if one already exists (i.e. the bill has already been
+// through Accounts once). Call this after any edit that can change
+// total_amount/gst_amount/tcs_amt on a bill post-certification -- otherwise
+// the GL silently goes stale relative to the bill (audit finding F-01).
+async function resyncTqsBillJV(companyId, userId, billId) {
+  try {
+    const nn = v => parseFloat(v || 0) || 0;
+    const billRes = await query(
+      `SELECT b.id, b.sl_number, b.bill_type, b.total_amount, b.gst_amount, b.tcs_amt,
+              b.vendor_name, b.wo_number, b.po_number, b.grn_id, b.project_id,
+              COALESCE(u.tds_deduction, 0)   AS tds_deduction,
+              COALESCE(u.retention_money, 0) AS retention_money,
+              COALESCE(u.accts_jv_date, b.received_date, b.inv_date, CURRENT_DATE) AS jv_date
+       FROM tqs_bills b
+       LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+       WHERE b.id = $1 AND b.company_id = $2 AND b.is_deleted = FALSE`,
+      [billId, companyId]
+    );
+    if (!billRes.rows.length) return;
+    const bill = billRes.rows[0];
+    const ref = bill.sl_number || bill.id;
+
+    const existing = await query(
+      `SELECT 1 FROM journal_entries WHERE company_id = $1 AND source = 'auto_tqs_bill' AND reference = $2 LIMIT 1`,
+      [companyId, ref]
+    );
+    if (!existing.rows.length) return; // never posted (not through Accounts yet) -- nothing to resync
+
+    const total       = nn(bill.total_amount);
+    const gst         = nn(bill.gst_amount);
+    const tcs         = nn(bill.tcs_amt);
+    const expenseBase = total - gst - tcs;
+    const tds         = nn(bill.tds_deduction);
+    const retention   = nn(bill.retention_money);
+    const apCredit    = total - tds - retention;
+    const isWO        = (bill.bill_type === 'wo') || (!!bill.wo_number && !bill.po_number);
+    const grinCode    = await resolveGrinClearingCode(companyId, bill.grn_id);
+    const expenseCode = grinCode || (isWO ? '5100' : '5000');
+
+    await query(
+      `DELETE FROM journal_entries WHERE company_id = $1 AND source = 'auto_tqs_bill' AND reference = $2`,
+      [companyId, ref]
+    ).catch(() => {});
+
+    if (total <= 0) return;
+
+    const expenseLabel = grinCode ? 'GRIN clearing' : (isWO ? 'Subcontractor' : 'Material');
+    const lines = [
+      { code: expenseCode, debit: expenseBase, description: `${expenseLabel} — ${bill.vendor_name || ''} ${ref}` },
+    ];
+    if (gst > 0) lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+    if (tcs > 0) lines.push({ code: '1310', debit: tcs, description: `TCS collected by vendor — ${ref}` });
+    lines.push({ code: '2000', credit: apCredit, description: `Payable to ${bill.vendor_name || 'vendor'} — ${ref}` });
+    if (tds > 0)       lines.push({ code: '2200', credit: tds, description: `TDS deducted — ${ref}` });
+    if (retention > 0) lines.push({ code: '2300', credit: retention, description: `Retention withheld — ${ref}` });
+
+    await postAutoJournalStandalone({
+      companyId, userId,
+      entryDate: bill.jv_date,
+      projectId: bill.project_id || null,
+      reference: ref,
+      narration: `Bill booking (resynced) — ${bill.vendor_name || ''} (${ref})`,
+      source: 'auto_tqs_bill',
+      lines,
+    });
+  } catch (_) { /* best-effort — never block the edit over JV resync */ }
+}
+
 const STAGE_DEPT_RULES = {
   stores:           ['store'],
   document_control: ['document controller', 'document', 'controller', 'doc'],
@@ -3090,6 +3159,16 @@ router.put('/:id', async (req, res) => {
     sets.push(`updated_at = NOW()`);
     const r = await query(`UPDATE tqs_bills SET ${sets.join(', ')} WHERE id = $1 AND company_id = $2 RETURNING *`, params);
     await logHistory(req.params.id, 'system', 'Bill updated', req.user.id);
+
+    // If an amount field changed, resync the auto-JV so the GL doesn't go
+    // stale relative to the bill (audit finding F-01). No-op if the bill
+    // hasn't been through Accounts yet (no auto-JV exists to resync).
+    const AMOUNT_FIELDS = ['basic_amount', 'cgst_amt', 'sgst_amt', 'igst_amt', 'gst_amount',
+      'transport_gst_amt', 'other_charges', 'tcs_amt', 'total_amount'];
+    if (AMOUNT_FIELDS.some(f => Object.prototype.hasOwnProperty.call(fields, f))) {
+      await resyncTqsBillJV(req.user.company_id, req.user.id, req.params.id);
+    }
+
     res.json({ data: r.rows[0] });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });

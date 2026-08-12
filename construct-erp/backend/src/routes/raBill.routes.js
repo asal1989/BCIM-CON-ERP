@@ -822,9 +822,14 @@ router.patch('/:id/approve', authorize('super_admin','admin','project_manager'),
     // If advance recovery was applied, drain 2050 and reduce AR accordingly.
     try {
       const nn = v => parseFloat(v || 0);
-      const gross   = nn(bill.gross_amount) + nn(bill.price_escalation);
       const gst     = nn(bill.gst_amount);
       const grossWG = nn(bill.gross_with_gst);
+      // Revenue is derived from grossWG (the same total the debit/AR side is built
+      // from) rather than from gross_amount + price_escalation, which are stored
+      // independently and can be off by a paisa from grossWG due to separate
+      // rounding. Deriving it this way makes debit == credit true by construction
+      // instead of by coincidence — see audit finding F-02.
+      const revenue = grossWG - gst;
       const advRec  = nn(bill.mobilization_advance_recovery) + nn(bill.adhoc_advance_recovery);
       const ref     = bill.bill_number || bill.id;
 
@@ -840,7 +845,7 @@ router.patch('/:id/approve', authorize('super_admin','admin','project_manager'),
         ];
         if (advRec > 0)
           lines.push({ code: '2050', debit: advRec, description: `Advance recovery — ${ref}` });
-        lines.push({ code: '4000', credit: gross,   description: `Contract revenue — ${ref}` });
+        lines.push({ code: '4000', credit: revenue, description: `Contract revenue — ${ref}` });
         if (gst > 0)
           lines.push({ code: '2100', credit: gst,   description: `Output GST — ${ref}` });
 
