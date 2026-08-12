@@ -447,6 +447,25 @@ router.post('/attendance/corrections/bulk', async (req, res) => {
   }
 });
 
+// Upcoming holidays (today onward), for the native app's Holidays screen.
+// The dashboard summary only returns holidays within the current calendar
+// month — this is a broader forward-looking list.
+router.get('/holidays', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, holiday_date, name, holiday_type
+       FROM hr_holidays
+       WHERE company_id = $1 AND holiday_date >= CURRENT_DATE
+       ORDER BY holiday_date ASC
+       LIMIT 30`,
+      [ownCompany(req)]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/attendance/corrections', async (req, res) => {
   try {
     const { rows } = await query(
