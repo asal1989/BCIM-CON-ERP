@@ -1,0 +1,1 @@
+import{j as e}from"./vendor-react-QqYhfoRR.js";import{O as o}from"./OnboardingPlaceholderPage-CBdU1hhc.js";import"./vendor-icons-4CW4uHPM.js";function i(){return e.jsx(o,{title:"Onboarding Feedback",description:"Collect new-hire feedback on the onboarding experience."})}export{i as default};

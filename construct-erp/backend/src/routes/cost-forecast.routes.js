@@ -438,15 +438,16 @@ router.get('/:project_id/drilldown/actual', async (req, res) => {
     // itemized here (flagged as such in each row's Reference column).
     const rows = await query(`
       SELECT * FROM (
-        SELECT invoice_date AS date, invoice_number AS voucher_number, 'Vendor Invoice' AS transaction_type,
-               vendor_name AS vendor, 'Materials' AS cost_head, net_amount AS amount, invoice_number AS reference
-        FROM invoices WHERE project_id=$1 AND status IN ('authorized','verified','paid')
+        SELECT i.invoice_date AS date, i.invoice_number AS voucher_number, 'Vendor Invoice' AS transaction_type,
+               v.name AS vendor, 'Materials' AS cost_head, i.net_amount AS amount, i.invoice_number AS reference
+        FROM invoices i LEFT JOIN vendors v ON v.id = i.vendor_id
+        WHERE i.project_id=$1 AND i.status IN ('authorized','verified','paid')
         UNION ALL
         SELECT bill_date, bill_number, 'Subcontract Bill', sc.name, 'Subcontract', b.gross_amount, b.bill_number
         FROM sc_bills b JOIN sc_subcontractors sc ON sc.id = b.sc_id
         WHERE b.project_id=$1 AND b.status IN ('submitted','under_review','approved','paid')
         UNION ALL
-        SELECT entry_date, voucher_number, 'Petty Cash', payee_name, 'Overheads', amount, voucher_number
+        SELECT entry_date, pc_voucher_no, 'Petty Cash', supplier, 'Overheads', amount, pc_voucher_no
         FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved'
       ) x
       WHERE ($2::text IS NULL OR x.cost_head = $2)
@@ -465,10 +466,10 @@ router.get('/:project_id/drilldown/committed', async (req, res) => {
     await assertProjectAccess(req, projectId);
 
     const po = await query(`
-      SELECT po.po_number AS ref_no, po.vendor_name, po.grand_total AS order_value,
+      SELECT po.po_number AS ref_no, v.name AS vendor_name, po.grand_total AS order_value,
              COALESCE((SELECT SUM(b.total_amount) FROM tqs_bills b WHERE b.po_id = po.id AND b.is_deleted=FALSE), 0) AS invoiced,
              'Purchase Order' AS type
-      FROM purchase_orders po
+      FROM purchase_orders po LEFT JOIN vendors v ON v.id = po.vendor_id
       WHERE po.project_id=$1 AND po.status IN ('approved','fully_received')
     `, [projectId]);
 

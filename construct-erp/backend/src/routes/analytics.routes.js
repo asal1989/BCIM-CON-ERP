@@ -1044,6 +1044,7 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
       poCommittedRes, poBilledRes, scWoCommittedRes, scWoBilledRes,
       raBillsMonthlyRes, baselineRes,
       riskRes, lowStockRes, openRfisRes, openNcrsRes, openIncidentsRes,
+      forecastRes, costRiskRes, snapshotHistoryRes,
     ] = await Promise.all([
       safeQuery(`SELECT COALESCE(SUM(net_amount),0) total FROM invoices WHERE project_id=$1 AND status IN ('authorized','verified','paid')`, [projectId]),
       safeQuery(`SELECT COALESCE(SUM(total_cost),0) fuel, COALESCE((SELECT SUM(units_worked*hourly_rate) FROM asset_usage_logs ul JOIN assets a ON ul.asset_id=a.id WHERE ul.project_id=$1),0) rental FROM asset_fuel_logs WHERE project_id=$1`, [projectId]),
@@ -1073,6 +1074,17 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
       safeQuery(`SELECT COUNT(*) c FROM quality_rfis WHERE project_id=$1 AND status NOT IN ('closed','approved','completed')`, [projectId]),
       safeQuery(`SELECT COUNT(*) c FROM quality_ncrs WHERE project_id=$1 AND status NOT IN ('verified','closed','completed')`, [projectId]),
       safeQuery(`SELECT COUNT(*) c FROM incidents WHERE project_id=$1 AND status NOT IN ('closed','resolved')`, [projectId]),
+      // Approved forecast overrides (Method 1 — manual, reviewed) per cost head.
+      // Only 'approved' rows are used here — submitted/pm_reviewed revisions
+      // stay pending and must never silently change what this statement shows.
+      safeQuery(`SELECT cost_head, revised_etc, status FROM project_cost_forecast_items WHERE project_id=$1`, [projectId]),
+      // Cost-specific risks (project_cost_risks) — the CRUD-capable risk log
+      // this module owns, separate from the general risk_register above.
+      safeQuery(`SELECT id, risk_title, description, severity, cost_head, impact, owner, status FROM project_cost_risks WHERE project_id=$1 AND status='open' ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC LIMIT 20`, [projectId]),
+      // Prior periods' EAC snapshots — real history for the forecast trend
+      // line, filled in as this endpoint is actually used over time rather
+      // than fabricated. Empty until at least one prior period exists.
+      safeQuery(`SELECT period, eac FROM project_cost_snapshots WHERE project_id=$1 ORDER BY period ASC`, [projectId]),
     ]);
 
     const materialsTotal = toNumber(materialCostRes.rows[0]?.total);
@@ -1100,10 +1112,32 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
     const cpi = totalActual > 0 ? earnedValue / totalActual : null;
     const costProgressPct = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
 
+    // Planned Value for SPI — cumulative baseline value up to today if an
+    // active baseline exists, else budget prorated by elapsed schedule time
+    // (same fallback the S-curve uses). SPI = EV / PV.
+    const startDate = project.start_date ? new Date(project.start_date) : null;
+    const endDate = project.end_date ? new Date(project.end_date) : null;
+    const timeElapsedPct = (startDate && endDate && endDate > startDate)
+      ? Math.min(100, Math.max(0, ((Date.now() - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100))
+      : null;
+    const baselineToDate = (baselineRes.rows || [])
+      .filter(r => r.planned_start && new Date(r.planned_start) <= new Date())
+      .reduce((s, r) => s + toNumber(r.planned_value), 0);
+    const plannedValue = baselineToDate > 0 ? baselineToDate
+      : (timeElapsedPct != null ? totalBudget * (timeElapsedPct / 100) : null);
+    const spi = (plannedValue && plannedValue > 0) ? earnedValue / plannedValue : null;
+
     const remainingBudget = Math.max(totalBudget - totalActual, 0);
-    const etc = (cpi && cpi > 0) ? Math.max((totalBudget - earnedValue) / cpi, 0) : remainingBudget;
-    const eac = totalActual + etc;
-    const variance = totalBudget - eac; // positive = under budget, negative = overrun
+    const autoEtc = (cpi && cpi > 0) ? Math.max((totalBudget - earnedValue) / cpi, 0) : remainingBudget;
+
+    // Approved manual forecast overrides (Method 1) — only 'approved' rows
+    // override the auto-computed (Method 3, CPI-based) ETC for that cost
+    // head. A submitted/pm_reviewed revision is still pending and must not
+    // silently change what this statement reports.
+    const approvedForecast = {};
+    for (const row of (forecastRes.rows || [])) {
+      if (row.status === 'approved') approvedForecast[row.cost_head] = toNumber(row.revised_etc);
+    }
 
     // Per-bucket breakdown — budget allocated proportionally by each bucket's
     // share of total actual spend (project_costhead_budgets is keyed by the
@@ -1112,6 +1146,7 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
     // summary, same approach Project 360 uses for its topVariance table).
     // Committed is real (not proportional) for Materials/Subcontract; 0
     // elsewhere, since no PO/WO commitment concept exists for those buckets.
+    const knownBucketNames = ['Labour', 'Materials', 'Plant & Machinery', 'Subcontract', 'Overheads'];
     const buckets = [
       { name: 'Labour',       actual: laborTotal,     committed: 0 },
       { name: 'Materials',    actual: materialsTotal, committed: poCommitted },
@@ -1120,15 +1155,39 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
       { name: 'Overheads',    actual: othersTotal,    committed: 0 },
     ].map(b => {
       const budget = totalActual > 0 ? totalBudget * (b.actual / totalActual) : 0;
-      const bucketEtc = totalBudget > 0 ? etc * (budget / totalBudget) : 0;
+      const autoBucketEtc = totalBudget > 0 ? autoEtc * (budget / totalBudget) : 0;
+      const isOverridden = approvedForecast[b.name] != null;
+      const bucketEtc = isOverridden ? approvedForecast[b.name] : autoBucketEtc;
       const bucketEac = b.actual + bucketEtc;
-      return { ...b, budget, etc: bucketEtc, eac: bucketEac, variance: budget - bucketEac };
+      return { ...b, budget, etc: bucketEtc, eac: bucketEac, variance: budget - bucketEac, forecast_method: isOverridden ? 'manual' : 'auto' };
     });
 
+    // Custom, admin-defined cost heads — any cost_head named in a forecast or
+    // risk that isn't one of the 5 auto-computed buckets above. No ERP source
+    // tracks Actual/Budget/Committed for these (that's exactly why they're
+    // "custom" — e.g. Engineering, Temporary Works), so they're honestly 0/0/0
+    // except for whatever ETC a manual forecast has actually been entered for.
+    const customHeadNames = new Set();
+    for (const row of (forecastRes.rows || [])) if (!knownBucketNames.includes(row.cost_head)) customHeadNames.add(row.cost_head);
+    for (const row of (costRiskRes.rows || [])) if (row.cost_head && !knownBucketNames.includes(row.cost_head)) customHeadNames.add(row.cost_head);
+    for (const name of customHeadNames) {
+      const customEtc = approvedForecast[name] || 0;
+      buckets.push({ name, actual: 0, committed: 0, budget: 0, etc: customEtc, eac: customEtc, variance: -customEtc, forecast_method: approvedForecast[name] != null ? 'manual' : 'auto', custom: true });
+    }
+
+    // Totals now roll UP from the (possibly manually-overridden) buckets,
+    // rather than being computed once and prorated down — so a forecast
+    // override on one cost head correctly moves the project-level EAC/Variance.
+    const etc = buckets.reduce((s, b) => s + b.etc, 0);
+    const eac = totalActual + etc;
+    const variance = totalBudget - eac; // positive = under budget, negative = overrun
+
     // Monthly trend — Budget (flat reference or time-phased baseline) vs
-    // Actual (monthly certified RA bills) vs Forecast (this endpoint's own
-    // EAC, shown as a flat line at the latest EAC — no time-phased forecast
-    // data exists in this ERP, same honesty constraint Project 360 applies).
+    // Actual (monthly certified RA bills) vs Forecast. Forecast is real
+    // snapshot history (project_cost_snapshots, written below on every call)
+    // for past periods, plus today's just-computed EAC for the current
+    // period — not a fabricated curve. It starts as a single point and fills
+    // in as this screen is actually used over successive reporting periods.
     const months = buildMonthSeries(dateFrom, dateTo);
     const monthlyActual = {};
     for (const row of (raBillsMonthlyRes.rows || [])) monthlyActual[row.ym] = toNumber(row.v);
@@ -1140,8 +1199,11 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
       const key = String(row.planned_start).slice(0, 7);
       monthlyPlanned[key] = (monthlyPlanned[key] || 0) + toNumber(row.planned_value);
     }
+    const snapshotEacByPeriod = {};
+    for (const row of (snapshotHistoryRes.rows || [])) snapshotEacByPeriod[row.period] = toNumber(row.eac);
+    const currentPeriod = new Date().toISOString().slice(0, 7);
     let cumActual = 0, cumPlanned = 0;
-    const monthlyTrend = months.map((m, i) => {
+    const monthlyTrend = months.map((m) => {
       cumActual += monthlyActual[m.key] || 0;
       cumPlanned += hasBaseline ? (monthlyPlanned[m.key] || 0) : (totalBudget / months.length);
       const point = {
@@ -1149,32 +1211,58 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
         budget: Number((cumPlanned / 100000).toFixed(2)),
         actual: Number((cumActual / 100000).toFixed(2)),
       };
-      if (i === months.length - 1) point.forecast = Number((eac / 100000).toFixed(2));
+      const snapshotEac = m.key === currentPeriod ? eac : snapshotEacByPeriod[m.key];
+      if (snapshotEac != null) point.forecast = Number((snapshotEac / 100000).toFixed(2));
       return point;
     });
 
+    // Risk panel — three sources, each tagged so the frontend knows what's
+    // editable: this module's own CRUD risks (project_cost_risks), the
+    // general project risk register (read-only here — edited from Planning),
+    // and cheap derived exceptions (also read-only, no fabricated predictions).
     const riskAlerts = [
+      ...costRiskRes.rows.map(r => ({
+        source: 'cost_risk', id: r.id, type: 'risk', severity: r.severity, label: r.risk_title,
+        description: r.description, category: r.cost_head, impact: toNumber(r.impact), owner: r.owner,
+      })),
       ...riskRes.rows.map(r => ({
-        type: 'risk', severity: r.risk_level, label: r.risk_title, category: r.category,
+        source: 'risk_register', type: 'risk', severity: r.risk_level, label: r.risk_title, category: r.category,
         due_date: r.due_date, owner: r.owner,
       })),
     ];
     const lowStockCount = parseInt(lowStockRes.rows[0]?.c || 0, 10);
-    if (lowStockCount > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${lowStockCount} material(s) at/below reorder level`, to: '/stores/inventory' });
+    if (lowStockCount > 0) riskAlerts.push({ source: 'system', type: 'exception', severity: 'medium', label: `${lowStockCount} material(s) at/below reorder level`, to: '/stores/inventory' });
     const openRfisCount = parseInt(openRfisRes.rows[0]?.c || 0, 10);
-    if (openRfisCount > 0) riskAlerts.push({ type: 'exception', severity: 'low', label: `${openRfisCount} open inspection(s)`, to: '/quality/rfi' });
+    if (openRfisCount > 0) riskAlerts.push({ source: 'system', type: 'exception', severity: 'low', label: `${openRfisCount} open inspection(s)`, to: '/quality/rfi' });
     const openNcrsCount = parseInt(openNcrsRes.rows[0]?.c || 0, 10);
-    if (openNcrsCount > 0) riskAlerts.push({ type: 'exception', severity: 'medium', label: `${openNcrsCount} open NCR(s)`, to: '/quality/ncr' });
+    if (openNcrsCount > 0) riskAlerts.push({ source: 'system', type: 'exception', severity: 'medium', label: `${openNcrsCount} open NCR(s)`, to: '/quality/ncr' });
     const openIncidentsCount = parseInt(openIncidentsRes.rows[0]?.c || 0, 10);
-    if (openIncidentsCount > 0) riskAlerts.push({ type: 'exception', severity: 'high', label: `${openIncidentsCount} open safety incident(s)`, to: '/safety/incidents' });
-    // Overrun/overspend risks derived from this screen's own numbers.
-    if (variance < 0) riskAlerts.unshift({ type: 'exception', severity: 'high', label: `Projected cost overrun of ₹${Math.round(Math.abs(variance)).toLocaleString('en-IN')} at completion` });
+    if (openIncidentsCount > 0) riskAlerts.push({ source: 'system', type: 'exception', severity: 'high', label: `${openIncidentsCount} open safety incident(s)`, to: '/safety/incidents' });
+    // Overrun/overspend/performance risks derived from this screen's own numbers.
+    if (variance < 0) riskAlerts.unshift({ source: 'system', type: 'exception', severity: 'high', label: `Projected cost overrun of ₹${Math.round(Math.abs(variance)).toLocaleString('en-IN')} at completion` });
+    if (cpi != null && cpi < 0.90) riskAlerts.push({ source: 'system', type: 'exception', severity: 'high', label: `CPI ${cpi.toFixed(2)} — cost performance below 0.90` });
+    if (spi != null && spi < 0.90) riskAlerts.push({ source: 'system', type: 'exception', severity: 'medium', label: `SPI ${spi.toFixed(2)} — schedule performance below 0.90` });
+    if (costProgressPct > progressPct + 10) riskAlerts.push({ source: 'system', type: 'exception', severity: 'medium', label: `Cost progress (${costProgressPct.toFixed(0)}%) is running well ahead of physical progress (${progressPct.toFixed(0)}%)` });
     buckets.forEach(b => {
       if (b.budget > 0 && b.actual > b.budget * 1.05) {
         const pct = (((b.actual - b.budget) / b.budget) * 100).toFixed(0);
-        riskAlerts.push({ type: 'exception', severity: 'medium', label: `${b.name} spend ${pct}% above its allocated share of budget` });
+        riskAlerts.push({ source: 'system', type: 'exception', severity: 'medium', label: `${b.name} spend ${pct}% above its allocated share of budget` });
       }
     });
+
+    // Snapshot this period's key figures — best-effort, never blocks the
+    // response. This is what lets the forecast trend line above show real
+    // history instead of a single flat point once a few periods have passed.
+    query(
+      `INSERT INTO project_cost_snapshots
+         (company_id, project_id, period, approved_budget, actual_cost, committed_cost, etc, eac, variance, cpi, spi, physical_progress_pct)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (project_id, period) DO UPDATE SET
+         approved_budget=EXCLUDED.approved_budget, actual_cost=EXCLUDED.actual_cost, committed_cost=EXCLUDED.committed_cost,
+         etc=EXCLUDED.etc, eac=EXCLUDED.eac, variance=EXCLUDED.variance, cpi=EXCLUDED.cpi, spi=EXCLUDED.spi,
+         physical_progress_pct=EXCLUDED.physical_progress_pct`,
+      [req.user.company_id, projectId, currentPeriod, totalBudget, totalActual, totalCommitted, etc, eac, variance, cpi, spi, progressPct]
+    ).catch(e => console.error('[cost-to-completion] snapshot upsert failed:', e.message));
 
     res.json({
       data: {
@@ -1195,7 +1283,12 @@ router.get('/cost-to-completion/:project_id', async (req, res) => {
         projected_variance: variance,
         cost_completion_pct: costProgressPct,
         physical_progress_pct: progressPct,
+        planned_progress_pct: (baselineToDate > 0 && totalBudget > 0) ? (baselineToDate / totalBudget) * 100 : timeElapsedPct,
         cpi,
+        spi,
+        earned_value: earnedValue,
+        planned_value: plannedValue,
+        reporting_period: currentPeriod,
         buckets,
         monthlyTrend,
         riskAlerts,

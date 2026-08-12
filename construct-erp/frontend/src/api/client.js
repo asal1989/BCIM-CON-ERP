@@ -1871,6 +1871,20 @@ export const analyticsAPI = {
   costToCompletion: (id, params) => api.get(`/analytics/cost-to-completion/${id}`, { params }),
 };
 
+export const costForecastAPI = {
+  listForecast:    (projectId)          => api.get(`/analytics/cost-to-completion/${projectId}/forecast`),
+  submitForecast:  (projectId, payload) => api.post(`/analytics/cost-to-completion/${projectId}/forecast`, payload),
+  reviewForecast:  (projectId, id, payload)  => api.put(`/analytics/cost-to-completion/${projectId}/forecast/${id}/review`, payload),
+  approveForecast: (projectId, id, payload)  => api.put(`/analytics/cost-to-completion/${projectId}/forecast/${id}/approve`, payload),
+  forecastHistory: (projectId, params)  => api.get(`/analytics/cost-to-completion/${projectId}/forecast/history`, { params }),
+  listRisks:   (projectId)         => api.get(`/analytics/cost-to-completion/${projectId}/risks`),
+  createRisk:  (projectId, payload) => api.post(`/analytics/cost-to-completion/${projectId}/risks`, payload),
+  updateRisk:  (projectId, id, payload) => api.put(`/analytics/cost-to-completion/${projectId}/risks/${id}`, payload),
+  drilldownActual:    (projectId, params) => api.get(`/analytics/cost-to-completion/${projectId}/drilldown/actual`, { params }),
+  drilldownCommitted: (projectId)         => api.get(`/analytics/cost-to-completion/${projectId}/drilldown/committed`),
+  exportExcel: (projectId) => api.get(`/analytics/cost-to-completion/${projectId}/export`, { responseType: 'blob' }),
+};
+
 export const approvalsAPI = {
   getPending:   ()            => api.get('/approvals/pending'),
   doAction:     (d)           => api.post('/approvals/action', d),
