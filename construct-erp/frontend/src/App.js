@@ -831,6 +831,7 @@ export default function App() {
                 <Route path="accounts/reports/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
                 <Route path="accounts/reports/budget" element={<RequireModule module="Finance"><BudgetPage /></RequireModule>} />
                 <Route path="project-controls/cost-to-completion" element={<RequireModule module="Finance"><CostToCompletionPage /></RequireModule>} />
+                <Route path="project-controls" element={<Navigate to="/project-controls/cost-to-completion" replace />} />
                 {/* Taxes */}
                 <Route path="accounts/taxes/summary" element={<RequireModule module="Finance"><TaxSummaryPage /></RequireModule>} />
                 <Route path="accounts/taxes/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
