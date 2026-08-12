@@ -68,4 +68,22 @@ router.get('/tables', async (req, res) => {
   }
 });
 
+// GET /audit-log/actions — distinct action values seen, for the filter dropdown.
+// A hardcoded list went stale the moment the generic auto-capture middleware
+// started deriving actions from URL path segments (login_success, terminate,
+// submit, close, reopen, ...) on top of the ~9 the manual logAudit() call
+// sites originally used — this keeps the dropdown honest without a code
+// change every time a new action shows up in real traffic.
+router.get('/actions', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT DISTINCT action FROM audit_logs WHERE company_id = $1 AND action IS NOT NULL ORDER BY action`,
+      [req.user.company_id]
+    );
+    res.json({ data: r.rows.map((row) => row.action) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

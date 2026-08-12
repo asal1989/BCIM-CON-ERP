@@ -13,11 +13,27 @@ const ACTION_COLORS = {
   update:          { bg: 'bg-blue-50',    text: 'text-blue-700' },
   delete:          { bg: 'bg-red-50',     text: 'text-red-700' },
   deactivate:      { bg: 'bg-red-50',     text: 'text-red-700' },
+  terminate:       { bg: 'bg-red-50',     text: 'text-red-700' },
+  cancel:          { bg: 'bg-red-50',     text: 'text-red-700' },
   approve:         { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  activate:        { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  complete:        { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  login_success:   { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   verify:          { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+  submit:          { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+  link:            { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
   reject:          { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  close:           { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  reopen:          { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  login_failed:    { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  unlink:          { bg: 'bg-amber-50',   text: 'text-amber-700' },
   pay:             { bg: 'bg-teal-50',    text: 'text-teal-700' },
+  send:            { bg: 'bg-teal-50',    text: 'text-teal-700' },
   reset_password:  { bg: 'bg-violet-50',  text: 'text-violet-700' },
+  upload:          { bg: 'bg-violet-50',  text: 'text-violet-700' },
+  convert:         { bg: 'bg-violet-50',  text: 'text-violet-700' },
+  run:             { bg: 'bg-violet-50',  text: 'text-violet-700' },
+  mark_absent:     { bg: 'bg-amber-50',   text: 'text-amber-700' },
 };
 
 function DiffValue({ value }) {
@@ -99,6 +115,10 @@ export default function AuditLogPage() {
     queryKey: ['audit-log-tables'],
     queryFn: () => auditLogAPI.tables().then(r => r.data?.data || []),
   });
+  const { data: actions = [] } = useQuery({
+    queryKey: ['audit-log-actions'],
+    queryFn: () => auditLogAPI.actions().then(r => r.data?.data || []),
+  });
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['audit-log', filters, page],
@@ -163,7 +183,7 @@ export default function AuditLogPage() {
             <select value={filters.action} onChange={e => set('action', e.target.value)}
               className="border border-slate-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-200">
               <option value="">All Actions</option>
-              {Object.keys(ACTION_COLORS).map(a => <option key={a} value={a}>{a}</option>)}
+              {actions.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
             <input type="date" value={filters.date_from} onChange={e => set('date_from', e.target.value)}
               className="border border-slate-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-200" />

@@ -912,8 +912,9 @@ export const companySettingsAPI = {
 };
 
 export const auditLogAPI = {
-  list:   (params) => api.get('/audit-log', { params }),
-  tables: ()        => api.get('/audit-log/tables'),
+  list:    (params) => api.get('/audit-log', { params }),
+  tables:  ()        => api.get('/audit-log/tables'),
+  actions: ()        => api.get('/audit-log/actions'),
 };
 
 export const rolePermissionsAPI = {

@@ -42,8 +42,13 @@ function deriveActionAndTable(method, pathOnly) {
   const segments = pathOnly.split('/').filter(Boolean);
   const last = segments[segments.length - 1] || '';
   const lastIsAction = ACTION_SEGMENTS.has(last.toLowerCase());
+  // URL segments are hyphenated (REST convention); the manual logAudit() call
+  // sites use underscores (action='reset_password', 'login_success', ...).
+  // Normalize so a route ending in /reset-password lands in the same action
+  // bucket as a manual call, instead of silently splitting the audit trail
+  // and filter dropdown into two values for the same real action.
   const action = lastIsAction
-    ? last.toLowerCase()
+    ? last.toLowerCase().replace(/-/g, '_')
     : { POST: 'create', PUT: 'update', PATCH: 'update', DELETE: 'delete' }[method] || 'update';
 
   const tableSegments = segments.filter((seg, i) =>
