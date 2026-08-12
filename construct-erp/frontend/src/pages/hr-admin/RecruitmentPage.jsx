@@ -212,7 +212,7 @@ function RequisitionsTab() {
 /* ═══════════════════════════ Job Openings ═══════════════════════════ */
 function JobForm({ job, onClose, onSaved }) {
   const isEdit = !!job;
-  const [f, setF] = useState(job || { title: '', department: '', designation: '', vacancies: 1, job_type: 'full_time', experience_min: 0, experience_max: '', qualification: '', work_location: '', salary_min: '', salary_max: '', description: '', responsibilities: '', skills_required: '', status: 'open', closing_date: '' });
+  const [f, setF] = useState(job || { title: '', department: '', designation: '', vacancies: 1, job_type: 'full_time', experience_min: 0, experience_max: '', qualification: '', work_location: '', salary_min: '', salary_max: '', description: '', responsibilities: '', skills_required: '', status: 'open', closing_date: '', is_public_listed: true });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const mut = useMutation({
     mutationFn: (d) => isEdit ? hrRecruitmentAPI.updateJob(job.id, d) : hrRecruitmentAPI.createJob(d),
@@ -249,6 +249,12 @@ function JobForm({ job, onClose, onSaved }) {
           <Field label="Qualification"><input value={f.qualification || ''} onChange={e => set('qualification', e.target.value)} className={INP} /></Field>
           <Field label="Skills Required" wide><input value={f.skills_required || ''} onChange={e => set('skills_required', e.target.value)} className={INP} /></Field>
           <Field label="Description" wide><textarea rows={3} value={f.description || ''} onChange={e => set('description', e.target.value)} className={TA} /></Field>
+          <Field label="" wide>
+            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={f.is_public_listed !== false} onChange={e => set('is_public_listed', e.target.checked)} className="w-3.5 h-3.5" />
+              List on public careers site
+            </label>
+          </Field>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t">
           <button onClick={onClose} className="h-9 px-4 rounded-xl border text-xs">Cancel</button>
@@ -595,7 +601,7 @@ function CandidateDrawer({ applicantId, onClose, onChanged }) {
           <div className="flex items-start justify-between">
             <div>
               <h3 className="font-bold text-black text-lg">{app.name}</h3>
-              <p className="text-xs text-slate-500">{app.current_designation || '—'} · {app.current_company || '—'} · {app.job_title}</p>
+              <p className="text-xs text-slate-500">{app.current_designation || '—'} · {app.current_company || '—'} · {app.job_title || 'General Application'}</p>
             </div>
             <div className="flex items-center gap-2">
               <select value={app.status} onChange={e => statusMut.mutate(e.target.value)} className={`h-8 rounded-lg px-2 text-[11px] font-semibold border-0 outline-none bg-${APP_STATUS_C[app.status]}-100 text-${APP_STATUS_C[app.status]}-700 cursor-pointer`}>
@@ -785,7 +791,7 @@ function CandidatesTab({ jobs, filterJobId, setFilterJobId, filterStatus, setFil
               </div>
               <Badge color={APP_STATUS_C[a.status]}>{a.status.replace(/_/g, ' ')}</Badge>
             </div>
-            <div className="text-[10px] text-slate-400 mt-2">{a.job_title} · Applied {dayjs(a.applied_on).format('DD-MM-YYYY')}</div>
+            <div className="text-[10px] text-slate-400 mt-2">{a.job_title || 'General Application'} · Applied {dayjs(a.applied_on).format('DD-MM-YYYY')}</div>
           </button>
         ))}
         {applicants.length === 0 && <div className="col-span-3 text-center py-16 text-slate-400 text-sm">No candidates found</div>}

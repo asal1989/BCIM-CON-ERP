@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BookOpen, Briefcase, CalendarCheck, CheckCircle2, Clock3, FileCheck2, FileText,
+  BookOpen, CalendarCheck, CheckCircle2, Clock3, FileCheck2, FileText,
   Headphones, IndianRupee, Plus, RefreshCw, ShieldCheck, Users, XCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -19,7 +19,6 @@ const tabGroups = [
   {
     group: 'Talent & Growth',
     tabs: [
-      { id: 'recruitment', label: 'Recruitment', icon: Briefcase },
       { id: 'training',    label: 'Training',     icon: FileCheck2 },
       { id: 'performance', label: 'Performance',   icon: CheckCircle2 },
     ],
@@ -107,86 +106,6 @@ function DataTable({ columns, rows, empty = 'No records found' }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function RecruitmentTab({ employees, departments, designations }) {
-  const qc = useQueryClient();
-  const [job, setJob] = useState({ title: '', job_code: '', department_id: '', designation_id: '', location: '', vacancies: 1 });
-  const [candidate, setCandidate] = useState({ name: '', phone: '', email: '', job_id: '', experience_years: 0, expected_ctc: 0 });
-  const [interview, setInterview] = useState({ candidate_id: '', interview_date: '', interviewer_id: '', interview_round: 'Round 1', mode: 'in-person' });
-  const [offer, setOffer] = useState({ candidate_id: '', offered_ctc: 0, joining_date: '' });
-
-  const jobs = useQuery({ queryKey: ['hr-advanced-jobs'], queryFn: () => hrAdvancedAPI.listJobs().then(unwrap) });
-  const candidates = useQuery({ queryKey: ['hr-advanced-candidates'], queryFn: () => hrAdvancedAPI.listCandidates().then(unwrap) });
-  const refresh = () => { qc.invalidateQueries({ queryKey: ['hr-advanced-jobs'] }); qc.invalidateQueries({ queryKey: ['hr-advanced-candidates'] }); };
-  const saveJob = useMutation({ mutationFn: hrAdvancedAPI.createJob, onSuccess: () => { toast.success('Job opening created'); setJob({ title: '', job_code: '', department_id: '', designation_id: '', location: '', vacancies: 1 }); refresh(); } });
-  const saveCandidate = useMutation({ mutationFn: hrAdvancedAPI.createCandidate, onSuccess: () => { toast.success('Candidate added'); setCandidate({ name: '', phone: '', email: '', job_id: '', experience_years: 0, expected_ctc: 0 }); refresh(); } });
-  const schedule = useMutation({ mutationFn: () => hrAdvancedAPI.scheduleInterview(interview.candidate_id, interview), onSuccess: () => { toast.success('Interview scheduled'); setInterview({ candidate_id: '', interview_date: '', interviewer_id: '', interview_round: 'Round 1', mode: 'in-person' }); refresh(); } });
-  const createOffer = useMutation({ mutationFn: () => hrAdvancedAPI.createOffer(offer.candidate_id, offer), onSuccess: () => { toast.success('Offer recorded'); setOffer({ candidate_id: '', offered_ctc: 0, joining_date: '' }); refresh(); } });
-  const setStatus = useMutation({ mutationFn: ({ id, status }) => hrAdvancedAPI.updateCandidate(id, { status }), onSuccess: refresh });
-
-  return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
-      <div className="space-y-5">
-        <Panel title="Create Job Opening" subtitle="Hiring request, vacancy and department mapping" icon={Briefcase}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Job Title"><input className={input} value={job.title} onChange={(e) => setJob({ ...job, title: e.target.value })} /></Field>
-            <Field label="Job Code"><input className={input} value={job.job_code} onChange={(e) => setJob({ ...job, job_code: e.target.value })} /></Field>
-            <Field label="Department"><select className={input} value={job.department_id} onChange={(e) => setJob({ ...job, department_id: e.target.value })}><option value="">Select</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-            <Field label="Designation"><select className={input} value={job.designation_id} onChange={(e) => setJob({ ...job, designation_id: e.target.value })}><option value="">Select</option>{designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-            <Field label="Location"><input className={input} value={job.location} onChange={(e) => setJob({ ...job, location: e.target.value })} /></Field>
-            <Field label="Vacancies"><input type="number" className={input} value={job.vacancies} onChange={(e) => setJob({ ...job, vacancies: e.target.value })} /></Field>
-          </div>
-          <button className={`${btn} mt-4 bg-blue-700 text-white hover:bg-blue-800`} disabled={!job.title} onClick={() => saveJob.mutate(job)}><Plus className="h-4 w-4" />Create Job</button>
-        </Panel>
-        <Panel title="Candidate Pipeline" subtitle="Add candidate, schedule interview, issue offer" icon={Users}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Candidate Name"><input className={input} value={candidate.name} onChange={(e) => setCandidate({ ...candidate, name: e.target.value })} /></Field>
-            <Field label="Phone"><input className={input} value={candidate.phone} onChange={(e) => setCandidate({ ...candidate, phone: e.target.value })} /></Field>
-            <Field label="Email"><input className={input} value={candidate.email} onChange={(e) => setCandidate({ ...candidate, email: e.target.value })} /></Field>
-            <Field label="Job"><select className={input} value={candidate.job_id} onChange={(e) => setCandidate({ ...candidate, job_id: e.target.value })}><option value="">Walk-in / General</option>{(jobs.data || []).map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}</select></Field>
-            <Field label="Experience"><input type="number" className={input} value={candidate.experience_years} onChange={(e) => setCandidate({ ...candidate, experience_years: e.target.value })} /></Field>
-            <Field label="Expected CTC"><input type="number" className={input} value={candidate.expected_ctc} onChange={(e) => setCandidate({ ...candidate, expected_ctc: e.target.value })} /></Field>
-          </div>
-          <button className={`${btn} mt-4 bg-blue-700 text-white hover:bg-blue-800`} disabled={!candidate.name} onClick={() => saveCandidate.mutate(candidate)}><Plus className="h-4 w-4" />Add Candidate</button>
-        </Panel>
-      </div>
-      <div className="space-y-5">
-        <Panel title="Open Jobs" subtitle={`${jobs.data?.length || 0} openings`} icon={Briefcase}>
-          <DataTable columns={[
-            { key: 'title', label: 'Job' }, { key: 'department_name', label: 'Department' },
-            { key: 'vacancies', label: 'Vacancies' }, { key: 'status', label: 'Status' },
-          ]} rows={jobs.data || []} />
-        </Panel>
-        <Panel title="Candidate Register" subtitle="Interview, shortlist, offer and hire tracking" icon={Users}>
-          <DataTable columns={[
-            { key: 'name', label: 'Candidate' }, { key: 'job_title', label: 'Job' }, { key: 'phone', label: 'Phone' },
-            { key: 'status', label: 'Status' },
-            { key: 'actions', label: 'Actions', render: (r) => (
-              <div className="flex flex-wrap gap-2">
-                <button className="rounded bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700" onClick={() => setStatus.mutate({ id: r.id, status: 'shortlisted' })}>Shortlist</button>
-                <button className="rounded bg-blue-50 px-2 py-1 text-xs font-black text-blue-700" onClick={() => setInterview((p) => ({ ...p, candidate_id: r.id }))}>Interview</button>
-                <button className="rounded bg-amber-50 px-2 py-1 text-xs font-black text-amber-700" onClick={() => setOffer((p) => ({ ...p, candidate_id: r.id }))}>Offer</button>
-              </div>
-            ) },
-          ]} rows={candidates.data || []} />
-          <div className="mt-4 grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
-            <Field label="Interview Candidate"><select className={input} value={interview.candidate_id} onChange={(e) => setInterview({ ...interview, candidate_id: e.target.value })}><option value="">Select</option>{(candidates.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-            <Field label="Date / Time"><input type="datetime-local" className={input} value={interview.interview_date} onChange={(e) => setInterview({ ...interview, interview_date: e.target.value })} /></Field>
-            <Field label="Interviewer"><select className={input} value={interview.interviewer_id} onChange={(e) => setInterview({ ...interview, interviewer_id: e.target.value })}><option value="">Select</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
-            <Field label="Round"><input className={input} value={interview.interview_round} onChange={(e) => setInterview({ ...interview, interview_round: e.target.value })} /></Field>
-            <button className={`${btn} bg-slate-900 text-white`} disabled={!interview.candidate_id} onClick={() => schedule.mutate()}>Schedule Interview</button>
-          </div>
-          <div className="mt-3 grid gap-3 rounded-lg bg-blue-50 p-3 sm:grid-cols-3">
-            <Field label="Offer Candidate"><select className={input} value={offer.candidate_id} onChange={(e) => setOffer({ ...offer, candidate_id: e.target.value })}><option value="">Select</option>{(candidates.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-            <Field label="Offered CTC"><input type="number" className={input} value={offer.offered_ctc} onChange={(e) => setOffer({ ...offer, offered_ctc: e.target.value })} /></Field>
-            <Field label="Joining Date"><input type="date" className={input} value={offer.joining_date} onChange={(e) => setOffer({ ...offer, joining_date: e.target.value })} /></Field>
-            <button className={`${btn} bg-blue-700 text-white`} disabled={!offer.candidate_id} onClick={() => createOffer.mutate()}>Record Offer</button>
-          </div>
-        </Panel>
-      </div>
     </div>
   );
 }
@@ -733,7 +652,7 @@ function AnalyticsTab() {
 
 export default function HRAdvancedPage() {
   const [searchParams] = useSearchParams();
-  const [active, setActive] = useState(searchParams.get('tab') || 'recruitment');
+  const [active, setActive] = useState(searchParams.get('tab') || 'training');
   const employees = useQuery({ queryKey: ['hr-advanced-employees'], queryFn: () => hrEmployeesAPI.list({ employment_status: 'active' }).then(unwrap) });
   const departments = useQuery({ queryKey: ['hr-advanced-departments'], queryFn: () => hrMastersAPI.listDepts().then(unwrap) });
   const designations = useQuery({ queryKey: ['hr-advanced-designations'], queryFn: () => hrMastersAPI.listDesigs().then(unwrap) });
@@ -751,7 +670,7 @@ export default function HRAdvancedPage() {
       <div className="border-b border-blue-900 bg-[#0A1F5C] px-6 py-5 text-white">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-200">HR & Admin</p>
         <h1 className="mt-1 text-2xl font-black">Advanced HR Controls</h1>
-        <p className="mt-1 text-sm font-semibold text-blue-100">Recruitment, roster, regularization, policies, HR letters, training, performance and compliance.</p>
+        <p className="mt-1 text-sm font-semibold text-blue-100">Roster, regularization, policies, HR letters, training, performance and compliance.</p>
       </div>
       <div className="px-6 py-5">
         <div className="flex flex-col md:flex-row gap-5 items-start">
@@ -776,7 +695,6 @@ export default function HRAdvancedPage() {
             ))}
           </nav>
           <div className="flex-1 min-w-0 w-full">
-            {active === 'recruitment' && <RecruitmentTab {...common} />}
             {active === 'roster' && <RosterTab {...common} />}
             {active === 'regularization' && <RegularizationTab {...common} />}
             {active === 'leave' && <LeaveAutomationTab {...common} />}

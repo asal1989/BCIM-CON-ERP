@@ -111,6 +111,19 @@ const upload = multer({
   await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS rating INT`);
   await query(`ALTER TABLE hr_interviews ADD COLUMN IF NOT EXISTS feedback TEXT`);
 
+  // job_id was NOT NULL — but a real "general application" (not tied to a
+  // specific opening) legitimately has no job to attach to. Relaxed so the
+  // public careers "apply" endpoint (public-careers.routes.js) can accept
+  // those instead of forcing every applicant onto some job. See the paired
+  // GET/detail queries below — switched from JOIN to LEFT JOIN so a NULL
+  // job_id applicant still shows up instead of silently disappearing.
+  await safe(`ALTER TABLE hr_applicants ALTER COLUMN job_id DROP NOT NULL`);
+  // Distinct from `status` (open/on_hold/closed/filled, which governs
+  // internal hiring state) — this governs whether the public careers site
+  // should list it at all. Defaults true so existing/new postings keep
+  // showing up publicly unless explicitly opted out.
+  await query(`ALTER TABLE hr_job_postings ADD COLUMN IF NOT EXISTS is_public_listed BOOLEAN DEFAULT true`);
+
   // ── Job Requisition — the approval workflow that precedes a job opening ──
   await safe(`CREATE TABLE IF NOT EXISTS hr_job_requisitions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -307,8 +320,8 @@ router.get('/dashboard', authorize(...HR_ALL), async (req, res) => {
         COUNT(*) FILTER (WHERE a.status='joined') AS joined,
         COUNT(*) FILTER (WHERE a.status='rejected') AS rejected,
         COUNT(*) FILTER (WHERE a.applied_on >= CURRENT_DATE - INTERVAL '30 days') AS applied_last_30d
-      FROM hr_applicants a JOIN hr_job_postings j ON j.id=a.job_id
-      WHERE j.company_id=$1
+      FROM hr_applicants a LEFT JOIN hr_job_postings j ON j.id=a.job_id
+      WHERE a.company_id=$1
     `, [cid]);
     const reqRes = await query(`
       SELECT COUNT(*) FILTER (WHERE status IN ('pending_hr_review','pending_management_approval')) AS pending_requisitions
@@ -316,8 +329,8 @@ router.get('/dashboard', authorize(...HR_ALL), async (req, res) => {
     `, [cid]);
     const interviewsRes = await query(`
       SELECT COUNT(*) AS upcoming_interviews
-      FROM hr_interviews i JOIN hr_applicants a ON a.id=i.applicant_id JOIN hr_job_postings j ON j.id=a.job_id
-      WHERE j.company_id=$1 AND i.scheduled_on >= NOW() AND i.result IS NULL
+      FROM hr_interviews i JOIN hr_applicants a ON a.id=i.applicant_id LEFT JOIN hr_job_postings j ON j.id=a.job_id
+      WHERE a.company_id=$1 AND i.scheduled_on >= NOW() AND i.result IS NULL
     `, [cid]);
     const j = jobsRes.rows[0], a = appsRes.rows[0], r = reqRes.rows[0], iv = interviewsRes.rows[0];
     res.json({ data: {
@@ -358,12 +371,13 @@ router.post('/jobs', authorize(...HR_ROLES), async (req, res) => {
   const { rows } = await query(
     `INSERT INTO hr_job_postings(company_id,title,department,designation,vacancies,
        experience_min,experience_max,qualification,job_type,work_location,salary_min,salary_max,
-       description,responsibilities,skills_required,status,closing_date,created_by)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+       description,responsibilities,skills_required,status,closing_date,created_by,is_public_listed)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
     [req.user.company_id,d.title,d.department,d.designation,d.vacancies||1,
      d.experience_min||0,d.experience_max||null,d.qualification,d.job_type||'full_time',
      d.work_location,d.salary_min||null,d.salary_max||null,
-     d.description,d.responsibilities,d.skills_required,d.status||'open',d.closing_date||null,req.user.id]
+     d.description,d.responsibilities,d.skills_required,d.status||'open',d.closing_date||null,req.user.id,
+     d.is_public_listed !== false]
   );
   res.json({ data: rows[0] });
 });
@@ -374,12 +388,12 @@ router.put('/jobs/:id', authorize(...HR_ROLES), async (req, res) => {
     `UPDATE hr_job_postings SET title=$1,department=$2,designation=$3,vacancies=$4,
        experience_min=$5,experience_max=$6,qualification=$7,job_type=$8,work_location=$9,
        salary_min=$10,salary_max=$11,description=$12,responsibilities=$13,skills_required=$14,
-       status=$15,closing_date=$16
-     WHERE id=$17 AND company_id=$18 RETURNING *`,
+       status=$15,closing_date=$16,is_public_listed=$17
+     WHERE id=$18 AND company_id=$19 RETURNING *`,
     [d.title,d.department,d.designation,d.vacancies||1,
      d.experience_min||0,d.experience_max||null,d.qualification,d.job_type,d.work_location,
      d.salary_min||null,d.salary_max||null,d.description,d.responsibilities,d.skills_required,
-     d.status,d.closing_date||null,req.params.id,req.user.company_id]
+     d.status,d.closing_date||null,d.is_public_listed !== false,req.params.id,req.user.company_id]
   );
   res.json({ data: rows[0] });
 });
@@ -393,7 +407,7 @@ router.get('/applicants', authorize(...HR_ALL), async (req, res) => {
   if (search) { conds.push(`(a.name ILIKE $${i} OR a.email ILIKE $${i} OR a.phone ILIKE $${i})`); params.push(`%${search}%`); i++; }
   const { rows } = await query(
     `SELECT a.*, j.title as job_title, j.department
-     FROM hr_applicants a JOIN hr_job_postings j ON j.id=a.job_id
+     FROM hr_applicants a LEFT JOIN hr_job_postings j ON j.id=a.job_id
      WHERE ${conds.join(' AND ')} ORDER BY a.applied_on DESC`,
     params
   );
@@ -402,7 +416,7 @@ router.get('/applicants', authorize(...HR_ALL), async (req, res) => {
 
 router.get('/applicants/:id', authorize(...HR_ALL), async (req, res) => {
   const { rows } = await query(
-    `SELECT a.*, j.title as job_title FROM hr_applicants a JOIN hr_job_postings j ON j.id=a.job_id
+    `SELECT a.*, j.title as job_title FROM hr_applicants a LEFT JOIN hr_job_postings j ON j.id=a.job_id
      WHERE a.id=$1 AND a.company_id=$2`,
     [req.params.id, req.user.company_id]
   );

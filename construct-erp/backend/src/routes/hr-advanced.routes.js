@@ -1235,7 +1235,10 @@ router.get('/analytics/summary', async (req, res) => {
       projectId !== null
         ? query(empFilter, [cid, projectId])
         : query(empFilter, [cid]),
-      safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
+      // hr_job_openings is the superseded legacy recruitment table (kept as
+      // an inert historical record, no longer fed by anything) — read the
+      // real, live one instead so this tile doesn't silently freeze.
+      safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_postings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
       safe(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [cid], { pending: 0 }),
       safe(`
         SELECT
