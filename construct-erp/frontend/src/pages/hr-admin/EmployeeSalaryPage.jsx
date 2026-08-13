@@ -62,13 +62,14 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
     mess_deduction: editSalary.mess_deduction || '',
     accommodation_deduction: editSalary.accommodation_deduction || '',
     basic_reversal: editSalary.basic_reversal || '',
+    vda: editSalary.vda || '',
     pf_applicable: editSalary.pf_applicable ?? true,
     esi_applicable: editSalary.esi_applicable ?? false,
     pt_applicable: editSalary.pt_applicable ?? true,
     effective_from: (editSalary.effective_from || today()).slice(0, 10),
   } : {
     user_id:'', structure_id:structures[0]?.id||'',
-    ctc_monthly:'', mess_deduction:'', accommodation_deduction:'', basic_reversal:'',
+    ctc_monthly:'', mess_deduction:'', accommodation_deduction:'', basic_reversal:'', vda:'',
     pf_applicable:true, esi_applicable:false, pt_applicable:true,
     effective_from:today(),
   });
@@ -106,6 +107,9 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
       const res = await calculateBreakup({ ctc_monthly: Number(form.ctc_monthly) });
       setBreakup(res.data?.data || null);
       setRecalculated(true);
+      // New entries have no real saved DA to protect — seed it from the CTC
+      // formula estimate. Existing edits keep whatever the admin has typed.
+      if (!isEdit) update('vda', res.data?.data?.vda ?? 0);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to calculate breakup');
     }
@@ -123,7 +127,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
       gross_monthly:breakup.gross_monthly, pf_applicable:form.pf_applicable,
       esi_applicable:form.esi_applicable, pt_applicable:form.pt_applicable,
       effective_from:form.effective_from,
-      vda:breakup.vda, lta:breakup.lta,
+      vda:Number(form.vda||0), lta:breakup.lta,
       education_allowance:breakup.education_allowance, washing_allowance:breakup.washing_allowance,
       mobile_allowance:breakup.mobile_allowance, project_allowance:breakup.project_allowance,
       accommodation_allowance:breakup.accommodation_allowance, food_allowance:breakup.food_allowance,
@@ -223,6 +227,12 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
                     <div className="text-sm font-black text-gray-900">₹{fmt(v)}</div>
                   </div>
                 ))}
+                <div className="bg-white px-3 py-2">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">DA</div>
+                  <input type="number" value={form.vda} onChange={e=>update('vda',e.target.value)}
+                    className="w-full text-sm font-black text-gray-900 border border-gray-200 rounded-lg px-2 py-1 mt-0.5 focus:outline-none focus:border-blue-400"
+                    placeholder="0"/>
+                </div>
                 <div className="bg-white px-3 py-2">
                   <div className="text-[10px] font-bold text-gray-400 uppercase">Basic Reversal</div>
                   <input type="number" value={form.basic_reversal} onChange={e=>update('basic_reversal',e.target.value)}
