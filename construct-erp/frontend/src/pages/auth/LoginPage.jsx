@@ -15,7 +15,7 @@ import { authAPI, projectAPI } from '../../api/client';
 import { CursorSpotlight } from '../../components/ui/cursor-spotlight';
 
 const schema = z.object({
-  email:    z.string().email('Enter a valid email address'),
+  email:    z.string().min(1, 'Enter your email or staff ID'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -886,18 +886,18 @@ export default function LoginPage() {
               {loginStep === 'credentials' ? (
               <form onSubmit={handleSubmit(onSubmit)} noValidate>
 
-                {/* Email */}
+                {/* Email or Staff ID */}
                 <div style={{ marginBottom:12 }}>
-                  <label className="lp-label">Email Address</label>
+                  <label className="lp-label">Email or Staff ID</label>
                   <div className="lp-input-wrap">
                     <div className="lp-icon-box">
                       <Mail style={{ width:13,height:13,color:accent }} />
                     </div>
                     <input
                       {...register('email')}
-                      type="email"
-                      placeholder="yourname@bcimengineering.in"
-                      autoComplete="email"
+                      type="text"
+                      placeholder="yourname@bcimengineering.in or staff ID"
+                      autoComplete="username"
                       autoFocus
                       className="lp-input"
                     />

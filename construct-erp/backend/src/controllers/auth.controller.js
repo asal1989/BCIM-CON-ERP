@@ -145,7 +145,12 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const normalizedEmail = (email || '').trim().toLowerCase();
+    // The login field accepts either an email address or a staff ID
+    // (employee_code) — the ESS login page already labels this field
+    // "Employee No / Email", but the backend previously only ever matched
+    // on email, silently rejecting valid staff-ID logins.
+    const identifier = (email || '').trim();
+    const normalizedEmail = identifier.toLowerCase();
 
     const retryAfterSec = checkLoginThrottle(normalizedEmail);
     if (retryAfterSec) {
@@ -164,7 +169,7 @@ const login = async (req, res) => {
               ), ARRAY[]::text[]) AS project_ids,
               c.name as company_name, c.gstin as company_gstin
        FROM users u JOIN companies c ON u.company_id = c.id
-       WHERE LOWER(u.email) = $1`,
+       WHERE LOWER(u.email) = $1 OR LOWER(u.employee_code) = $1`,
       [normalizedEmail]
     );
 
@@ -172,7 +177,7 @@ const login = async (req, res) => {
     if (!user) {
       recordFailedLogin(normalizedEmail);
       logLoginAttempt({ action: 'login_failed', email: normalizedEmail, ip: req.ip });
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email/staff ID or password.' });
     }
     if (!user.is_active) {
       logLoginAttempt({ action: 'login_failed', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
@@ -184,7 +189,7 @@ const login = async (req, res) => {
     if (!validPassword) {
       recordFailedLogin(normalizedEmail);
       logLoginAttempt({ action: 'login_failed', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email/staff ID or password.' });
     }
     clearLoginThrottle(normalizedEmail);
     logLoginAttempt({ action: 'login_success', email: normalizedEmail, userId: user.id, companyId: user.company_id, ip: req.ip });
