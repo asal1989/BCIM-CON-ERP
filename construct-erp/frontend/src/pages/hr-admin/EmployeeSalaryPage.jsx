@@ -144,9 +144,9 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-0">
       <motion.div initial={{opacity:0,scale:0.97}} animate={{opacity:1,scale:1}} transition={{duration:0.2}}
-        className="w-full h-full sm:h-auto sm:max-w-5xl bg-white sm:rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+        className="w-full h-full bg-white shadow-2xl overflow-hidden flex flex-col">
 
         {/* Modal Header */}
         <div className="relative px-6 py-5 flex items-center justify-between flex-shrink-0"
