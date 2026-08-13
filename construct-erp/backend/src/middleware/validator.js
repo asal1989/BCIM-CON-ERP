@@ -21,7 +21,9 @@ const registerValidation = [
 ];
 
 const loginValidation = [
-  body('email').isEmail().withMessage('Please provide a valid email address'),
+  // Login accepts either an email address or a staff ID (employee_code),
+  // so this can't require .isEmail() — it only rejects a blank identifier.
+  body('email').trim().notEmpty().withMessage('Please provide your email or staff ID'),
   body('password').notEmpty().withMessage('Password is required'),
   validate
 ];
