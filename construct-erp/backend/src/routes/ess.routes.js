@@ -372,10 +372,10 @@ router.post('/attendance/corrections', async (req, res) => {
     // Notify HR about new correction request
     const empName = req.user.name || req.user.email;
     notifyHR(
-      `Attendance Correction Request: ${empName} — ${fmtDate(attendance_date)}`,
+      `Attendance Regularization Request: ${empName} — ${fmtDate(attendance_date)}`,
       mailWrap(
-        mailHeader('Attendance Correction Request'),
-        `<p style="margin-top:0"><strong>${empName}</strong> has submitted an attendance correction request.</p>
+        mailHeader('Attendance Regularization Request'),
+        `<p style="margin-top:0"><strong>${empName}</strong> has submitted an attendance regularization request.</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
           ${mailRow('Employee', empName)}
           ${mailRow('Date', fmtDate(attendance_date))}
@@ -427,10 +427,10 @@ router.post('/attendance/corrections/bulk', async (req, res) => {
     // One summary email to HR for the whole batch.
     const empName = req.user.name || req.user.email;
     notifyHR(
-      `Attendance Correction Request (${created.length} dates): ${empName}`,
+      `Attendance Regularization Request (${created.length} dates): ${empName}`,
       mailWrap(
-        mailHeader('Attendance Correction Request'),
-        `<p style="margin-top:0"><strong>${empName}</strong> has submitted attendance correction requests for <strong>${created.length}</strong> date(s).</p>
+        mailHeader('Attendance Regularization Request'),
+        `<p style="margin-top:0"><strong>${empName}</strong> has submitted attendance regularization requests for <strong>${created.length}</strong> date(s).</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
           ${mailRow('Employee', empName)}
           ${mailRow('Dates', uniqueDates.map(fmtDate).join(', '))}
@@ -935,14 +935,14 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
     await client.query('COMMIT');
     res.json({ data: correction });
 
-    // Notify employee of correction decision
+    // Notify employee of regularization decision
     const corrActionWord = action === 'approve' ? 'Approved' : 'Rejected';
     const corrAccent = action === 'approve' ? '#16a34a' : '#dc2626';
     notifyEmployee(correction.user_id, correction.company_id,
-      `Your attendance correction for ${fmtDate(correction.attendance_date)} has been ${corrActionWord}`,
+      `Your attendance regularization for ${fmtDate(correction.attendance_date)} has been ${corrActionWord}`,
       mailWrap(
-        `<div style="background:${corrAccent};padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Attendance Correction ${corrActionWord}</h2></div>`,
-        `<p style="margin-top:0">Your attendance correction request has been <strong>${corrActionWord.toLowerCase()}</strong>.</p>
+        `<div style="background:${corrAccent};padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Attendance Regularization ${corrActionWord}</h2></div>`,
+        `<p style="margin-top:0">Your attendance regularization request has been <strong>${corrActionWord.toLowerCase()}</strong>.</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
           ${mailRow('Date', fmtDate(correction.attendance_date))}
           ${mailRow('Requested Status', correction.requested_status || '—')}

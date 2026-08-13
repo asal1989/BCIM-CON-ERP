@@ -1401,18 +1401,18 @@ function AttendanceTab({ leaveTypes }) {
   const refresh = () => ['ess-attendance','ess-corrections','ess-summary','ess-attendance-dash'].forEach(k => qc.invalidateQueries({ queryKey: [k] }));
   const createCorrection = useMutation({
     mutationFn: essAPI.createCorrection,
-    onSuccess: () => { toast.success('Correction requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
-    onError:   (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
+    onSuccess: () => { toast.success('Regularization requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
+    onError:   (e) => toast.error(e?.response?.data?.error || 'Failed to submit regularization request'),
   });
   const createCorrectionBulk = useMutation({
     mutationFn: essAPI.createCorrectionBulk,
     onSuccess: (r) => {
-      toast.success(`Correction requested for ${r.data?.count ?? bulkDates.length} date(s)`);
+      toast.success(`Regularization requested for ${r.data?.count ?? bulkDates.length} date(s)`);
       setCorrection({ ...correction, reason: '' });
       setBulkDates([]);
       refresh();
     },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit bulk correction request'),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit bulk regularization request'),
   });
   const addBulkDate = () => {
     if (bulkDateInput && !bulkDates.includes(bulkDateInput)) {
@@ -1679,17 +1679,17 @@ function AttendanceTab({ leaveTypes }) {
             )}
           </div>
 
-          {/* Correction Form */}
+          {/* Regularization Form */}
           <div style={{ ...Cd(), padding:'16px 18px' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
-              <div style={{ fontSize:11,fontWeight:700,color:T.t4,textTransform:'uppercase',letterSpacing:'.08em' }}>Attendance Correction</div>
+              <div style={{ fontSize:11,fontWeight:700,color:T.t4,textTransform:'uppercase',letterSpacing:'.08em' }}>Attendance Regularization</div>
               <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:10.5, color:T.t3, cursor:'pointer' }}>
                 <input type="checkbox" checked={bulkMode} onChange={e => { setBulkMode(e.target.checked); setBulkDates([]); }} />
                 Multiple dates
               </label>
             </div>
             <p style={{ fontSize:11.5,color:T.t3,marginBottom:12 }}>
-              {bulkMode ? 'Same status/time/reason applied to every date you add below.' : 'Missed punch or wrong status? Raise a correction.'}
+              {bulkMode ? 'Same status/time/reason applied to every date you add below.' : 'Missed punch or wrong status? Raise a regularization request.'}
             </p>
             <div style={{ display:'flex',flexDirection:'column',gap:9 }}>
               {bulkMode ? (
@@ -1750,7 +1750,7 @@ function AttendanceTab({ leaveTypes }) {
               </div>
               <div>
                 <label style={{ fontSize:10.5,fontWeight:700,color:T.t4,display:'block',marginBottom:4 }}>Reason</label>
-                <input value={correction.reason} placeholder="Brief reason for correction"
+                <input value={correction.reason} placeholder="Brief reason for regularization"
                   onChange={e=>setCorrection({...correction,reason:e.target.value})}
                   style={{ width:'100%',borderRadius:10,border:`1px solid ${T.bdr}`,padding:'8px 12px',fontSize:13,color:T.t1,outline:'none',background:'#F0FDF9',boxSizing:'border-box' }}/>
               </div>
@@ -1780,7 +1780,7 @@ function AttendanceTab({ leaveTypes }) {
                       background:ready?'linear-gradient(135deg,#059669,#0D9488)':'rgba(0,0,0,.06)',
                       color:ready?'#fff':'#94A3B8',fontSize:13,fontWeight:700,
                       boxShadow:ready?'0 4px 14px rgba(5,150,105,.35)':undefined,transition:'.15s' }}>
-                    {pending ? 'Submitting…' : bulkMode ? `Submit Correction for ${bulkDates.length} Date${bulkDates.length===1?'':'s'}` : 'Submit Correction Request'}
+                    {pending ? 'Submitting…' : bulkMode ? `Submit Regularization for ${bulkDates.length} Date${bulkDates.length===1?'':'s'}` : 'Submit Regularization Request'}
                   </button>
                 );
               })()}
@@ -1790,12 +1790,12 @@ function AttendanceTab({ leaveTypes }) {
         </div>
       </div>
 
-      {/* ── CORRECTION HISTORY ── */}
+      {/* ── REGULARIZATION HISTORY ── */}
       <div style={{ padding:'0 24px 16px' }}>
         <div style={{ ...Cd(), padding:'16px 20px' }}>
-          <div style={{ fontSize:13,fontWeight:700,color:T.t1,marginBottom:14 }}>My Correction Requests</div>
+          <div style={{ fontSize:13,fontWeight:700,color:T.t1,marginBottom:14 }}>My Regularization Requests</div>
           {!(corrections.data||[]).length ? (
-            <div style={{ textAlign:'center',padding:'16px 0',color:T.t4,fontSize:12 }}>No correction requests yet</div>
+            <div style={{ textAlign:'center',padding:'16px 0',color:T.t4,fontSize:12 }}>No regularization requests yet</div>
           ) : (
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%',borderCollapse:'collapse',fontSize:12.5 }}>
@@ -2702,7 +2702,7 @@ function ManagerDeskTab() {
     },
     onSuccess: ({ total, failed }) => {
       if (failed) toast.error(`${total - failed} approved, ${failed} failed`);
-      else toast.success(`${total} correction${total === 1 ? '' : 's'} approved`);
+      else toast.success(`${total} regularization${total === 1 ? '' : 's'} approved`);
       setSelectedCorr({});
       refresh();
     },
@@ -2768,10 +2768,10 @@ function ManagerDeskTab() {
       icon={CheckCircle2}
       label="Manager Desk"
       title="Team Approvals"
-      subtitle="Pending leave requests, attendance corrections and performance evaluations from your team"
+      subtitle="Pending leave requests, attendance regularizations and performance evaluations from your team"
       stats={[
         { label: 'Pending Leave', value: pendingLeaveCnt, color: pendingLeaveCnt > 0 ? '#DC2626' : '#059669' },
-        { label: 'Pending Corrections', value: pendingCorrCnt, color: pendingCorrCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Pending Regularizations', value: pendingCorrCnt, color: pendingCorrCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Pending Evaluations', value: pendingEvalCnt, color: pendingEvalCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Pending Training', value: pendingTrainingCnt, color: pendingTrainingCnt > 0 ? '#DC2626' : '#059669' },
       ]}
@@ -2811,8 +2811,8 @@ function ManagerDeskTab() {
       <div style={{ ...GCA, padding:20 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:4 }}>
           <div>
-            <span style={STA}>Attendance Corrections</span>
-            <p style={{ fontSize:11.5, color:'#64748B' }}>Pending attendance corrections from your team</p>
+            <span style={STA}>Attendance Regularizations</span>
+            <p style={{ fontSize:11.5, color:'#64748B' }}>Pending attendance regularizations from your team</p>
           </div>
           {Object.values(selectedCorr).some(Boolean) && (
             <button
