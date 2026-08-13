@@ -493,7 +493,7 @@ export default function LiabilityRegisterPage() {
       if (logo) doc.addImage(logo, 'PNG', L, 9, 26, 13, undefined, 'FAST');
       doc.setFont('times', 'bold');
       doc.setFontSize(6.5);
-      doc.setTextColor(...NAVY_RGB);
+      doc.setTextColor(...INK_RGB);
       doc.text('BCIM ENGINEERING PVT. LTD.', L, 26);
 
       doc.setFont('times', 'bold');
@@ -513,7 +513,7 @@ export default function LiabilityRegisterPage() {
       doc.setTextColor(...MUTED_RGB);
       doc.text('# 11, B Wing, Divyasree Chambers, "O" Shaughnessy Road, Bangalore 560 025', R, 13, { align: 'right' });
       doc.setFont('times', 'bold');
-      doc.setTextColor(...NAVY_RGB);
+      doc.setTextColor(...INK_RGB);
       doc.text(`Project: ${pName}`, R, 17, { align: 'right', maxWidth: 90 });
 
       doc.setFillColor(...NAVY_RGB);
@@ -541,7 +541,7 @@ export default function LiabilityRegisterPage() {
       doc.text(label, x + 4, cardY + 4.2);
       doc.setFont('times', 'bold');
       doc.setFontSize(8.5);
-      doc.setTextColor(...NAVY_RGB);
+      doc.setTextColor(...INK_RGB);
       doc.text(String(value || '—'), x + 4, cardY + 8.6, { maxWidth: cardW - 8 });
     });
 
@@ -587,7 +587,7 @@ export default function LiabilityRegisterPage() {
         0: { cellWidth: 20 }, 1: { cellWidth: 75 }, 2: { cellWidth: 22 },
         3: { cellWidth: 30 }, 4: { cellWidth: 38 },
         5: { cellWidth: 28, halign: 'right' }, 6: { cellWidth: 28, halign: 'right' },
-        7: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: NAVY_RGB },
+        7: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: INK_RGB },
       },
       // Continuation banner on page 2+ — kept synchronous (no logo re-fetch)
       // so it can never race the table's own rendering on that page.
@@ -595,7 +595,7 @@ export default function LiabilityRegisterPage() {
         if (data.pageNumber === 1) return;
         doc.setFont('times', 'bold');
         doc.setFontSize(9);
-        doc.setTextColor(...NAVY_RGB);
+        doc.setTextColor(...INK_RGB);
         doc.text(`VENDOR LIABILITY LEDGER — ${selectedVendor} (contd.)`, L, 12);
         doc.setFillColor(...NAVY_RGB);
         doc.rect(L, 15, W, 0.5, 'F');
@@ -618,7 +618,7 @@ export default function LiabilityRegisterPage() {
       doc.rect(x + 0.2, y + 0.2, bw - 0.4, 6, 'F');
       doc.setFont('times', 'bold');
       doc.setFontSize(7);
-      doc.setTextColor(...NAVY_RGB);
+      doc.setTextColor(...INK_RGB);
       doc.text(b.title, x + 3, y + 4.2, { maxWidth: bw - 6 });
 
       doc.setFont('times', 'normal');
