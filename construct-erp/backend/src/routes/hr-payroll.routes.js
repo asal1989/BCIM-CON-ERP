@@ -486,15 +486,21 @@ router.post('/run', async (req, res) => {
       const edli          = pro(emp.edli);
       const epfAdmin      = pro(emp.epf_admin);
       // Gross = the configured monthly gross (gross_monthly), pro-rated for
-      // attendance. gross_monthly already includes ALL BCIM earning components
-      // (project/accommodation/food/transport/LTA/incentive/etc). Summing only
-      // basic+hra+medical+special dropped those allowances and understated gross
-      // (e.g. ₹27,613 instead of the configured ₹53,886). Fall back to the
-      // component sum only when gross_monthly is unset on legacy rows.
+      // attendance, PLUS incentive. gross_monthly includes every other BCIM
+      // earning component (project/accommodation/food/transport/LTA/etc) but
+      // NOT incentive — the salary edit screen's own net-pay formula adds
+      // incentive on top of gross_monthly, confirming it's additional, not
+      // included. Without adding it here, `itemised` below (which does
+      // include incentive) exceeded `gross`, so the Math.max(0, ...) clamp
+      // on `other` silently absorbed the whole incentive amount out of the
+      // payslip. Summing only basic+hra+medical+special dropped the other
+      // allowances entirely and understated gross (e.g. ₹27,613 instead of
+      // the configured ₹53,886) — component sum is only a legacy fallback
+      // for rows with no gross_monthly set.
       const componentSum = basic + hra + conv + med + spec
         + Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
       const grossMonthly = Math.round(parseFloat(emp.gross_monthly || 0) * lopFactor);
-      const gross = grossMonthly > 0 ? grossMonthly : componentSum;
+      const gross = (grossMonthly > 0 ? grossMonthly : componentSum) + incentive;
       // Unprorated entitlement, kept for reference so a reviewer can see at a
       // glance how much LOP cost the employee without recomputing it.
       const fullGross = Math.round(parseFloat(emp.gross_monthly || 0));
