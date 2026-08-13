@@ -645,6 +645,189 @@ export default function LiabilityRegisterPage() {
     doc.save(`Liability_${safeFile(selectedVendor)}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
+  // Project-wide "who to pay" statement — same letterhead/style as the
+  // per-vendor ledger PDF, but summarising every vendor under the current
+  // project filter instead of one vendor's transaction history. Built from
+  // visibleVendors, which is already the exact vendor-summary rows for the
+  // active project/date/source filters — no separate API call needed.
+  const exportProjectStatement = async () => {
+    if (!visibleVendors.length) return;
+    const pName = projectId ? (projects.find(p => p.id === projectId)?.name ?? 'All Projects') : 'All Projects';
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    doc.setFont('times', 'normal');
+
+    const NAVY_RGB   = [27, 58, 107];
+    const BORDER_RGB = [217, 226, 239];
+    const CARD_RGB   = [247, 250, 253];
+    const MUTED_RGB  = [107, 124, 147];
+    const INK_RGB    = [15, 23, 42];
+    const AMBER_RGB  = [180, 83, 9];
+    const RED_RGB    = [225, 29, 72];
+
+    const L = 14, R = 196, W = R - L;
+
+    const payableRows = visibleVendors
+      .filter(v => parseFloat(v.payable_balance || 0) > 0.5)
+      .sort((a, b) => parseFloat(b.payable_balance) - parseFloat(a.payable_balance));
+    const advanceRows = visibleVendors
+      .filter(v => parseFloat(v.total_advance_open || 0) > 0.5)
+      .sort((a, b) => parseFloat(b.total_advance_open) - parseFloat(a.total_advance_open));
+
+    const drawLetterhead = async () => {
+      const logo = await loadBcimLogoBase64();
+      if (logo) doc.addImage(logo, 'PNG', L, 9, 22, 11, undefined, 'FAST');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...INK_RGB);
+      doc.text('BCIM ENGINEERING PVT. LTD.', L, 24);
+
+      doc.setFont('times', 'bold');
+      doc.setFontSize(14);
+      doc.text('OUTSTANDING PAYABLES REPORT', 105, 16, { align: 'center' });
+      doc.setFillColor(...NAVY_RGB);
+      doc.rect(65, 18.5, 80, 0.9, 'F');
+      doc.setFont('times', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text('Vendor-wise Liability Summary — Prepared for Payment Processing', 105, 22.5, { align: 'center' });
+
+      doc.setFillColor(...NAVY_RGB);
+      doc.rect(L, 27, W, 0.6, 'F');
+      return 30.5;
+    };
+
+    let y = await drawLetterhead();
+
+    const cardH = 10, gap = 3, cardW = (W - gap * 2) / 3;
+    [
+      ['PROJECT', pName],
+      ['REPORT DATE', fmt(new Date())],
+      ['STATUS', 'For Accounts Review'],
+    ].forEach(([label, value], i) => {
+      const x = L + i * (cardW + gap);
+      doc.setFillColor(...CARD_RGB);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, y, cardW, cardH, 1.2, 1.2, 'FD');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(5.5);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text(label, x + 3, y + 4);
+      doc.setFont('times', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...INK_RGB);
+      doc.text(String(value || '—'), x + 3, y + 8, { maxWidth: cardW - 6 });
+    });
+    y += cardH + 5;
+
+    const totalInvoiced = visibleVendors.reduce((s, v) => s + parseFloat(v.total_invoiced || 0), 0);
+    const totalPaidAll  = visibleVendors.reduce((s, v) => s + parseFloat(v.total_paid || 0), 0);
+    const totalTdsAll   = visibleVendors.reduce((s, v) => s + parseFloat(v.total_tds || 0), 0);
+    const totalPayable  = payableRows.reduce((s, v) => s + parseFloat(v.payable_balance || 0), 0);
+    const totalAdvOpen  = advanceRows.reduce((s, v) => s + parseFloat(v.total_advance_open || 0), 0);
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: L, right: 210 - R },
+      head: [['Total Invoiced', 'Total Paid', 'TDS Deducted', 'Outstanding Payable']],
+      body: [[`Rs. ${inr(totalInvoiced, 2)}`, `Rs. ${inr(totalPaidAll, 2)}`, `Rs. ${inr(totalTdsAll, 2)}`, `Rs. ${inr(totalPayable, 2)}`]],
+      theme: 'grid',
+      styles: { font: 'times', fontSize: 8, cellPadding: 2.5, lineColor: BORDER_RGB, lineWidth: 0.15, halign: 'center', textColor: INK_RGB, fontStyle: 'bold' },
+      headStyles: { font: 'times', fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7 },
+      columnStyles: { 3: { textColor: RED_RGB } },
+    });
+    y = doc.lastAutoTable.finalY + 6;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...INK_RGB);
+    doc.text(`Vendors with Outstanding Balance (${payableRows.length})`, L, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: L, right: 210 - R },
+      head: [['Sl', 'Vendor Name', 'Bills', 'Invoiced', 'Paid', 'Outstanding', 'Last Activity']],
+      body: payableRows.map((v, i) => [
+        i + 1, v.vendor_name, v.bill_count || 0,
+        `Rs. ${inr(v.total_invoiced, 2)}`, `Rs. ${inr(v.total_paid, 2)}`,
+        `Rs. ${inr(v.payable_balance, 2)}`,
+        v.last_activity_date ? fmt(v.last_activity_date) : '—',
+      ]),
+      foot: [[
+        { content: 'TOTAL OUTSTANDING', colSpan: 5, styles: { halign: 'right' } },
+        `Rs. ${inr(totalPayable, 2)}`, '',
+      ]],
+      theme: 'striped',
+      styles: { font: 'times', fontSize: 7.5, cellPadding: 1.8, lineColor: BORDER_RGB, lineWidth: 0.1, textColor: INK_RGB },
+      headStyles: { font: 'times', fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      footStyles: { font: 'times', fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      alternateRowStyles: { fillColor: [245, 248, 252] },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 8 }, 2: { halign: 'center', cellWidth: 12 },
+        3: { halign: 'right' }, 4: { halign: 'right' },
+        5: { halign: 'right', fontStyle: 'bold', textColor: RED_RGB },
+        6: { halign: 'center', cellWidth: 22 },
+      },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    if (advanceRows.length) {
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setFont('times', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...INK_RGB);
+      doc.text(`Advances Given & Not Yet Adjusted (${advanceRows.length}) — for information, not part of the payable total above`, L, y, { maxWidth: W });
+      y += 3;
+      autoTable(doc, {
+        startY: y,
+        margin: { left: L, right: 210 - R },
+        head: [['Sl', 'Vendor Name', 'Advance Given', 'Open Balance']],
+        body: advanceRows.map((v, i) => [i + 1, v.vendor_name, `Rs. ${inr(v.total_advance_given, 2)}`, `Rs. ${inr(v.total_advance_open, 2)}`]),
+        foot: [[{ content: 'TOTAL ADVANCE OPEN', colSpan: 3, styles: { halign: 'right' } }, `Rs. ${inr(totalAdvOpen, 2)}`]],
+        theme: 'striped',
+        styles: { font: 'times', fontSize: 7.5, cellPadding: 1.8, lineColor: [245, 221, 166], lineWidth: 0.1, textColor: INK_RGB },
+        headStyles: { font: 'times', fillColor: AMBER_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+        footStyles: { font: 'times', fillColor: AMBER_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [254, 246, 231] },
+        columnStyles: { 0: { halign: 'center', cellWidth: 8 }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    // ── Sign-off ──
+    const bw = (W - 6) / 2, bh = 22;
+    if (y + bh > 275) { doc.addPage(); y = 20; }
+    [
+      { title: 'Prepared By (QS / Projects)' },
+      { title: 'Verified & Approved By (Accounts)' },
+    ].forEach((b, idx) => {
+      const x = L + idx * (bw + 6);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, y, bw, bh, 1.5, 1.5, 'D');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...INK_RGB);
+      doc.text(b.title, x + 3, y + 5);
+      doc.setFont('times', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text('Name :', x + 3, y + 12);
+      doc.line(x + 15, y + 12.5, x + bw - 3, y + 12.5);
+      doc.text('Signature / Date :', x + 3, y + 18);
+      doc.line(x + 30, y + 18.5, x + bw - 3, y + 18.5);
+    });
+    y += bh + 5;
+
+    doc.setFont('times', 'italic');
+    doc.setFontSize(6);
+    doc.setTextColor(...MUTED_RGB);
+    doc.text(`Generated on ${fmt(new Date())} · System-generated report from Bill Tracker — Liability Register`, 105, y, { align: 'center' });
+
+    doc.save(`Outstanding_Payables_${safeFile(pName)}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   // ─── RENDER ─────────────────────────────────────────────────────────────────
   const S = {
     root: {
@@ -748,6 +931,21 @@ export default function LiabilityRegisterPage() {
             }}
           >
             <BellRing size={13} /> {automationMut.isPending ? 'Running...' : 'Run Alert'}
+          </button>
+
+          <button
+            onClick={exportProjectStatement}
+            disabled={!visibleVendors.length}
+            title="Download an outstanding-payables statement for the current project — every vendor, ready for accounts to process payment"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px',
+              border: `1px solid ${C.blueBorder}`, borderRadius: 7, background: C.blueBg,
+              color: C.blue, fontSize: 12, fontWeight: 700,
+              cursor: visibleVendors.length ? 'pointer' : 'not-allowed',
+              opacity: visibleVendors.length ? 1 : 0.5,
+            }}
+          >
+            <FileText size={13} /> Statement
           </button>
 
           {selectedVendor && (
