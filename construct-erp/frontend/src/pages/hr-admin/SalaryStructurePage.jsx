@@ -20,6 +20,7 @@ const TYPE_CFG = {
 // BCIM site-staff salary structure (calibrated to GreytHR extract)
 const DEFAULT_COMPONENTS = [
   { component_name:'Basic',                    component_type:'earning',   calc_type:'fixed',        amount:0,   pct:0,     is_taxable:true  },
+  { component_name:'DA',                       component_type:'earning',   calc_type:'pct_of_basic', amount:0,   pct:0,     is_taxable:true  },
   { component_name:'HRA',                      component_type:'earning',   calc_type:'pct_of_basic', amount:0,   pct:20,    is_taxable:false },
   { component_name:'Project Office Spl Allow', component_type:'earning',   calc_type:'pct_of_basic', amount:0,   pct:20,    is_taxable:true  },
   { component_name:'Accommodation Allowance',  component_type:'earning',   calc_type:'pct_of_basic', amount:0,   pct:30,    is_taxable:false },
