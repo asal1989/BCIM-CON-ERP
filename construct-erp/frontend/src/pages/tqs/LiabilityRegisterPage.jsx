@@ -424,12 +424,34 @@ export default function LiabilityRegisterPage() {
   });
 
   // ── Export ──
+  // The page-level project filter is often left on "All Projects" even when
+  // the selected vendor's own ledger only ever touched one project — reading
+  // pName off the filter alone showed "All Projects" on a single-project
+  // vendor. Prefer the actual project(s) present in the ledger rows.
+  const resolveLedgerProjectName = () => {
+    if (projectId) return projects.find(p => p.id === projectId)?.name ?? 'All Projects';
+    const names = [...new Set(ledger.map(r => r.project_name).filter(Boolean))];
+    if (names.length === 1) return names[0];
+    if (names.length > 1) return 'Multiple Projects';
+    return 'All Projects';
+  };
+
+  // Same problem as the project name: with no date filter applied, this
+  // showed the literal placeholder text "Start to Today" instead of the
+  // actual span of the ledger being exported.
+  const resolveLedgerPeriod = () => {
+    if (fromDate || toDate) return `${fromDate ? fmt(fromDate) : 'Start'} to ${toDate ? fmt(toDate) : 'Today'}`;
+    const dates = ledger.map(r => r.txn_date).filter(Boolean).sort();
+    if (!dates.length) return 'Start to Today';
+    return `${fmt(dates[0])} to ${fmt(dates[dates.length - 1])}`;
+  };
+
   const exportExcel = () => {
     if (!selectedVendor || !ledger.length) return;
-    const pName = projectId ? (projects.find(p => p.id === projectId)?.name ?? 'All Projects') : 'All Projects';
+    const pName = resolveLedgerProjectName();
     const ws = XLSX.utils.aoa_to_sheet([
       ['Vendor Liability Ledger'], ['Vendor', selectedVendor], ['Project', pName],
-      ['Period', `${fromDate || 'Start'} to ${toDate || 'Today'}`], [],
+      ['Period', resolveLedgerPeriod()], [],
       ['Total Invoiced', +selRow.total_invoiced || 0], ['Total Paid', +selRow.total_paid || 0],
       ['TDS', +selRow.total_tds || 0], ['Advance', +selRow.total_advance_given || 0],
       ['Closing Balance', +totals.closing_balance || 0], [],
@@ -451,7 +473,7 @@ export default function LiabilityRegisterPage() {
 
   const exportPDF = async () => {
     if (!selectedVendor || !ledger.length) return;
-    const pName = projectId ? (projects.find(p => p.id === projectId)?.name ?? 'All Projects') : 'All Projects';
+    const pName = resolveLedgerProjectName();
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     doc.setFont('times', 'normal');
 
@@ -464,7 +486,7 @@ export default function LiabilityRegisterPage() {
     const INK_RGB    = [15, 23, 42];
 
     const L = 14, R = 283, W = R - L;
-    const period = `${fromDate ? fmt(fromDate) : 'Start'} to ${toDate ? fmt(toDate) : 'Today'}`;
+    const period = resolveLedgerPeriod();
 
     const drawLetterhead = async () => {
       const logo = await loadBcimLogoBase64();
