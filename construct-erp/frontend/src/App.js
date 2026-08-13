@@ -499,13 +499,12 @@ function isMDDashboardUser(user) {
   return !!user.can_access_executive_dashboard;
 }
 
-// Custom-domain ESS Portal: visitors on this hostname land on /ess and see
-// only the ESS Portal — except HR/admin staff, who still need full ERP
-// access (managing the very HR data ESS reads) so they get the normal
-// role-based routing and menus even on this domain.
+// Custom-domain ESS Portal: every visitor on this hostname — including
+// super_admin/HR/admin roles — lands on /ess and sees only the ESS Portal.
+// HR/admin staff manage HR data from the main ERP domain instead.
 const ESS_DOMAIN = 'bcimhr.bcim.in';
 const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === ESS_DOMAIN;
-const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+const ESS_FULL_ACCESS_ROLES = [];
 const isEssFullAccessRole = (user) => ESS_FULL_ACCESS_ROLES.includes(String(user?.role || '').toLowerCase());
 
 function getHomeRoute(user) {

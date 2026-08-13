@@ -2280,10 +2280,10 @@ export default function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  // ESS custom domain: strip the full ERP nav chrome for regular employees —
-  // they should only ever see the ESS Portal, not the module sidebar. HR/admin
-  // staff are exempt since they still need full ERP access on this domain.
-  const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+  // ESS custom domain: strip the full ERP nav chrome for every role —
+  // everyone, including super_admin/HR/admin, should only ever see the ESS
+  // Portal here, not the module sidebar.
+  const ESS_FULL_ACCESS_ROLES = [];
   const isEssDomainHost = typeof window !== 'undefined' && window.location.hostname === 'bcimhr.bcim.in';
   const essOnly = isEssDomainHost && !ESS_FULL_ACCESS_ROLES.includes(String(user?.role || '').toLowerCase());
   const { language, setLanguage, t } = useLanguage();
