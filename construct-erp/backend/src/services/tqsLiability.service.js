@@ -299,6 +299,13 @@ async function getVendorLiabilitySummary({
       FROM sc_bills sb
       JOIN sc_subcontractors sc ON sc.id = sb.sc_id
       WHERE ${scConds.join(' AND ')}
+        -- Once an SC bill is approved it gets pushed into Bill Tracker
+        -- (tqs_bills.sc_bill_id) for payment tracking/PC generation — from
+        -- that point on its liability lives in bill_agg above. Without this
+        -- exclusion, a paid WO/PC bill in Bill Tracker and its now-stale SC
+        -- bill twin (still paid_amount=0) both counted, doubling the
+        -- vendor's apparent payable.
+        AND NOT EXISTS (SELECT 1 FROM tqs_bills tb WHERE tb.sc_bill_id = sb.id)
       GROUP BY LOWER(TRIM(sc.name))
     )
     SELECT
