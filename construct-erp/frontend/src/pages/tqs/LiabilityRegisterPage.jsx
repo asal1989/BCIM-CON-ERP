@@ -358,7 +358,7 @@ export default function LiabilityRegisterPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: vendors = [], isLoading: loadingVendors } = useQuery({
+  const { data: vendors = [], isLoading: loadingVendors, refetch: refetchVendors } = useQuery({
     queryKey: ['liability-summary', projectId, fromDate, toDate, search, sourceType],
     queryFn: () => liabilityRegisterAPI.summary({
       project_id:  projectId  || undefined,
@@ -386,13 +386,14 @@ export default function LiabilityRegisterPage() {
   const ledger = ledgerData?.ledger ?? [];
   const totals = ledgerData?.totals ?? { total_credit: 0, total_debit: 0, closing_balance: 0 };
 
-  const visibleVendors = useMemo(() => vendors.filter(v => {
+  const applyBalanceFilter = (list) => list.filter(v => {
     const b = parseFloat(v.net_balance || 0);
     if (balanceFilter === 'payable') return b > 0;
     if (balanceFilter === 'settled') return Math.abs(b) < 1;
     if (balanceFilter === 'advance') return parseFloat(v.total_advance_given || 0) > 0;
     return true;
-  }), [vendors, balanceFilter]);
+  });
+  const visibleVendors = useMemo(() => applyBalanceFilter(vendors), [vendors, balanceFilter]);
 
   useEffect(() => {
     if (selectedVendor && !visibleVendors.some(v => v.vendor_name === selectedVendor))
@@ -650,6 +651,13 @@ export default function LiabilityRegisterPage() {
   // active project/date/source filters — no separate API call needed.
   const exportProjectStatement = async () => {
     if (!visibleVendors.length) return;
+    // The vendor summary is cached for 5 minutes (staleTime) so it doesn't
+    // refetch on every render — fine for browsing, but a statement handed to
+    // accounts for payment must reflect transactions entered seconds ago, not
+    // a stale cache. Force a fresh pull right before building the PDF.
+    const { data: latestVendors } = await refetchVendors();
+    const freshVendors = applyBalanceFilter(latestVendors ?? vendors);
+    if (!freshVendors.length) return;
     const pName = projectId ? (projects.find(p => p.id === projectId)?.name ?? 'All Projects') : 'All Projects';
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     doc.setFont('times', 'normal');
@@ -664,10 +672,10 @@ export default function LiabilityRegisterPage() {
 
     const L = 14, R = 196, W = R - L;
 
-    const payableRows = visibleVendors
+    const payableRows = freshVendors
       .filter(v => parseFloat(v.payable_balance || 0) > 0.5)
       .sort((a, b) => parseFloat(b.payable_balance) - parseFloat(a.payable_balance));
-    const advanceRows = visibleVendors
+    const advanceRows = freshVendors
       .filter(v => parseFloat(v.total_advance_open || 0) > 0.5)
       .sort((a, b) => parseFloat(b.total_advance_open) - parseFloat(a.total_advance_open));
 
@@ -718,9 +726,9 @@ export default function LiabilityRegisterPage() {
     });
     y += cardH + 5;
 
-    const totalInvoiced = visibleVendors.reduce((s, v) => s + parseFloat(v.total_invoiced || 0), 0);
-    const totalPaidAll  = visibleVendors.reduce((s, v) => s + parseFloat(v.total_paid || 0), 0);
-    const totalTdsAll   = visibleVendors.reduce((s, v) => s + parseFloat(v.total_tds || 0), 0);
+    const totalInvoiced = freshVendors.reduce((s, v) => s + parseFloat(v.total_invoiced || 0), 0);
+    const totalPaidAll  = freshVendors.reduce((s, v) => s + parseFloat(v.total_paid || 0), 0);
+    const totalTdsAll   = freshVendors.reduce((s, v) => s + parseFloat(v.total_tds || 0), 0);
     const totalPayable  = payableRows.reduce((s, v) => s + parseFloat(v.payable_balance || 0), 0);
     const totalAdvOpen  = advanceRows.reduce((s, v) => s + parseFloat(v.total_advance_open || 0), 0);
 
