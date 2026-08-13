@@ -400,6 +400,11 @@ router.post('/run', async (req, res) => {
     }
 
     const generated = [];
+    // Guards against a repeat of the incentive bug: if a new earning
+    // component is ever added to `itemised` without also being folded into
+    // `gross`, itemised silently exceeds gross and the other-earnings clamp
+    // below absorbs the difference without a trace. Surface it instead.
+    const componentMismatches = [];
     for (const emp of employees.rows) {
       // Count attendance for the month
       const att = await query(
@@ -510,6 +515,9 @@ router.post('/run', async (req, res) => {
       // payslips could not break the pay down.
       const itemised = basic + hra + conv + med + spec + da + washing + lta + mobile
         + project + citySpec + accom + food + transport + convAllow + incentive;
+      if (itemised > gross + 1) {
+        componentMismatches.push(`${emp.employee_name || emp.user_id} (itemised ₹${itemised} > gross ₹${gross}, short by ₹${itemised - gross})`);
+      }
       const other = Math.max(0, gross - itemised);
 
       // Statutory deductions
@@ -604,6 +612,9 @@ router.post('/run', async (req, res) => {
       ...(missingSalary.length ? { missing_salary_employees: missingSalary } : {}),
       ...(stoppedNames.length ? { stopped_salary_employees: stoppedNames } : {}),
       ...(ptSlabs.length === 0 ? { pt_warning: 'No PT slabs configured for this company — Professional Tax was not deducted for anyone this run. Configure PT slabs under HR Masters.' } : {}),
+      ...(componentMismatches.length ? {
+        component_warning: `${componentMismatches.length} employee(s) have earning components that exceed their configured gross salary — some pay may have been silently dropped: ${componentMismatches.slice(0, 3).join('; ')}${componentMismatches.length > 3 ? '…' : ''}`,
+      } : {}),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

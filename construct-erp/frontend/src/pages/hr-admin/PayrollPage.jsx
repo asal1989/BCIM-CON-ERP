@@ -330,6 +330,15 @@ export default function PayrollPage() {
       if (missing.length) {
         toast.error(`${missing.length} employee(s) skipped — no salary record: ${missing.slice(0,3).join(', ')}${missing.length > 3 ? '…' : ''}`, { duration: 8000 });
       }
+      // The backend has always computed this warning (empty hr_pt_slabs means
+      // nobody's PT gets deducted for the whole run) but nothing ever
+      // displayed it, so it went unnoticed in every payroll run until now.
+      if (res.data?.pt_warning) {
+        toast.error(res.data.pt_warning, { duration: 10000, icon: '⚠️' });
+      }
+      if (res.data?.component_warning) {
+        toast.error(res.data.component_warning, { duration: 12000, icon: '⚠️' });
+      }
       refetch();
     },
     onError: e => toast.error(e.response?.data?.error || 'Failed to generate payroll'),
