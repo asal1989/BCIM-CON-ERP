@@ -131,6 +131,12 @@ router.get('/ledger', async (req, res) => {
       avSourceFilter = 'AND FALSE';
     }
 
+    // Advances can come from either tqs_advances OR the Procurement Advance
+    // Tracker (tqs_advance_vouchers) — checking only tqs_advances here
+    // silently dropped advance_recovered from the invoice's credit amount
+    // whenever a vendor's advance was disbursed via the voucher route,
+    // undercrediting the invoice by exactly the recovered advance and
+    // showing a phantom "excess paid" balance equal to it.
     const advanceCreditSql = `
       CASE WHEN EXISTS (
         SELECT 1
@@ -139,6 +145,15 @@ router.get('/ledger', async (req, res) => {
           AND LOWER(TRIM(a.vendor_name)) = LOWER(TRIM($2))
           ${advProjectFilter}
           ${advSourceFilter}
+      ) OR EXISTS (
+        SELECT 1
+        FROM tqs_advance_vouchers av
+        WHERE av.company_id = $1
+          AND LOWER(TRIM(av.vendor_name)) = LOWER(TRIM($2))
+          AND av.is_deleted = FALSE
+          AND COALESCE(av.paid_amount, 0) > 0
+          ${avProjectFilter}
+          ${avSourceFilter}
       )
       THEN COALESCE(u.advance_recovered, 0)
       ELSE 0

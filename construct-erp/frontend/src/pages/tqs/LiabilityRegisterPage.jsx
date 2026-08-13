@@ -401,8 +401,6 @@ export default function LiabilityRegisterPage() {
 
   const totalInvoiced = visibleVendors.reduce((s, v) => s + parseFloat(v.total_invoiced      || 0), 0);
   const totalPaid     = visibleVendors.reduce((s, v) => s + parseFloat(v.total_paid          || 0), 0);
-  const totalAdvance  = visibleVendors.reduce((s, v) => s + parseFloat(v.total_advance_given || 0), 0);
-  const totalBalance  = visibleVendors.reduce((s, v) => s + parseFloat(v.net_balance         || 0), 0);
   const totalTDS      = visibleVendors.reduce((s, v) => s + parseFloat(v.total_tds           || 0), 0);
   const totalPayable  = visibleVendors.reduce((s, v) => s + parseFloat(v.payable_balance     || 0), 0);
   const totalAdvanceOpen = visibleVendors.reduce((s, v) => s + parseFloat(v.total_advance_open || 0), 0);
@@ -1009,8 +1007,8 @@ export default function LiabilityRegisterPage() {
           { label: 'Total Invoiced', val: totalInvoiced,         isN: false, accent: C.blue, light: C.blueBg, border: C.blueBorder, Icon: Receipt },
           { label: 'Total Paid',     val: totalPaid,             isN: false, accent: C.blue, light: C.blueBg, border: C.blueBorder, Icon: Wallet },
           { label: 'TDS Deducted',   val: totalTDS,              isN: false, accent: C.slate, light: C.slateBg, border: C.slateBorder, Icon: Percent },
-          { label: 'Advance Open',   val: totalAdvanceOpen || totalAdvance, isN: false, accent: C.red, light: C.redBg, border: C.redBorder, Icon: TrendingUp },
-          { label: 'Net Payable',    val: totalPayable || totalBalance,     isN: false, accent: C.slate, light: C.slateBg, border: C.slateBorder, Icon: IndianRupee },
+          { label: 'Advance Open',   val: totalAdvanceOpen, isN: false, accent: C.red, light: C.redBg, border: C.redBorder, Icon: TrendingUp },
+          { label: 'Net Payable',    val: totalPayable,     isN: false, accent: C.slate, light: C.slateBg, border: C.slateBorder, Icon: IndianRupee },
           { label: `90+ Days (${vendorsOver90})`, val: totalOver90,         isN: false, accent: C.red, light: C.redBg, border: C.redBorder, Icon: Clock },
         ].map(k => (
           <div key={k.label} style={{
@@ -1229,7 +1227,7 @@ export default function LiabilityRegisterPage() {
                     ...(parseFloat(selRow.total_retention || 0) > 0
                       ? [{ label: 'Retention', val: selRow.total_retention, color: C.amber, bg: C.amberBg, border: C.amberBorder }]
                       : []),
-                    { label: 'Advance Open', val: selRow.total_advance_open || selRow.total_advance_given, color: C.amber, bg: C.amberBg, border: C.amberBorder },
+                    { label: 'Advance Open', val: selRow.total_advance_open ?? selRow.total_advance_given, color: C.amber, bg: C.amberBg, border: C.amberBorder },
                     { label: '90+ Due',  val: selRow.payable_90_plus,     color: C.red, bg: C.redBg, border: C.redBorder },
                   ].map(s => (
                     <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 7, padding: '3px 9px' }}>
