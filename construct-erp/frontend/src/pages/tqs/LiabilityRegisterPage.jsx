@@ -29,6 +29,24 @@ const fmt = (d) => {
 const safeFile = (n) =>
   String(n || 'Vendor').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
 
+let logoBase64Cache = null;
+async function loadBcimLogoBase64() {
+  if (logoBase64Cache) return logoBase64Cache;
+  try {
+    const resp = await fetch('/bcim-logo.png');
+    const blob = await resp.blob();
+    logoBase64Cache = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return logoBase64Cache;
+  } catch {
+    return null;
+  }
+}
+
 // Professional, differentiated palette.
 //  · indigo  = brand / payable / selection
 //  · emerald = money paid out (debit)
@@ -431,28 +449,102 @@ export default function LiabilityRegisterPage() {
     XLSX.writeFile(wb, `Liability_${safeFile(selectedVendor)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!selectedVendor || !ledger.length) return;
     const pName = projectId ? (projects.find(p => p.id === projectId)?.name ?? 'All Projects') : 'All Projects';
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    doc.setFontSize(13); doc.setFont(undefined, 'bold');
-    doc.text('BCIM Engineering - Vendor Liability Ledger', 14, 12);
-    doc.setFontSize(9); doc.setFont(undefined, 'normal');
-    doc.text(`Vendor: ${selectedVendor}   Project: ${pName}   Period: ${fromDate || 'Start'} to ${toDate || 'Today'}`, 14, 20);
-    autoTable(doc, {
-      startY: 27,
-      head: [['Invoiced', 'Paid', 'TDS', 'Advance', 'Total Debit', 'Total Credit', 'Balance']],
-      body: [[
-        `₹${inr(selRow.total_invoiced, 2)}`, `₹${inr(selRow.total_paid, 2)}`,
-        `₹${inr(selRow.total_tds, 2)}`, `₹${inr(selRow.total_advance_given, 2)}`,
-        `₹${inr(totals.total_debit, 2)}`, `₹${inr(totals.total_credit, 2)}`,
-        `₹${inr(Math.abs(totals.closing_balance), 2)}`,
-      ]],
-      theme: 'grid', styles: { fontSize: 8 },
-      headStyles: { fillColor: [30, 58, 95] }, margin: { left: 14, right: 14 },
+    doc.setFont('times', 'normal');
+
+    // RGB twins of the app's letterhead palette (navy #1B3A6B), matching the
+    // Bill Tracker Transmittal PDF's house style.
+    const NAVY_RGB   = [27, 58, 107];
+    const BORDER_RGB = [217, 226, 239];
+    const CARD_RGB   = [247, 250, 253];
+    const MUTED_RGB  = [107, 124, 147];
+    const INK_RGB    = [15, 23, 42];
+
+    const L = 14, R = 283, W = R - L;
+    const period = `${fromDate ? fmt(fromDate) : 'Start'} to ${toDate ? fmt(toDate) : 'Today'}`;
+
+    const drawLetterhead = async () => {
+      const logo = await loadBcimLogoBase64();
+      if (logo) doc.addImage(logo, 'PNG', L, 9, 26, 13, undefined, 'FAST');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...NAVY_RGB);
+      doc.text('BCIM ENGINEERING PVT. LTD.', L, 26);
+
+      doc.setFont('times', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(...INK_RGB);
+      doc.text('VENDOR LIABILITY LEDGER', 148, 17, { align: 'center' });
+      doc.setFillColor(...NAVY_RGB);
+      doc.rect(122, 19.5, 52, 0.9, 'F');
+
+      doc.setFont('times', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text('Statement of Account — Payables', 148, 24, { align: 'center' });
+
+      doc.setFont('times', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text('# 11, B Wing, Divyasree Chambers, "O" Shaughnessy Road, Bangalore 560 025', R, 13, { align: 'right' });
+      doc.setFont('times', 'bold');
+      doc.setTextColor(...NAVY_RGB);
+      doc.text(`Project: ${pName}`, R, 17, { align: 'right', maxWidth: 90 });
+
+      doc.setFillColor(...NAVY_RGB);
+      doc.rect(L, 29, W, 0.6, 'F');
+      return 32.5;
+    };
+
+    let cardY = await drawLetterhead();
+
+    // ── Meta cards ──
+    const cardH = 11, gap = 3.5, cardW = (W - gap * 2) / 3;
+    [
+      ['VENDOR NAME', selectedVendor],
+      ['PROJECT', pName],
+      ['STATEMENT PERIOD', period],
+    ].forEach(([label, value], i) => {
+      const x = L + i * (cardW + gap);
+      doc.setFillColor(...CARD_RGB);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, cardY, cardW, cardH, 1.5, 1.5, 'FD');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(5.5);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text(label, x + 4, cardY + 4.2);
+      doc.setFont('times', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...NAVY_RGB);
+      doc.text(String(value || '—'), x + 4, cardY + 8.6, { maxWidth: cardW - 8 });
     });
+
+    // ── Summary strip ──
+    autoTable(doc, {
+      startY: cardY + cardH + 4,
+      margin: { left: L, right: 297 - R },
+      head: [['Total Invoiced', 'Total Paid', 'TDS Deducted', 'Advance Given', 'Total Debit', 'Total Credit', 'Closing Balance']],
+      body: [[
+        `Rs. ${inr(selRow.total_invoiced, 2)}`, `Rs. ${inr(selRow.total_paid, 2)}`,
+        `Rs. ${inr(selRow.total_tds, 2)}`, `Rs. ${inr(selRow.total_advance_given, 2)}`,
+        `Rs. ${inr(totals.total_debit, 2)}`, `Rs. ${inr(totals.total_credit, 2)}`,
+        `Rs. ${inr(Math.abs(totals.closing_balance), 2)}`,
+      ]],
+      theme: 'grid',
+      styles: { font: 'times', fontSize: 7.5, cellPadding: 2.2, lineColor: BORDER_RGB, lineWidth: 0.15, halign: 'center', textColor: INK_RGB },
+      headStyles: { font: 'times', fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 6.5 },
+      bodyStyles: { fontStyle: 'bold' },
+      margin: { left: L, right: 297 - R },
+    });
+
+    // ── Ledger detail ──
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 5,
+      margin: { left: L, right: 297 - R, top: 20 },
       head: [['Date', 'Particulars', 'Type', 'Voucher No.', 'Project', 'Debit', 'Credit', 'Balance']],
       body: ledger.map(r => [
         fmt(r.txn_date),
@@ -461,19 +553,73 @@ export default function LiabilityRegisterPage() {
           + (r.po_ref ? `\nPO: ${r.po_ref}` : ''),
         ENTRY[r.entry_type]?.label || r.entry_type || '',
         r.vch_number || '', r.project_name || '',
-        +r.debit_amount > 0  ? `₹${inr(r.debit_amount, 2)}`  : '-',
-        +r.credit_amount > 0 ? `₹${inr(r.credit_amount, 2)}` : '-',
-        Math.abs(+r.running_balance) < 0.01 ? '-' : `₹${inr(Math.abs(r.running_balance), 2)}`,
+        +r.debit_amount > 0  ? `Rs. ${inr(r.debit_amount, 2)}`  : '-',
+        +r.credit_amount > 0 ? `Rs. ${inr(r.credit_amount, 2)}` : '-',
+        Math.abs(+r.running_balance) < 0.01 ? '-' : `Rs. ${inr(Math.abs(r.running_balance), 2)}`,
       ]),
-      theme: 'striped', styles: { fontSize: 7, cellPadding: 1.8 },
-      headStyles: { fillColor: [30, 41, 59] },
+      theme: 'striped',
+      styles: { font: 'times', fontSize: 7, cellPadding: 1.8, lineColor: BORDER_RGB, lineWidth: 0.1, textColor: INK_RGB },
+      headStyles: { font: 'times', fillColor: NAVY_RGB, textColor: 255, fontStyle: 'bold', fontSize: 7 },
+      alternateRowStyles: { fillColor: [245, 248, 252] },
       columnStyles: {
         0: { cellWidth: 20 }, 1: { cellWidth: 75 }, 2: { cellWidth: 22 },
         3: { cellWidth: 30 }, 4: { cellWidth: 38 },
-        5: { cellWidth: 28, halign: 'right' }, 6: { cellWidth: 28, halign: 'right' }, 7: { cellWidth: 30, halign: 'right' },
+        5: { cellWidth: 28, halign: 'right' }, 6: { cellWidth: 28, halign: 'right' },
+        7: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: NAVY_RGB },
       },
-      margin: { left: 14, right: 14 },
+      // Continuation banner on page 2+ — kept synchronous (no logo re-fetch)
+      // so it can never race the table's own rendering on that page.
+      didDrawPage: (data) => {
+        if (data.pageNumber === 1) return;
+        doc.setFont('times', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...NAVY_RGB);
+        doc.text(`VENDOR LIABILITY LEDGER — ${selectedVendor} (contd.)`, L, 12);
+        doc.setFillColor(...NAVY_RGB);
+        doc.rect(L, 15, W, 0.5, 'F');
+      },
     });
+
+    // ── Sign-off ──
+    let y = doc.lastAutoTable.finalY + 8;
+    const bw = (W - 6) / 2, bh = 26;
+    if (y + bh > 200) { doc.addPage(); await drawLetterhead(); y = 40; }
+    [
+      { title: 'For BCIM Engineering Pvt. Ltd.', name: '', role: 'Authorised Signatory' },
+      { title: `For ${selectedVendor}`, name: '', role: 'Vendor Acknowledgement' },
+    ].forEach((b, idx) => {
+      const x = L + idx * (bw + 6);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, y, bw, bh, 1.5, 1.5, 'D');
+      doc.setFillColor(...CARD_RGB);
+      doc.rect(x + 0.2, y + 0.2, bw - 0.4, 6, 'F');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(...NAVY_RGB);
+      doc.text(b.title, x + 3, y + 4.2, { maxWidth: bw - 6 });
+
+      doc.setFont('times', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text('Signature :', x + 3, y + 14);
+      doc.setDrawColor(...BORDER_RGB);
+      doc.line(x + 20, y + 14.5, x + bw - 3, y + 14.5);
+      doc.text('Name :', x + 3, y + 20);
+      doc.line(x + 20, y + 20.5, x + bw - 3, y + 20.5);
+      doc.text('Date :', x + 3, y + 24.5);
+      doc.line(x + 20, y + 25, x + bw - 3, y + 25);
+      doc.setFont('times', 'italic');
+      doc.setFontSize(6);
+      doc.setTextColor(...MUTED_RGB);
+      doc.text(b.role, x + bw - 3, y + 24.5, { align: 'right' });
+    });
+
+    doc.setFont('times', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...MUTED_RGB);
+    doc.text(`Generated on ${fmt(new Date())} · This is a system-generated statement of account`, 148, y + bh + 6, { align: 'center' });
+
     doc.save(`Liability_${safeFile(selectedVendor)}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
