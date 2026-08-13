@@ -164,7 +164,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 overflow-y-auto">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0 overflow-y-auto">
           <div>
             <label className={lbl}>Employee</label>
             <select value={form.user_id} onChange={e=>update('user_id',e.target.value)} className={inp}
