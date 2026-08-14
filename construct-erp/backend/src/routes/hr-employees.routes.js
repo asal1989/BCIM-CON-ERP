@@ -814,7 +814,8 @@ router.put('/:id', async (req, res) => {
 
     await syncExitToWorkerRoster(
       (sql, params) => client.query(sql, params),
-      req.params.id, req.user.company_id, employment_status, previousEmploymentStatus
+      req.params.id, req.user.company_id, employment_status, previousEmploymentStatus,
+      date_of_leaving || null
     );
 
     await addTimeline(
@@ -852,7 +853,7 @@ router.put('/:id', async (req, res) => {
 // Only the statuses that actually mean "gone" propagate.
 const EXIT_STATUSES = ['resigned', 'terminated', 'absconded'];
 
-async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus, previousEmploymentStatus) {
+async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus, previousEmploymentStatus, dateOfLeaving) {
   if (!EXIT_STATUSES.includes(employmentStatus)) {
     // Only reactivate when this save is specifically undoing a previous exit
     // (e.g. an accidental "resigned" corrected back to "active"). Without
@@ -889,6 +890,28 @@ async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatu
     `UPDATE users SET is_active=FALSE WHERE id=$1 AND company_id=$2`,
     [userId, companyId]
   );
+
+  // Exits are almost always filed days after the person actually left, and
+  // until this point users.is_active was still TRUE — so the biometric sync
+  // (hr-essl, which gates only on is_active) has been writing hr_attendance
+  // rows for every day the leaver's still-enrolled fingerprint was scanned,
+  // or that the roster swept them into. Those days were never worked, and
+  // they surface the leaver in the monthly attendance report. Drop them.
+  //
+  // Scoped to device/system-generated rows only: anything a human entered
+  // (manual, regularization) or that backs a leave record is left untouched,
+  // mirroring the guard on the essl upsert itself. Without date_of_leaving
+  // there is no boundary to cut on, so nothing is removed.
+  if (dateOfLeaving) {
+    await runner(
+      `DELETE FROM hr_attendance
+       WHERE user_id=$1 AND company_id=$2
+         AND attendance_date > $3::date
+         AND leave_request_id IS NULL
+         AND COALESCE(source,'') NOT IN ('regularization','manual')`,
+      [userId, companyId, dateOfLeaving]
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -912,7 +935,8 @@ router.patch('/:id/status', async (req, res) => {
       await query(`UPDATE users SET is_active=$1 WHERE id=$2 AND company_id=$3`,
         [is_active, req.params.id, req.user.company_id]);
     }
-    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status, previousEmploymentStatus);
+    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status,
+      previousEmploymentStatus, date_of_leaving || null);
     await query(
       `INSERT INTO employee_timeline
        (user_id, company_id, event_type, title, description, event_date, created_by)

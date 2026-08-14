@@ -1367,6 +1367,13 @@ router.get('/monthly-report', async (req, res) => {
         -- in the requested month (via the INNER JOIN above), so someone who
         -- worked that month and has since resigned/been terminated must
         -- still appear — excluding them would silently rewrite history.
+        -- They must NOT appear for days after they left, though. The
+        -- biometric device keeps a leaver's fingerprint enrolled and exits
+        -- are usually recorded days late, so the essl_agent sync (which
+        -- gates only on users.is_active, still TRUE until HR files the exit)
+        -- writes hr_attendance rows for days never worked. Bound the rows to
+        -- the employment period rather than dropping the person.
+        AND (ep.date_of_leaving IS NULL OR a.attendance_date <= ep.date_of_leaving)
         -- unioned with sc_attendance below; drop the SC-roster duplicates
         AND NOT EXISTS (
           SELECT 1 FROM sc_workers w
