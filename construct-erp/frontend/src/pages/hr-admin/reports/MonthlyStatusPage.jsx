@@ -44,20 +44,25 @@ export default function MonthlyStatusPage() {
   const [project, setProject] = useState('');
   const [category, setCategory] = useState('all');
   const [company, setCompany] = useState('');
+  // Staff who have left are hidden by default — see the note on the endpoint.
+  // Payroll turns this on to get everyone who worked any part of the month.
+  const [includeExited, setIncludeExited] = useState(false);
 
   const { data: projects } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data||r.data||[]) });
 
   const days = daysInMonth(year, month);
 
   const { data: apiData, isLoading } = useQuery({
-    queryKey: ['monthly-status', year, month, project, category],
-    queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined, category })
+    queryKey: ['monthly-status', year, month, project, category, includeExited],
+    queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined, category,
+                                                    include_exited: includeExited ? 1 : undefined })
                     .then(r => r.data || {}),
     enabled: true,
   });
 
   const attendanceRows = Array.isArray(apiData?.data) ? apiData.data : Array.isArray(apiData) ? apiData : [];
   const holidays = apiData?.holidays || [];
+  const hiddenExited = apiData?.hidden_exited || 0;
 
   const holidaySet = new Set(holidays.map(h => h.date?.slice(0,10)));
   const sundaySet = new Set();
@@ -283,7 +288,43 @@ export default function MonthlyStatusPage() {
             {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
+        <div>
+          <label style={labelCls}>Staff shown</label>
+          <select
+            value={includeExited ? 'all' : 'current'}
+            onChange={e => setIncludeExited(e.target.value === 'all')}
+            style={{ ...selectCls, minWidth: 200,
+                     fontWeight: includeExited ? 700 : 400,
+                     color: includeExited ? '#B45309' : '#334155',
+                     borderColor: includeExited ? '#FDE68A' : '#E2E8F0' }}
+          >
+            <option value='current'>Current staff only</option>
+            <option value='all'>Include staff who have left</option>
+          </select>
+        </div>
       </div>
+
+      {/* Say what was left out, rather than just showing a shorter list. */}
+      {!isLoading && !includeExited && hiddenExited > 0 && (
+        <div className="no-print" style={{
+          display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+          background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:10,
+          padding:'9px 14px', marginBottom:14, fontSize:12.5, color:'#92400E',
+        }}>
+          <UserX size={15} color="#B45309" style={{ flexShrink:0 }} />
+          <span>
+            <strong>{hiddenExited}</strong> {hiddenExited === 1 ? 'person who has' : 'people who have'} since left
+            {' '}{hiddenExited === 1 ? 'is' : 'are'} hidden. They worked part of this month, so payroll needs them.
+          </span>
+          <button
+            onClick={() => setIncludeExited(true)}
+            style={{ marginLeft:'auto', background:'#B45309', color:'#fff', border:'none',
+                     borderRadius:7, padding:'5px 12px', fontSize:11.5, fontWeight:700, cursor:'pointer' }}
+          >
+            Show them
+          </button>
+        </div>
+      )}
 
       {/* KPI strip */}
       {!isLoading && rows.length > 0 && (

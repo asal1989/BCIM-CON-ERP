@@ -1297,9 +1297,19 @@ router.get('/overtime-earlyexit-report', async (req, res) => {
 
 router.get('/monthly-report', async (req, res) => {
   try {
-    const { year, month, project_id, department_id, category = 'all' } = req.query;
+    const { year, month, project_id, department_id, category = 'all',
+            include_exited } = req.query;
     const cid = req.user.company_id;
     if (!year || !month) return res.status(400).json({ error: 'year and month required' });
+
+    // Staff who have since left default to hidden: the grid is read as "who is
+    // on my site this month", and stale duplicate records (the same person
+    // re-imported under a new employee_code, the old one closed as terminated)
+    // otherwise list people twice. Opt back in with include_exited=1 for
+    // payroll, which needs everyone who worked any part of the month — the
+    // response reports how many were hidden so the omission is never silent.
+    const includeExited = ['1', 'true', 'yes'].includes(String(include_exited || '').toLowerCase());
+    const exitedFilter = includeExited ? '' : ' AND u.is_active = TRUE';
 
     const y = parseInt(year), m = parseInt(month);
     const from = `${y}-${String(m).padStart(2,'0')}-01`;
@@ -1374,6 +1384,7 @@ router.get('/monthly-report', async (req, res) => {
         -- writes hr_attendance rows for days never worked. Bound the rows to
         -- the employment period rather than dropping the person.
         AND (ep.date_of_leaving IS NULL OR a.attendance_date <= ep.date_of_leaving)
+        ${exitedFilter}
         -- unioned with sc_attendance below; drop the SC-roster duplicates
         AND NOT EXISTS (
           SELECT 1 FROM sc_workers w
@@ -1424,9 +1435,27 @@ router.get('/monthly-report', async (req, res) => {
       [cid, from, to]
     );
 
+    // How many people the exited filter removed, so the UI can say so rather
+    // than just showing a shorter list. Only worth asking when filtering.
+    let hiddenExited = 0;
+    if (!includeExited) {
+      const hidden = await query(`
+        SELECT COUNT(DISTINCT u.id)::int AS n
+        FROM users u
+        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+        JOIN hr_attendance a ON a.user_id = u.id AND a.company_id = $1
+         AND a.attendance_date BETWEEN $2 AND $3
+        WHERE u.company_id = $1 AND u.is_active = FALSE
+          AND (ep.date_of_leaving IS NULL OR a.attendance_date <= ep.date_of_leaving)`,
+        [cid, from, to]);
+      hiddenExited = hidden.rows[0]?.n || 0;
+    }
+
     res.json({
       data:     [...staffRes.rows, ...scRes.rows],
       holidays: holidayRes.rows,
+      hidden_exited: hiddenExited,
+      include_exited: includeExited,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
