@@ -791,7 +791,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
           <div className={Z_CARD}>
             <h3 className={Z_HEAD}>Work Order Information</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 p-4">
-              <FormFieldlabel="Project *" className="col-span-2">
+              <FormField label="Project *" className="col-span-2">
                 <SearchableSelect
                   value={form.project_id}
                   onChange={v => f('project_id', v)}
@@ -801,7 +801,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
                   footerLabel="projects"
                 />
               </FormField>
-              <FormFieldlabel="WO Number">
+              <FormField label="WO Number">
                 <div className="relative">
                   <Hash className="w-3.5 h-3.5 text-slate-300 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   {isEditing
@@ -810,10 +810,10 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
                   }
                 </div>
               </FormField>
-              <FormFieldlabel="WO Date">
+              <FormField label="WO Date">
                 <input type="date" className={Z_INP} value={form.wo_date} onChange={e => f('wo_date', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Contractor / Vendor *" className="col-span-2 md:col-span-2">
+              <FormField label="Contractor / Vendor *" className="col-span-2 md:col-span-2">
                 <VendorSelect
                   value={form.vendor_id}
                   onChange={v => f('vendor_id', v)}
@@ -825,16 +825,16 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
                   addNewLabel="contractor"
                 />
               </FormField>
-              <FormFieldlabel="Work Category">
+              <FormField label="Work Category">
                 <select className={Z_INP} value={form.work_category} onChange={e => f('work_category', e.target.value)}>
                   <option value="">Select…</option>
                   {WORK_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               </FormField>
-              <FormFieldlabel="Cost Head">
+              <FormField label="Cost Head">
                 <input className={Z_INP} placeholder="e.g. Civil Works" value={form.cost_head} onChange={e => f('cost_head', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Approved MR (optional)" className="col-span-2 md:col-span-2">
+              <FormField label="Approved MR (optional)" className="col-span-2 md:col-span-2">
                 <select
                   className={Z_INP}
                   value={form.mrs_id}
@@ -889,13 +889,13 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
           <div className={Z_CARD}>
             <h3 className={Z_HEAD}>Scope & Location</h3>
             <div className="grid grid-cols-2 md:grid-cols-2 gap-3.5 p-4">
-              <FormFieldlabel="Subject / Title of Work *" className="col-span-2 md:col-span-1">
+              <FormField label="Subject / Title of Work *" className="col-span-2 md:col-span-1">
                 <input className={Z_INP} placeholder="e.g. Supply & erection of structural steel – Tower A" value={form.subject} onChange={e => f('subject', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Tower / Block / Location" className="col-span-2 md:col-span-1">
+              <FormField label="Tower / Block / Location" className="col-span-2 md:col-span-1">
                 <input className={Z_INP} placeholder="e.g. Tower A / Block 1 / Basement" value={form.tower_block} onChange={e => f('tower_block', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Detailed Scope of Work" className="col-span-2">
+              <FormField label="Detailed Scope of Work" className="col-span-2">
                 <textarea rows={3} className={clsx(Z_INP, 'h-auto py-2 resize-none')} placeholder="Describe the full scope, deliverables, specifications, materials in scope / out of scope…" value={form.scope_of_work} onChange={e => f('scope_of_work', e.target.value)} />
               </FormField>
             </div>
@@ -908,10 +908,10 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
               {durationDays != null && <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">{durationDays} days duration</span>}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 p-4">
-              <FormFieldlabel="Start Date">
+              <FormField label="Start Date">
                 <input type="date" className={Z_INP} value={form.start_date} onChange={e => f('start_date', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Completion Date">
+              <FormField label="Completion Date">
                 <input type="date" className={Z_INP} value={form.end_date} onChange={e => f('end_date', e.target.value)} />
               </FormField>
               <div className="flex items-end">
@@ -983,16 +983,16 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
           <div className={Z_CARD}>
             <h3 className={Z_HEAD}>Commercial & Tax Terms</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 p-4">
-              <FormFieldlabel="GST %">
+              <FormField label="GST %">
                 <input type="number" min="0" max="100" className={Z_INP} value={form.gst_pct} onChange={e => f('gst_pct', e.target.value)} />
               </FormField>
-              <FormFieldlabel="TDS %">
+              <FormField label="TDS %">
                 <input type="number" min="0" max="100" className={Z_INP} value={form.tds_pct} onChange={e => f('tds_pct', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Retention %">
+              <FormField label="Retention %">
                 <input type="number" min="0" max="100" className={Z_INP} value={form.retention_pct} onChange={e => f('retention_pct', e.target.value)} />
               </FormField>
-              <FormFieldlabel="Advance Recovery %">
+              <FormField label="Advance Recovery %">
                 <input type="number" min="0" max="100" className={Z_INP} value={form.advance_recovery_pct} onChange={e => f('advance_recovery_pct', e.target.value)} />
               </FormField>
             </div>
@@ -2465,3 +2465,4 @@ export default function WorkOrderPage() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-// src/pages/stores/MRSPage.jsx
+﻿// src/pages/stores/MRSPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
@@ -20,9 +20,9 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 // Show date only if it's today or in the past (guards against wrong DB timestamps)
 const fmtMRSDate = (d) => {
-  if (!d) return '—';
+  if (!d) return 'â€”';
   const dt = dayjs(d);
-  return dt.isAfter(dayjs(), 'day') ? '—' : dt.format('DD-MM-YYYY');
+  return dt.isAfter(dayjs(), 'day') ? 'â€”' : dt.format('DD-MM-YYYY');
 };
 import { mrsAPI, projectAPI, inventoryAPI, vendorAPI, budgetAPI } from '../../api/client';
 import VendorSelect from '../../components/shared/VendorSelect';
@@ -38,7 +38,7 @@ const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 const MR_TYPE_OPTIONS = ['New Purchase', 'Internal Transfer', 'Return to Store', 'Tool & Equipment'];
 const COST_CENTER_OPTIONS = ['CC-Civil-Structural', 'CC-MEP', 'CC-Finishing', 'CC-Admin-General'];
-const DELIVERY_LOCATION_OPTIONS = ['Site Store – Zone A', 'Site Store – Zone B', 'Container Office', 'Main Warehouse'];
+const DELIVERY_LOCATION_OPTIONS = ['Site Store â€“ Zone A', 'Site Store â€“ Zone B', 'Container Office', 'Main Warehouse'];
 const ITEM_CATEGORY_OPTIONS = ['Steel', 'Cement', 'Aggregate', 'Electrical', 'Plumbing', 'Finishing', 'Other'];
 const MRS_DRAFT_KEY = 'mrs_new_request_draft';
 
@@ -118,12 +118,12 @@ const PO_STATUS_CONFIG = {
 };
 
 const PRIORITY_CONFIG = {
-  low:    { label: 'Low',    emoji: '🟢', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  medium: { label: 'Medium', emoji: '🟡', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-  high:   { label: 'High',   emoji: '🟠', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-  urgent: { label: 'Urgent', emoji: '🔴', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  low:    { label: 'Low',    emoji: 'ðŸŸ¢', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  medium: { label: 'Medium', emoji: 'ðŸŸ¡', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  high:   { label: 'High',   emoji: 'ðŸŸ ', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+  urgent: { label: 'Urgent', emoji: 'ðŸ”´', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
-// Older records used a 3-value priority scheme — map them onto the new 4-value set for display
+// Older records used a 3-value priority scheme â€” map them onto the new 4-value set for display
 const PRIORITY_ALIAS = { normal: 'medium', critical: 'urgent' };
 const normalizePriority = (p) => (PRIORITY_CONFIG[p] ? p : (PRIORITY_ALIAS[p] || 'medium'));
 
@@ -147,13 +147,13 @@ function PriorityBadge({ priority }) {
   );
 }
 
-/* ── Master stage definitions (mirrors backend ALL_STAGES) ─────────────── */
+/* â”€â”€ Master stage definitions (mirrors backend ALL_STAGES) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const ALL_STAGES = [
-  { id: 'stores-approve', label: 'Stores Verification',  short: 'Stores',       color: 'bg-orange-500 hover:bg-orange-600',  btnLabel: '✓ Stores Verified',       status: 'pending'         },
-  { id: 'verify-tower',   label: 'Tower Manager/Incharge', short: 'Tower Mgr',  color: 'bg-blue-600 hover:bg-blue-700',      btnLabel: '✓ Verify',                status: 'stores_verified' },
-  { id: 'approve-pm',     label: 'Project Head',          short: 'Proj Head',   color: 'bg-emerald-600 hover:bg-emerald-700',btnLabel: '✓ Approve',               status: 'verified_tower'  },
-  { id: 'approve-srpm',   label: 'Sr. Project Manager',   short: 'Sr. PM',      color: 'bg-teal-600 hover:bg-teal-700',      btnLabel: '✓ Approve',               status: 'approved_pm'     },
-  { id: 'approve-mgmt',   label: 'Management Director',   short: 'Mgmt Dir',    color: 'bg-indigo-600 hover:bg-indigo-700',  btnLabel: '✓ Release',               status: 'approved_srpm'   },
+  { id: 'stores-approve', label: 'Stores Verification',  short: 'Stores',       color: 'bg-orange-500 hover:bg-orange-600',  btnLabel: 'âœ“ Stores Verified',       status: 'pending'         },
+  { id: 'verify-tower',   label: 'Tower Manager/Incharge', short: 'Tower Mgr',  color: 'bg-blue-600 hover:bg-blue-700',      btnLabel: 'âœ“ Verify',                status: 'stores_verified' },
+  { id: 'approve-pm',     label: 'Project Head',          short: 'Proj Head',   color: 'bg-emerald-600 hover:bg-emerald-700',btnLabel: 'âœ“ Approve',               status: 'verified_tower'  },
+  { id: 'approve-srpm',   label: 'Sr. Project Manager',   short: 'Sr. PM',      color: 'bg-teal-600 hover:bg-teal-700',      btnLabel: 'âœ“ Approve',               status: 'approved_pm'     },
+  { id: 'approve-mgmt',   label: 'Management Director',   short: 'Mgmt Dir',    color: 'bg-indigo-600 hover:bg-indigo-700',  btnLabel: 'âœ“ Release',               status: 'approved_srpm'   },
   { id: 'approve-md',     label: 'Managing Director',     short: 'MD',          color: 'bg-green-700 hover:bg-green-800',    btnLabel: 'Authorize (MD)',                 status: 'approved_mgmt'   },
 ];
 
@@ -162,9 +162,9 @@ const ACTIVE_STAGES = [
   { id: 'approve-pm',     label: 'Project Manager',    short: 'PM',        color: 'bg-emerald-600 hover:bg-emerald-700', btnLabel: 'Approve PM',       status: 'stores_verified', allowedRoles: ['project_manager', 'pm', 'project_head'] },
   { id: 'approve-mgmt',   label: 'Project Director',   short: 'Director',  color: 'bg-indigo-600 hover:bg-indigo-700',   btnLabel: 'Approve Director', status: 'approved_pm',    allowedRoles: ['project_head', 'director', 'project_director', 'management', 'management_director'] },
   { id: 'approve-md',     label: 'Managing Director',  short: 'MD',        color: 'bg-green-700 hover:bg-green-800',     btnLabel: 'Approve MD',       status: 'approved_mgmt',  allowedRoles: ['managing_director', 'md', 'ceo', 'admin', 'super_admin'] },
-  // Client sign-off — opt-in per project. The client has no login here, so this
+  // Client sign-off â€” opt-in per project. The client has no login here, so this
   // is LOGGED by one of our own staff (allowlist below, mirrored server-side in
-  // mrs.routes.js CLIENT_APPROVAL_LOGGERS — the backend is the real gate).
+  // mrs.routes.js CLIENT_APPROVAL_LOGGERS â€” the backend is the real gate).
   { id: 'client-approve', label: 'Client Approval',    short: 'Client',    color: 'bg-teal-600 hover:bg-teal-700',       btnLabel: 'Record Client Approval', status: 'approved_md', allowedRoles: [], optIn: true, allowedEmails: ['bkmanjunath@bcim.in', 'prithivi@bcim.in'] },
 ];
 
@@ -194,7 +194,7 @@ const STAGE_NEXT = {
 };
 function getNextStatus(stageId) { return STAGE_NEXT[stageId]; }
 
-/* ── Per-project MR numbering editor (prefix / shared pool / next number) ── */
+/* â”€â”€ Per-project MR numbering editor (prefix / shared pool / next number) â”€â”€ */
 function NumberingCell({ project }) {
   const qc = useQueryClient();
   const [prefix, setPrefix] = useState(project.mrs_prefix || '');
@@ -233,14 +233,14 @@ function NumberingCell({ project }) {
         <span className="text-[9px] text-slate-400 font-mono truncate" title={`${previewPrefix}-${previewSeq}`}>{previewPrefix}-{previewSeq}</span>
         <button onClick={save} disabled={saving || !dirty}
           className="text-[11px] font-semibold px-2.5 py-1 rounded bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700">
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Savingâ€¦' : 'Save'}
         </button>
       </div>
     </div>
   );
 }
 
-/* ── WorkflowConfigModal ───────────────────────────────────────────────── */
+/* â”€â”€ WorkflowConfigModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function WorkflowConfigModal({ onClose }) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(null);
@@ -255,9 +255,9 @@ function WorkflowConfigModal({ onClose }) {
   const allStagesMeta = cfg?.allStages || ACTIVE_STAGES.map(s => ({ id: s.id, label: s.label }));
 
   const PRESETS = [
-    { label: 'SM → PM → MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
-    { label: 'Full (SM → PM → Dir → MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
-    { label: 'SM → PM → MD → Client', stages: ['stores-approve', 'approve-pm', 'approve-md', 'client-approve'] },
+    { label: 'SM â†’ PM â†’ MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
+    { label: 'Full (SM â†’ PM â†’ Dir â†’ MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
+    { label: 'SM â†’ PM â†’ MD â†’ Client', stages: ['stores-approve', 'approve-pm', 'approve-md', 'client-approve'] },
     { label: 'Full + Client', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md', 'client-approve'] },
   ];
 
@@ -307,7 +307,7 @@ function WorkflowConfigModal({ onClose }) {
           style={{ background: `linear-gradient(135deg, #1a3a6b 0%, #0f2347 100%)` }}>
           <div>
             <h2 className="font-bold text-white text-base flex items-center gap-2">
-              <Settings size={16} className="opacity-70" /> MRS Workflow &amp; Numbering — Per Project
+              <Settings size={16} className="opacity-70" /> MRS Workflow &amp; Numbering â€” Per Project
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
               Configure approval stages and the MR serial number (prefix, shared pool, next number) per project
@@ -336,7 +336,7 @@ function WorkflowConfigModal({ onClose }) {
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-slate-400">
-              <RefreshCw size={18} className="animate-spin mr-2" /> Loading…
+              <RefreshCw size={18} className="animate-spin mr-2" /> Loadingâ€¦
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -501,7 +501,7 @@ export default function MRSPage() {
   const [copySearch, setCopySearch] = useState('');
   const [copyPreviewMRS, setCopyPreviewMRS] = useState(null);
 
-  // All MRS across all projects — used only by the "Copy from MR" modal
+  // All MRS across all projects â€” used only by the "Copy from MR" modal
   const { data: allMRSForCopy = [], isLoading: copyMRSLoading } = useQuery({
     queryKey: ['mrs-all-copy', user?.id],
     queryFn: () => mrsAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
@@ -521,7 +521,7 @@ export default function MRSPage() {
     }
   }, [location.state, mrsData]);
 
-  // Inventory lookup — for material name combobox & current stock check.
+  // Inventory lookup â€” for material name combobox & current stock check.
   // Scoped to the selected project so "Stock" reflects that project's store, not a mix of all projects.
   const { data: inventoryItems = [] } = useQuery({
     queryKey: ['inventory-lookup', formData.project_id],
@@ -534,7 +534,7 @@ export default function MRSPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Vendors — for "Preferred Vendor" dropdown on each item row
+  // Vendors â€” for "Preferred Vendor" dropdown on each item row
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors-list'],
     queryFn: () => vendorAPI.list({ limit: 500 }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
@@ -545,7 +545,7 @@ export default function MRSPage() {
     ...vendors.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type || v.category })),
   ];
 
-  // Budget summary for the selected project — drives "Budget Available" / "After This MR"
+  // Budget summary for the selected project â€” drives "Budget Available" / "After This MR"
   const { data: budgetLines = [] } = useQuery({
     queryKey: ['mrs-budget', formData.project_id],
     queryFn: () => budgetAPI.list({ project_id: formData.project_id }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
@@ -654,7 +654,7 @@ export default function MRSPage() {
 
   const visibleProjects = projectsData ?? [];
 
-  // ── Stock lookup helpers for the requisition item table ─────
+  // â”€â”€ Stock lookup helpers for the requisition item table â”€â”€â”€â”€â”€
   const stockOf = (materialName) => inventoryItems.find(i => i.material_name === materialName);
   const itemStockStatus = (materialName) => {
     const inv = stockOf(materialName);
@@ -700,7 +700,7 @@ export default function MRSPage() {
     }
   }, [showForm, formData.project_id, projectFilter, selectedProjectId, visibleProjects]);
 
-  // Client-side project filter — dropdown narrows the already-fetched dataset
+  // Client-side project filter â€” dropdown narrows the already-fetched dataset
   const rawMRS  = mrsData ?? [];
   const allMRS  = projectFilter !== 'all'
     ? rawMRS.filter(m => m.project_id === projectFilter)
@@ -712,7 +712,7 @@ export default function MRSPage() {
   };
 
   // Only projects that opted into the Client Approval stage make 'approved_md'
-  // a non-final status — everywhere else it's already "done."
+  // a non-final status â€” everywhere else it's already "done."
   const mrsUsesClientApproval = (m) => (m.mrs_workflow?.stages || []).includes('client-approve');
   const isAwaitingClient = (m) => m.status === 'approved_md' && mrsUsesClientApproval(m);
 
@@ -765,7 +765,7 @@ export default function MRSPage() {
     link.download = `MRS_Log_${dayjs().format('YYYY-MM-DD')}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success('Exporting MRS log…');
+    toast.success('Exporting MRS logâ€¦');
   };
 
   const handleDateImport = async (e) => {
@@ -778,7 +778,7 @@ export default function MRSPage() {
       const wb = XLSX.read(ab, { type: 'array', cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      // Find header row — look for columns named "MRS No" / "MRS Number" / "Date" / "Request Date"
+      // Find header row â€” look for columns named "MRS No" / "MRS Number" / "Date" / "Request Date"
       let headerIdx = 0, mrsCol = 0, dateCol = 1;
       for (let i = 0; i < Math.min(5, raw.length); i++) {
         const row = raw[i].map(c => String(c).toLowerCase().trim());
@@ -800,7 +800,7 @@ export default function MRSPage() {
         rows.push({ mrs_number, request_date });
       }
       if (!rows.length) return toast.error('No valid rows found. Check column headers.');
-      toast.loading(`Updating ${rows.length} MRS dates…`, { id: 'date-import' });
+      toast.loading(`Updating ${rows.length} MRS datesâ€¦`, { id: 'date-import' });
       const res = await mrsAPI.bulkUpdateDates(rows);
       toast.success(`Updated ${res.data.updated} MRS, skipped ${res.data.skipped}`, { id: 'date-import' });
       qc.invalidateQueries({ queryKey: ['mrs'] });
@@ -825,11 +825,11 @@ export default function MRSPage() {
     liveStatus;
   const currentAction = stageActions.find(a => a.status === actionableStatus);
 
-  // Role gate — only the designated role sees Approve/Reject buttons
+  // Role gate â€” only the designated role sees Approve/Reject buttons
   const userRoleLower = (user?.role || '').toLowerCase();
   const isGlobalAdmin = ['admin', 'super_admin'].includes(userRoleLower);
   // Client approval is gated by an explicit person allowlist rather than a role
-  // (its allowedRoles is empty by design), so it needs its own check — otherwise
+  // (its allowedRoles is empty by design), so it needs its own check â€” otherwise
   // it would fall through to the role test and never be actionable by anyone.
   const userEmailLower = (user?.email || '').toLowerCase();
   const canActOnCurrent = isGlobalAdmin || (
@@ -992,7 +992,7 @@ export default function MRSPage() {
     cancelItemsMutation.mutate({ id: selectedMRS.id, item_ids: [it.id], reason: reason || null });
   };
 
-  // Admin / PM / Stores may correct an MR's serial number (e.g. a stray -001 → -053)
+  // Admin / PM / Stores may correct an MR's serial number (e.g. a stray -001 â†’ -053)
   const canRenumber = ['admin', 'super_admin', 'managing_director', 'md', 'procurement_manager',
     'procurement', 'project_manager', 'pm', 'stores_manager', 'store_keeper'].includes(userRoleLower);
   const renumberMutation = useMutation({
@@ -1039,7 +1039,7 @@ export default function MRSPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-500 font-medium">Material Requisition • {fmtMRSDate(selectedMRS.request_date || selectedMRS.created_at)}</p>
+              <p className="text-xs text-slate-500 font-medium">Material Requisition â€¢ {fmtMRSDate(selectedMRS.request_date || selectedMRS.created_at)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1127,16 +1127,16 @@ export default function MRSPage() {
                             <td className="px-4 py-3 font-bold text-indigo-700">{it.quantity || it.qty}</td>
                             {['approved_md','client_approved'].includes(liveStatus) && (
                               <td className="px-4 py-3 font-bold text-green-700">
-                                {excluded ? '—' : (it.md_approved_qty ?? it.quantity ?? it.qty)}
+                                {excluded ? 'â€”' : (it.md_approved_qty ?? it.quantity ?? it.qty)}
                               </td>
                             )}
                             <td className="px-4 py-3">
                               {orderedQty > 0
                                 ? <span className="font-bold text-purple-700">{orderedQty}</span>
-                                : <span className="text-slate-400">—</span>}
+                                : <span className="text-slate-400">â€”</span>}
                             </td>
                             <td className="px-4 py-3">
-                              {excluded ? '—' : (
+                              {excluded ? 'â€”' : (
                                 orderedQty > 0
                                   ? <span className={clsx('font-bold', balanceQty > 0 ? 'text-orange-600' : 'text-emerald-600')}>{balanceQty}</span>
                                   : <span className="text-slate-400">{reqQty}</span>
@@ -1179,7 +1179,7 @@ export default function MRSPage() {
                   </div>
                   <div className="p-4 space-y-2">
                     {!detailedMRS ? (
-                      <p className="text-xs text-slate-400">Loading…</p>
+                      <p className="text-xs text-slate-400">Loadingâ€¦</p>
                     ) : detailedMRS.linked_pos?.length ? (
                       detailedMRS.linked_pos.map(po => {
                         const cfg = PO_STATUS_CONFIG[po.status] || PO_STATUS_CONFIG.pending;
@@ -1199,7 +1199,7 @@ export default function MRSPage() {
                             </div>
                             <div className="flex items-center justify-between mt-1.5 text-xs text-slate-500">
                               <span className="truncate">{po.vendor_name || '-'}</span>
-                              <span className="font-semibold text-slate-700">₹{Number(po.grand_total || 0).toLocaleString('en-IN')}</span>
+                              <span className="font-semibold text-slate-700">â‚¹{Number(po.grand_total || 0).toLocaleString('en-IN')}</span>
                             </div>
                             {po.po_date && (
                               <div className="text-[11px] text-slate-400 mt-1">{dayjs(po.po_date).format('DD-MM-YYYY')}</div>
@@ -1252,7 +1252,7 @@ export default function MRSPage() {
                     <dl className="text-xs space-y-1.5">
                       <div className="flex justify-between gap-3">
                         <dt className="text-teal-600">Client contact</dt>
-                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_contact_name || '—'}</dd>
+                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_contact_name || 'â€”'}</dd>
                       </div>
                       {detailedMRS.client_reference_no && (
                         <div className="flex justify-between gap-3">
@@ -1263,12 +1263,12 @@ export default function MRSPage() {
                       <div className="flex justify-between gap-3">
                         <dt className="text-teal-600">Approved on</dt>
                         <dd className="font-semibold text-teal-900 text-right">
-                          {detailedMRS.client_approved_at ? dayjs(detailedMRS.client_approved_at).format('DD MMM YYYY, h:mm A') : '—'}
+                          {detailedMRS.client_approved_at ? dayjs(detailedMRS.client_approved_at).format('DD MMM YYYY, h:mm A') : 'â€”'}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
                         <dt className="text-teal-600">Logged by</dt>
-                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_approved_by_name || '—'}</dd>
+                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_approved_by_name || 'â€”'}</dd>
                       </div>
                       {detailedMRS.client_approval_remarks && (
                         <div className="pt-1.5 mt-1.5 border-t border-teal-200">
@@ -1302,7 +1302,7 @@ export default function MRSPage() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
                           {canActOnCurrent
-                            ? (currentAction.id === 'stores-approve' ? '⚠ Awaiting Stores Verification' : 'Action Required')
+                            ? (currentAction.id === 'stores-approve' ? 'âš  Awaiting Stores Verification' : 'Action Required')
                             : `Awaiting ${currentAction.label} Approval`
                           }
                         </p>
@@ -1310,7 +1310,7 @@ export default function MRSPage() {
                           currentAction.id === 'stores-approve' ? 'text-orange-700' : canActOnCurrent ? 'text-emerald-700' : 'text-slate-500'
                         }`}>{currentAction.label}</p>
                         {!canActOnCurrent && (
-                          <p className="text-[11px] text-slate-400 mt-0.5">This step requires a {currentAction.label} — not your role</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">This step requires a {currentAction.label} â€” not your role</p>
                         )}
                         {currentAction.id === 'stores-approve' && canActOnCurrent && (
                           <p className="text-[11px] text-orange-500 mt-0.5">This MRS must be verified by Stores before proceeding</p>
@@ -1325,7 +1325,7 @@ export default function MRSPage() {
                             disabled={!detailedMRS || approveMutation.isPending}
                             className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-green-700 hover:bg-green-800"
                           >
-                            {!detailedMRS ? 'Loading…' : 'Review & Authorize (MD) →'}
+                            {!detailedMRS ? 'Loadingâ€¦' : 'Review & Authorize (MD) â†’'}
                           </button>
                         ) : currentAction.id === 'client-approve' ? (
                           <button
@@ -1333,7 +1333,7 @@ export default function MRSPage() {
                             disabled={!detailedMRS || approveMutation.isPending}
                             className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-teal-600 hover:bg-teal-700"
                           >
-                            {!detailedMRS ? 'Loading…' : 'Record Client Approval →'}
+                            {!detailedMRS ? 'Loadingâ€¦' : 'Record Client Approval â†’'}
                           </button>
                         ) : (
                           <button
@@ -1341,7 +1341,7 @@ export default function MRSPage() {
                             disabled={approveMutation.isPending}
                             className={`flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 ${currentAction.color || 'bg-emerald-600 hover:bg-emerald-700'}`}
                           >
-                            {approveMutation.isPending ? 'Updating…' : currentAction.btnLabel}
+                            {approveMutation.isPending ? 'Updatingâ€¦' : currentAction.btnLabel}
                           </button>
                         )}
                         <button
@@ -1354,7 +1354,7 @@ export default function MRSPage() {
                           disabled={rejectMutation.isPending}
                           className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-60"
                         >
-                          {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
+                          {rejectMutation.isPending ? 'Rejectingâ€¦' : 'Reject'}
                         </button>
                       </div>
                     )}
@@ -1371,7 +1371,7 @@ export default function MRSPage() {
             module="mrs"
             recordId={selectedMRS.id}
             projectId={selectedMRS.project_id}
-            label="MRS Attachments — Indent Forms, Drawings, Specs"
+            label="MRS Attachments â€” Indent Forms, Drawings, Specs"
             compact
           />
         </div>
@@ -1391,7 +1391,7 @@ export default function MRSPage() {
           />
         )}
 
-        {/* Client Approval Modal — records a decision the client made offline */}
+        {/* Client Approval Modal â€” records a decision the client made offline */}
         {showClientModal && detailedMRS && (
           <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -1465,7 +1465,7 @@ export default function MRSPage() {
                   }}
                   className="flex-[2] h-9 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold disabled:opacity-50"
                 >
-                  {approveMutation.isPending ? 'Saving…' : 'Mark client approved'}
+                  {approveMutation.isPending ? 'Savingâ€¦' : 'Mark client approved'}
                 </button>
               </div>
             </div>
@@ -1483,7 +1483,7 @@ export default function MRSPage() {
           />
         )}
 
-        {/* Hidden print area — react-to-print renders this directly */}
+        {/* Hidden print area â€” react-to-print renders this directly */}
         <div className="hidden">
           <div ref={printRef}>
             <MRSPrintTemplate data={detailedMRS} />
@@ -1494,7 +1494,7 @@ export default function MRSPage() {
     );
   }
 
-  // ── Wizard derived values (New MR form footer / summary panels) ──
+  // â”€â”€ Wizard derived values (New MR form footer / summary panels) â”€â”€
   const readyItems = items.filter(i => i.material && i.qty);
   const itemsWithValue = readyItems.map(i => {
     const qty = parseFloat(i.qty) || 0;
@@ -1505,7 +1505,7 @@ export default function MRSPage() {
   const needPurchaseCount = itemsWithValue.filter(i => !i.stock || i.stock.state === 'out' || i.stock.state === 'low').length;
   const inStockCount = itemsWithValue.filter(i => i.stock && i.stock.state === 'ok').length;
   const afterThisMr = budgetAvailable !== null ? budgetAvailable - estTotalValue : null;
-  const fmtINR = (n) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
+  const fmtINR = (n) => `â‚¹${Math.round(n || 0).toLocaleString('en-IN')}`;
   const requesterInitials = (formData.requester_name || '?')
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 
@@ -1558,7 +1558,7 @@ export default function MRSPage() {
       <div className="p-4 md:p-6 xl:p-8 max-w-[1600px] mx-auto">
 
 
-      {/* ── KPI Row ── */}
+      {/* â”€â”€ KPI Row â”€â”€ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 mb-5">
         <StatCard icon={ClipboardList} label="Total MRS"         value={allMRS.length}       sub="All requisitions"   color="slate"
           onClick={() => setStatusFilter('all')}         active={statusFilter === 'all'} />
@@ -1827,8 +1827,8 @@ export default function MRSPage() {
       </div>
 
 
-      {/* ── Detail Slide-over ── */}
-      {/* ── New MRS Form Modal ── */}
+      {/* â”€â”€ Detail Slide-over â”€â”€ */}
+      {/* â”€â”€ New MRS Form Modal â”€â”€ */}
       {showForm && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
@@ -1836,7 +1836,7 @@ export default function MRSPage() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
               <div className="flex items-center gap-3">
-                <div className="text-xs text-slate-400">Procurement <span className="text-slate-300">›</span> Material Requests <span className="text-slate-300">›</span> <b className="text-slate-700">New MR</b></div>
+                <div className="text-xs text-slate-400">Procurement <span className="text-slate-300">â€º</span> Material Requests <span className="text-slate-300">â€º</span> <b className="text-slate-700">New MR</b></div>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono">Auto-generated</span>
               </div>
               <button
@@ -1853,27 +1853,27 @@ export default function MRSPage() {
             <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
               <div className="flex flex-col lg:flex-row gap-4">
 
-              {/* ── Main column ── */}
+              {/* â”€â”€ Main column â”€â”€ */}
               <div className="flex-1 min-w-0 space-y-5">
 
-              {/* ════════ STEP 1 — Request Info ════════ */}
+              {/* â•â•â•â•â•â•â•â• STEP 1 â€” Request Info â•â•â•â•â•â•â•â• */}
               {step === 1 && <>
               {/* Request Header */}
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Request Header</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5 p-4">
-                  <FormFieldlabel="MR Number">
+                  <FormField label="MR Number">
                     <input className={clsx(Z_INP, 'bg-slate-50 text-slate-400 font-mono')} value="Auto-generated" readOnly />
                   </FormField>
-                  <FormFieldlabel="Request Date *">
+                  <FormField label="Request Date *">
                     <input type="date" className={Z_INP} value={formData.request_date}
                       onChange={e => setFormData(p => ({ ...p, request_date: e.target.value }))} />
                   </FormField>
-                  <FormFieldlabel="Required By Date *">
+                  <FormField label="Required By Date *">
                     <input type="date" className={Z_INP} value={formData.required_by}
                       onChange={e => setFormData(p => ({ ...p, required_by: e.target.value }))} />
                   </FormField>
-                  <FormFieldlabel="MR Type *">
+                  <FormField label="MR Type *">
                     <select className={Z_INP} value={formData.mr_type}
                       onChange={e => setFormData(p => ({ ...p, mr_type: e.target.value }))}>
                       {MR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1881,23 +1881,23 @@ export default function MRSPage() {
                   </FormField>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 px-4 pb-4">
-                  <FormFieldlabel="Project / Site *">
+                  <FormField label="Project / Site *">
                     <SearchableSelect
                       value={formData.project_id}
                       onChange={v => setFormData(p => ({ ...p, project_id: v }))}
                       options={visibleProjects.map(proj => ({ value: proj.id, label: proj.name }))}
-                      placeholder="Select project…"
-                      searchPlaceholder="Search projects…"
+                      placeholder="Select projectâ€¦"
+                      searchPlaceholder="Search projectsâ€¦"
                       footerLabel="projects"
                       className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
                     />
                   </FormField>
-                  <FormFieldlabel="Work Order / BOQ Reference">
-                    <input className={Z_INP} placeholder="e.g. WO-2026-041 – Civil Works"
+                  <FormField label="Work Order / BOQ Reference">
+                    <input className={Z_INP} placeholder="e.g. WO-2026-041 â€“ Civil Works"
                       value={formData.wo_boq_reference}
                       onChange={e => setFormData(p => ({ ...p, wo_boq_reference: e.target.value }))} />
                   </FormField>
-                  <FormFieldlabel="Cost Center">
+                  <FormField label="Cost Center">
                     <input className={Z_INP} list="cost-centers" placeholder="Select / type cost center"
                       value={formData.cost_center}
                       onChange={e => setFormData(p => ({ ...p, cost_center: e.target.value }))} />
@@ -1905,7 +1905,7 @@ export default function MRSPage() {
                   </FormField>
                 </div>
                 <div className="px-4 pb-4">
-                  <FormFieldlabel="Priority *">
+                  <FormField label="Priority *">
                     <div className="flex gap-2 h-9">
                       {Object.entries(PRIORITY_CONFIG).map(([v, c]) => (
                         <button key={v} type="button"
@@ -1926,12 +1926,12 @@ export default function MRSPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
                   <div className="space-y-3.5">
                     <div className="grid grid-cols-2 gap-3.5">
-                      <FormFieldlabel="Requester Name *">
+                      <FormField label="Requester Name *">
                         <input className={Z_INP} placeholder="Full name" value={formData.requester_name}
                           onChange={e => setFormData(p => ({ ...p, requester_name: e.target.value }))} />
                       </FormField>
-                      <FormFieldlabel="Employee ID">
-                        <input className={clsx(Z_INP, 'font-mono')} placeholder="BCIM-EMP-…" value={formData.requester_employee_id}
+                      <FormField label="Employee ID">
+                        <input className={clsx(Z_INP, 'font-mono')} placeholder="BCIM-EMP-â€¦" value={formData.requester_employee_id}
                           onChange={e => setFormData(p => ({ ...p, requester_employee_id: e.target.value }))} />
                       </FormField>
                     </div>
@@ -1939,7 +1939,7 @@ export default function MRSPage() {
                       <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{requesterInitials}</div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-blue-700 truncate">{formData.requester_name || 'Requester'}</p>
-                        <p className="text-[11px] text-slate-600 truncate">{formData.department || '—'}{formData.project_id ? ` · ${visibleProjects.find(p => p.id === formData.project_id)?.name || ''}` : ''}</p>
+                        <p className="text-[11px] text-slate-600 truncate">{formData.department || 'â€”'}{formData.project_id ? ` Â· ${visibleProjects.find(p => p.id === formData.project_id)?.name || ''}` : ''}</p>
                         <div className="flex gap-1.5 mt-1">
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Active</span>
                         </div>
@@ -1948,36 +1948,36 @@ export default function MRSPage() {
                   </div>
                   <div className="space-y-3.5">
                     <div className="grid grid-cols-2 gap-3.5">
-                      <FormFieldlabel="Department *">
+                      <FormField label="Department *">
                         <SearchableSelect
                           value={formData.department}
                           onChange={v => setFormData(p => ({ ...p, department: v }))}
                           options={DEPARTMENT_OPTIONS}
-                          placeholder="Select department…"
-                          searchPlaceholder="Search departments…"
+                          placeholder="Select departmentâ€¦"
+                          searchPlaceholder="Search departmentsâ€¦"
                           footerLabel="departments"
                           className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
                         />
                       </FormField>
-                      <FormFieldlabel="Delivery Location">
+                      <FormField label="Delivery Location">
                         <input className={Z_INP} list="delivery-locations" placeholder="Select / type location"
                           value={formData.delivery_location}
                           onChange={e => setFormData(p => ({ ...p, delivery_location: e.target.value }))} />
                         <datalist id="delivery-locations">{DELIVERY_LOCATION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
                       </FormField>
                     </div>
-                    <FormFieldlabel="Contact / Mobile">
-                      <input className={Z_INP} placeholder="+91 …" value={formData.requester_contact}
+                    <FormField label="Contact / Mobile">
+                      <input className={Z_INP} placeholder="+91 â€¦" value={formData.requester_contact}
                         onChange={e => setFormData(p => ({ ...p, requester_contact: e.target.value }))} />
                     </FormField>
-                    <FormFieldlabel="Email for Notification">
-                      <input type="email" className={Z_INP} placeholder="name@bcim…" value={formData.requester_email}
+                    <FormField label="Email for Notification">
+                      <input type="email" className={Z_INP} placeholder="name@bcimâ€¦" value={formData.requester_email}
                         onChange={e => setFormData(p => ({ ...p, requester_email: e.target.value }))} />
                     </FormField>
                   </div>
                 </div>
                 <div className="px-4 pb-4">
-                  <FormFieldlabel="Site Incharge">
+                  <FormField label="Site Incharge">
                     <input className={Z_INP} placeholder="Enter name" value={formData.site_incharge}
                       onChange={e => setFormData(p => ({ ...p, site_incharge: e.target.value }))} />
                   </FormField>
@@ -1985,7 +1985,7 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* ════════ STEP 2 — Material Items ════════ */}
+              {/* â•â•â•â•â•â•â•â• STEP 2 â€” Material Items â•â•â•â•â•â•â•â• */}
               {step === 2 && <>
               <div className="flex gap-2.5 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
                 <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
@@ -2046,7 +2046,7 @@ export default function MRSPage() {
                         />
                         <select className={clsx(Z_INP, '!px-2')} value={item.category}
                           onChange={e => { const n = [...items]; n[idx].category = e.target.value; setItems(n); }}>
-                          <option value="">—</option>
+                          <option value="">â€”</option>
                           {ITEM_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <select className={clsx(Z_INP, '!px-1')} value={item.unit}
@@ -2057,9 +2057,9 @@ export default function MRSPage() {
                           onChange={e => { const n = [...items]; n[idx].qty = e.target.value; setItems(n); }} />
                         <input type="number" placeholder="0" className={clsx(Z_INP, 'text-right font-mono !px-2')} value={item.est_rate}
                           onChange={e => { const n = [...items]; n[idx].est_rate = e.target.value; setItems(n); }} />
-                        <div className="text-right font-mono text-xs font-semibold text-slate-700">{estVal ? estVal.toLocaleString('en-IN') : '—'}</div>
+                        <div className="text-right font-mono text-xs font-semibold text-slate-700">{estVal ? estVal.toLocaleString('en-IN') : 'â€”'}</div>
                         <div className="flex justify-center">
-                          {!item.material ? <span className="text-xs text-slate-300">—</span> :
+                          {!item.material ? <span className="text-xs text-slate-300">â€”</span> :
                            !stock ? <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">New</span> :
                            stock.state === 'out' ? <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Nil</span> :
                            stock.state === 'low' ? <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Low ({stock.value})</span> :
@@ -2098,37 +2098,37 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* ════════ STEP 3 — Justification ════════ */}
+              {/* â•â•â•â•â•â•â•â• STEP 3 â€” Justification â•â•â•â•â•â•â•â• */}
               {step === 3 && <>
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Justification &amp; Notes</h3>
                 <div className="p-4 space-y-3.5">
-                  <FormFieldlabel="Reason / Justification *">
+                  <FormField label="Reason / Justification *">
                     <textarea rows={3} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
                       placeholder="Why are these materials required?"
                       value={formData.justification}
                       onChange={e => setFormData(p => ({ ...p, justification: e.target.value }))} />
                   </FormField>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    <FormFieldlabel="Linked Activity / Milestone">
-                      <input className={Z_INP} placeholder="e.g. L3 Slab Casting – Block A"
+                    <FormField label="Linked Activity / Milestone">
+                      <input className={Z_INP} placeholder="e.g. L3 Slab Casting â€“ Block A"
                         value={formData.linked_activity}
                         onChange={e => setFormData(p => ({ ...p, linked_activity: e.target.value }))} />
                     </FormField>
-                    <FormFieldlabel="Planned Usage Date">
+                    <FormField label="Planned Usage Date">
                       <input type="date" className={Z_INP} value={formData.planned_usage_date}
                         onChange={e => setFormData(p => ({ ...p, planned_usage_date: e.target.value }))} />
                     </FormField>
                   </div>
-                  <FormFieldlabel="Special Handling / Instructions">
+                  <FormField label="Special Handling / Instructions">
                     <textarea rows={2} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
-                      placeholder="Any special storage, safety, or handling notes…"
+                      placeholder="Any special storage, safety, or handling notesâ€¦"
                       value={formData.special_handling}
                       onChange={e => setFormData(p => ({ ...p, special_handling: e.target.value }))} />
                   </FormField>
-                  <FormFieldlabel="Remarks">
+                  <FormField label="Remarks">
                     <textarea rows={2} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
-                      placeholder="Additional notes…"
+                      placeholder="Additional notesâ€¦"
                       value={formData.remarks}
                       onChange={e => setFormData(p => ({ ...p, remarks: e.target.value }))} />
                   </FormField>
@@ -2152,7 +2152,7 @@ export default function MRSPage() {
                       dragOver ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/30')}>
                     <Upload className="w-5 h-5 text-blue-500" />
                     <span className="text-sm font-medium text-slate-700">Drag &amp; drop BOQ extracts, drawings, or site photos here</span>
-                    <span className="text-xs text-slate-400">PDF, JPG, PNG, XLSX, DWG – max 10MB each</span>
+                    <span className="text-xs text-slate-400">PDF, JPG, PNG, XLSX, DWG â€“ max 10MB each</span>
                     <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.xlsx,.dwg" className="hidden"
                       onChange={e => { const files = Array.from(e.target.files || []); if (files.length) setAttachments(a => [...a, ...files]); e.target.value = ''; }} />
                   </label>
@@ -2176,19 +2176,19 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* ════════ STEP 4 — Review & Submit ════════ */}
+              {/* â•â•â•â•â•â•â•â• STEP 4 â€” Review & Submit â•â•â•â•â•â•â•â• */}
               {step === 4 && <>
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Request Header</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 p-4 text-sm">
                   {[
-                    ['Project', visibleProjects.find(p => p.id === formData.project_id)?.name || '—'],
+                    ['Project', visibleProjects.find(p => p.id === formData.project_id)?.name || 'â€”'],
                     ['MR Type', formData.mr_type],
-                    ['Request Date', formData.request_date ? dayjs(formData.request_date).format('DD-MM-YYYY') : '—'],
-                    ['Required By', formData.required_by ? dayjs(formData.required_by).format('DD-MM-YYYY') : '—'],
-                    ['Cost Center', formData.cost_center || '—'],
-                    ['WO / BOQ Ref', formData.wo_boq_reference || '—'],
-                    ['Department', formData.department || '—'],
+                    ['Request Date', formData.request_date ? dayjs(formData.request_date).format('DD-MM-YYYY') : 'â€”'],
+                    ['Required By', formData.required_by ? dayjs(formData.required_by).format('DD-MM-YYYY') : 'â€”'],
+                    ['Cost Center', formData.cost_center || 'â€”'],
+                    ['WO / BOQ Ref', formData.wo_boq_reference || 'â€”'],
+                    ['Department', formData.department || 'â€”'],
                     ['Priority', `${PRIORITY_CONFIG[normalizePriority(formData.priority)].emoji} ${PRIORITY_CONFIG[normalizePriority(formData.priority)].label}`],
                   ].map(([l, v]) => (
                     <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-black truncate">{v}</p></div>
@@ -2200,12 +2200,12 @@ export default function MRSPage() {
                 <h3 className={Z_HEAD}>Requested By</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 p-4 text-sm">
                   {[
-                    ['Requester', formData.requester_name || '—'],
-                    ['Employee ID', formData.requester_employee_id || '—'],
-                    ['Contact', formData.requester_contact || '—'],
-                    ['Email', formData.requester_email || '—'],
-                    ['Delivery Location', formData.delivery_location || '—'],
-                    ['Site Incharge', formData.site_incharge || '—'],
+                    ['Requester', formData.requester_name || 'â€”'],
+                    ['Employee ID', formData.requester_employee_id || 'â€”'],
+                    ['Contact', formData.requester_contact || 'â€”'],
+                    ['Email', formData.requester_email || 'â€”'],
+                    ['Delivery Location', formData.delivery_location || 'â€”'],
+                    ['Site Incharge', formData.site_incharge || 'â€”'],
                   ].map(([l, v]) => (
                     <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-black truncate">{v}</p></div>
                   ))}
@@ -2231,8 +2231,8 @@ export default function MRSPage() {
                           <td className="px-3 py-2 font-medium text-black">{i.material}</td>
                           <td className="px-3 py-2 text-right font-mono">{i.qty}</td>
                           <td className="px-3 py-2">{i.unit}</td>
-                          <td className="px-3 py-2 text-right font-mono">{i.est_rate ? parseFloat(i.est_rate).toLocaleString('en-IN') : '—'}</td>
-                          <td className="px-3 py-2 text-right font-mono font-semibold">{i.estValue ? i.estValue.toLocaleString('en-IN') : '—'}</td>
+                          <td className="px-3 py-2 text-right font-mono">{i.est_rate ? parseFloat(i.est_rate).toLocaleString('en-IN') : 'â€”'}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold">{i.estValue ? i.estValue.toLocaleString('en-IN') : 'â€”'}</td>
                           <td className="px-3 py-2 text-center">{!i.stock ? 'New' : i.stock.state === 'out' ? 'Nil' : i.stock.state === 'low' ? `Low` : 'OK'}</td>
                         </tr>
                       ))}
@@ -2277,18 +2277,18 @@ export default function MRSPage() {
 
               </div>
 
-              {/* ── Sidebar (visible all steps) ── */}
+              {/* â”€â”€ Sidebar (visible all steps) â”€â”€ */}
               <div className="w-full lg:w-[300px] shrink-0 space-y-4">
                 {/* MR Summary panel */}
                 <div className="rounded-md border border-slate-200 overflow-hidden bg-white">
-                  <div className="px-4 py-2.5 bg-blue-600 text-white text-xs font-semibold uppercase tracking-wide">📋 MR Summary</div>
+                  <div className="px-4 py-2.5 bg-blue-600 text-white text-xs font-semibold uppercase tracking-wide">ðŸ“‹ MR Summary</div>
                   {[
                     ['Total Items', readyItems.length, ''],
                     ['Need Purchase', `${needPurchaseCount} items`, 'text-rose-600'],
                     ['Available in Stock', `${inStockCount} item${inStockCount === 1 ? '' : 's'}`, 'text-emerald-600'],
                     ['Est. Total Value', fmtINR(estTotalValue), ''],
                     ['Priority', `${PRIORITY_CONFIG[normalizePriority(formData.priority)].emoji} ${PRIORITY_CONFIG[normalizePriority(formData.priority)].label}`, ''],
-                    ['Required By', formData.required_by ? dayjs(formData.required_by).format('DD-MM-YYYY') : '—', ''],
+                    ['Required By', formData.required_by ? dayjs(formData.required_by).format('DD-MM-YYYY') : 'â€”', ''],
                   ].map(([l, v, c]) => (
                     <div key={l} className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 text-xs">
                       <span className="text-slate-500">{l}</span>
@@ -2297,12 +2297,12 @@ export default function MRSPage() {
                   ))}
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-blue-50 text-xs">
                     <span className="text-blue-700 font-semibold">Budget Available</span>
-                    <span className="font-mono font-bold text-blue-700">{budgetAvailable !== null ? fmtINR(budgetAvailable) : '—'}</span>
+                    <span className="font-mono font-bold text-blue-700">{budgetAvailable !== null ? fmtINR(budgetAvailable) : 'â€”'}</span>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2.5 text-xs">
                     <span className="text-slate-500">After This MR</span>
                     <span className={clsx('font-mono font-semibold', afterThisMr !== null && afterThisMr < 0 ? 'text-rose-600' : 'text-emerald-600')}>
-                      {afterThisMr !== null ? `${fmtINR(afterThisMr)} left` : '—'}
+                      {afterThisMr !== null ? `${fmtINR(afterThisMr)} left` : 'â€”'}
                     </span>
                   </div>
                 </div>
@@ -2345,7 +2345,7 @@ export default function MRSPage() {
                           <div key={m.id} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{fmtMRSDate(m.request_date || m.created_at)} · {m.item_count ?? '—'} items</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">{fmtMRSDate(m.request_date || m.created_at)} Â· {m.item_count ?? 'â€”'} items</p>
                             </div>
                             <StatusBadge status={m.status} />
                           </div>
@@ -2399,7 +2399,7 @@ export default function MRSPage() {
                   <button onClick={handleSubmit} disabled={createMutation.isPending}
                     className="inline-flex items-center gap-2 px-5 h-9 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50">
                     <Send className="w-4 h-4" />
-                    {createMutation.isPending ? 'Submitting…' : 'Submit for Approval'}
+                    {createMutation.isPending ? 'Submittingâ€¦' : 'Submit for Approval'}
                   </button>
                 )}
               </div>
@@ -2408,7 +2408,7 @@ export default function MRSPage() {
         </div>
       )}
 
-      {/* ═══ Copy Items from Existing MR Modal ═══ */}
+      {/* â•â•â• Copy Items from Existing MR Modal â•â•â• */}
       {showCopyModal && (() => {
         const needle = copySearch.trim().toLowerCase();
         const filtered = allMRSForCopy.filter(m =>
@@ -2444,7 +2444,7 @@ export default function MRSPage() {
                   <input
                     autoFocus
                     className="w-full pl-8 pr-3 h-9 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Search by MR number, project or department…"
+                    placeholder="Search by MR number, project or departmentâ€¦"
                     value={copySearch}
                     onChange={e => { setCopySearch(e.target.value); setCopyPreviewMRS(null); }}
                   />
@@ -2454,7 +2454,7 @@ export default function MRSPage() {
                 {/* MR list */}
                 <div className="w-80 flex-shrink-0 border-r border-slate-100 overflow-y-auto">
                   {copyMRSLoading ? (
-                    <div className="flex items-center justify-center h-24 text-xs text-slate-400">Loading…</div>
+                    <div className="flex items-center justify-center h-24 text-xs text-slate-400">Loadingâ€¦</div>
                   ) : filtered.length === 0 ? (
                     <div className="flex items-center justify-center h-24 text-xs text-slate-400">No MRs found</div>
                   ) : filtered.map(m => {
@@ -2469,8 +2469,8 @@ export default function MRSPage() {
                           <span className="text-xs font-bold text-black font-mono truncate">{label}</span>
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">{itemCount} items</span>
                         </div>
-                        <div className="text-[11px] text-slate-500 truncate mt-0.5">{m.project_name || '—'}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{m.department || ''}{m.department && m.status ? ' · ' : ''}{m.status || ''}</div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">{m.project_name || 'â€”'}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{m.department || ''}{m.department && m.status ? ' Â· ' : ''}{m.status || ''}</div>
                       </button>
                     );
                   })}
@@ -2499,8 +2499,8 @@ export default function MRSPage() {
                           <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60' : ''}>
                             <td className="px-3 py-2 text-slate-400 font-mono">{idx + 1}</td>
                             <td className="px-3 py-2 text-black font-medium">{it.material_name || it.material}</td>
-                            <td className="px-3 py-2 text-right font-mono text-slate-700">{it.quantity || it.qty || '—'}</td>
-                            <td className="px-3 py-2 text-slate-500">{it.unit || '—'}</td>
+                            <td className="px-3 py-2 text-right font-mono text-slate-700">{it.quantity || it.qty || 'â€”'}</td>
+                            <td className="px-3 py-2 text-slate-500">{it.unit || 'â€”'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2549,7 +2549,7 @@ export default function MRSPage() {
         );
       })()}
 
-      {/* ── New Inventory Item Modal ── */}
+      {/* â”€â”€ New Inventory Item Modal â”€â”€ */}
       {showNewItemModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
@@ -2591,7 +2591,7 @@ export default function MRSPage() {
                         value={newItemForm.category}
                         onChange={e => setNewItemForm(f => ({ ...f, category: e.target.value }))}
                       >
-                        <option value="">— Select category —</option>
+                        <option value="">â€” Select category â€”</option>
                         {[...new Set([...DEFAULT_CATEGORIES, ...existingCategories])].sort().map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
                       <button
@@ -2607,7 +2607,7 @@ export default function MRSPage() {
                       <input
                         autoFocus
                         className="flex-1 h-9 bg-slate-50 border border-indigo-300 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
-                        placeholder="Type new category name…"
+                        placeholder="Type new category nameâ€¦"
                         value={newItemForm.category_custom}
                         onChange={e => setNewItemForm(f => ({ ...f, category_custom: e.target.value }))}
                       />
@@ -2616,13 +2616,13 @@ export default function MRSPage() {
                         onClick={() => { setCategoryMode('select'); setNewItemForm(f => ({ ...f, category_custom: '' })); }}
                         className="flex items-center gap-1 px-3 h-9 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 transition-colors"
                       >
-                        ← Back
+                        â† Back
                       </button>
                     </div>
                   )}
                   {categoryMode === 'custom' && newItemForm.category_custom && (
                     <p className="text-xs text-indigo-600 font-bold">
-                      ✓ New category "<span className="font-bold">{newItemForm.category_custom}</span>" will be created
+                      âœ“ New category "<span className="font-bold">{newItemForm.category_custom}</span>" will be created
                     </p>
                   )}
                 </div>
@@ -2669,7 +2669,7 @@ export default function MRSPage() {
                 }}
                 className="px-5 h-9 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-sm"
               >
-                {addInventoryItemMutation.isPending ? 'Adding…' : 'Add to Store Ledger'}
+                {addInventoryItemMutation.isPending ? 'Addingâ€¦' : 'Add to Store Ledger'}
               </button>
             </div>
           </div>
@@ -2677,7 +2677,7 @@ export default function MRSPage() {
       )}
 
 
-      {/* ── Workflow Config Modal ── */}
+      {/* â”€â”€ Workflow Config Modal â”€â”€ */}
       {showWorkflowConfig && (
         <WorkflowConfigModal onClose={() => setShowWorkflowConfig(false)} />
       )}
@@ -2696,7 +2696,7 @@ function Field({ label, children }) {
   );
 }
 
-/* ── StatCard — modern white KPI tile (icon chip · big value · accent · click-to-filter) ── */
+/* â”€â”€ StatCard â€” modern white KPI tile (icon chip Â· big value Â· accent Â· click-to-filter) â”€â”€ */
 function StatCard({ icon: Icon, label, value, sub, color = 'slate', onClick, active = false }) {
   const C = {
     slate:   { chip: 'bg-slate-100 text-slate-600',     bar: 'bg-slate-400',   ring: 'ring-slate-300' },
@@ -2751,7 +2751,7 @@ function InsightCard({ icon: Icon, label, value, sub, tone = 'slate' }) {
   );
 }
 
-/* ── MD Authorization Modal ─────────────────────────────────────────────── */
+/* â”€â”€ MD Authorization Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
   const [approvedItems, setApprovedItems] = useState(() =>
     items.map(it => ({
@@ -2783,7 +2783,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
               <Landmark size={16} className="opacity-80" /> MD Authorization
             </h2>
             <p className="text-xs text-green-200 mt-0.5">
-              {mrs.serial_no_formatted || mrs.mrs_number} — select items &amp; set approved quantities
+              {mrs.serial_no_formatted || mrs.mrs_number} â€” select items &amp; set approved quantities
             </p>
           </div>
           <button onClick={onClose}
@@ -2795,7 +2795,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
         {/* Toolbar */}
         <div className="flex items-center justify-between px-5 py-2.5 bg-green-50 border-b border-green-100 flex-shrink-0">
           <p className="text-xs text-green-800 font-medium">
-            Check items to include · edit quantities if needed · uncheck to exclude
+            Check items to include Â· edit quantities if needed Â· uncheck to exclude
           </p>
           <div className="flex items-center gap-2">
             <button onClick={selectAll} className="text-[10px] font-bold text-green-700 hover:underline">Select All</button>
@@ -2845,7 +2845,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
             rows={2}
             value={remarks}
             onChange={e => setRemarks(e.target.value)}
-            placeholder="Authorization notes, conditions, or special instructions…"
+            placeholder="Authorization notes, conditions, or special instructionsâ€¦"
             className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-green-400 resize-none transition"
           />
         </div>
@@ -2875,7 +2875,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
               disabled={loading || includedCount === 0}
               className="px-5 h-9 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition shadow-sm"
             >
-              {loading ? 'Authorizing…' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} →`}
+              {loading ? 'Authorizingâ€¦' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} â†’`}
             </button>
           </div>
         </div>
@@ -2884,9 +2884,9 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
   );
 }
 
-// ── MD Edit Modal — correct an MRS's header/item details ──────────────────────
+// â”€â”€ MD Edit Modal â€” correct an MRS's header/item details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Existing items are kept and updated in place (id preserved); new rows have no
-// id and are appended. Items are never removed here — that stays on
+// id and are appended. Items are never removed here â€” that stays on
 // /cancel-items so removals stay audit-tracked.
 function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
   const [form, setForm] = useState({
@@ -2924,7 +2924,7 @@ function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
               <Pencil size={16} className="opacity-80" /> Edit Material Requisition
             </h2>
             <p className="text-xs text-blue-200 mt-0.5">
-              {mrs.serial_no_formatted || mrs.mrs_number} — Managing Director correction
+              {mrs.serial_no_formatted || mrs.mrs_number} â€” Managing Director correction
             </p>
           </div>
           <button onClick={onClose}
@@ -3002,7 +3002,7 @@ function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
               ))}
             </div>
             <p className="text-[11px] text-slate-400 mt-1.5">
-              Existing items can be corrected here but not removed — use "Cancel" on the requisition detail to drop an item (kept for audit).
+              Existing items can be corrected here but not removed â€” use "Cancel" on the requisition detail to drop an item (kept for audit).
             </p>
           </div>
         </div>
@@ -3029,7 +3029,7 @@ function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
               disabled={loading || !canSave}
               className="px-5 h-9 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 transition shadow-sm"
             >
-              {loading ? 'Saving…' : 'Save Changes'}
+              {loading ? 'Savingâ€¦' : 'Save Changes'}
             </button>
           </div>
         </div>
@@ -3037,4 +3037,5 @@ function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
     </div>
   );
 }
+
 
