@@ -33,7 +33,7 @@ import { useReactToPrint } from 'react-to-print';
 
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 import { Z_INP, Z_CARD, Z_HEAD } from '../../constants/zohoStyles';
-import ZField from '../../components/shared/ZField';
+import FormField from '../../components/shared/FormField';
 const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 const MR_TYPE_OPTIONS = ['New Purchase', 'Internal Transfer', 'Return to Store', 'Tool & Equipment'];
@@ -1862,26 +1862,26 @@ export default function MRSPage() {
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Request Header</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5 p-4">
-                  <ZField label="MR Number">
+                  <FormFieldlabel="MR Number">
                     <input className={clsx(Z_INP, 'bg-slate-50 text-slate-400 font-mono')} value="Auto-generated" readOnly />
-                  </ZField>
-                  <ZField label="Request Date *">
+                  </FormField>
+                  <FormFieldlabel="Request Date *">
                     <input type="date" className={Z_INP} value={formData.request_date}
                       onChange={e => setFormData(p => ({ ...p, request_date: e.target.value }))} />
-                  </ZField>
-                  <ZField label="Required By Date *">
+                  </FormField>
+                  <FormFieldlabel="Required By Date *">
                     <input type="date" className={Z_INP} value={formData.required_by}
                       onChange={e => setFormData(p => ({ ...p, required_by: e.target.value }))} />
-                  </ZField>
-                  <ZField label="MR Type *">
+                  </FormField>
+                  <FormFieldlabel="MR Type *">
                     <select className={Z_INP} value={formData.mr_type}
                       onChange={e => setFormData(p => ({ ...p, mr_type: e.target.value }))}>
                       {MR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                  </ZField>
+                  </FormField>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 px-4 pb-4">
-                  <ZField label="Project / Site *">
+                  <FormFieldlabel="Project / Site *">
                     <SearchableSelect
                       value={formData.project_id}
                       onChange={v => setFormData(p => ({ ...p, project_id: v }))}
@@ -1891,21 +1891,21 @@ export default function MRSPage() {
                       footerLabel="projects"
                       className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
                     />
-                  </ZField>
-                  <ZField label="Work Order / BOQ Reference">
+                  </FormField>
+                  <FormFieldlabel="Work Order / BOQ Reference">
                     <input className={Z_INP} placeholder="e.g. WO-2026-041 – Civil Works"
                       value={formData.wo_boq_reference}
                       onChange={e => setFormData(p => ({ ...p, wo_boq_reference: e.target.value }))} />
-                  </ZField>
-                  <ZField label="Cost Center">
+                  </FormField>
+                  <FormFieldlabel="Cost Center">
                     <input className={Z_INP} list="cost-centers" placeholder="Select / type cost center"
                       value={formData.cost_center}
                       onChange={e => setFormData(p => ({ ...p, cost_center: e.target.value }))} />
                     <datalist id="cost-centers">{COST_CENTER_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
-                  </ZField>
+                  </FormField>
                 </div>
                 <div className="px-4 pb-4">
-                  <ZField label="Priority *">
+                  <FormFieldlabel="Priority *">
                     <div className="flex gap-2 h-9">
                       {Object.entries(PRIORITY_CONFIG).map(([v, c]) => (
                         <button key={v} type="button"
@@ -1916,7 +1916,7 @@ export default function MRSPage() {
                         </button>
                       ))}
                     </div>
-                  </ZField>
+                  </FormField>
                 </div>
               </div>
 
@@ -1926,14 +1926,14 @@ export default function MRSPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
                   <div className="space-y-3.5">
                     <div className="grid grid-cols-2 gap-3.5">
-                      <ZField label="Requester Name *">
+                      <FormFieldlabel="Requester Name *">
                         <input className={Z_INP} placeholder="Full name" value={formData.requester_name}
                           onChange={e => setFormData(p => ({ ...p, requester_name: e.target.value }))} />
-                      </ZField>
-                      <ZField label="Employee ID">
+                      </FormField>
+                      <FormFieldlabel="Employee ID">
                         <input className={clsx(Z_INP, 'font-mono')} placeholder="BCIM-EMP-…" value={formData.requester_employee_id}
                           onChange={e => setFormData(p => ({ ...p, requester_employee_id: e.target.value }))} />
-                      </ZField>
+                      </FormField>
                     </div>
                     <div className="flex gap-3 items-center rounded-md border border-blue-100 bg-blue-50 px-3.5 py-3">
                       <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{requesterInitials}</div>
@@ -1948,7 +1948,7 @@ export default function MRSPage() {
                   </div>
                   <div className="space-y-3.5">
                     <div className="grid grid-cols-2 gap-3.5">
-                      <ZField label="Department *">
+                      <FormFieldlabel="Department *">
                         <SearchableSelect
                           value={formData.department}
                           onChange={v => setFormData(p => ({ ...p, department: v }))}
@@ -1958,29 +1958,29 @@ export default function MRSPage() {
                           footerLabel="departments"
                           className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
                         />
-                      </ZField>
-                      <ZField label="Delivery Location">
+                      </FormField>
+                      <FormFieldlabel="Delivery Location">
                         <input className={Z_INP} list="delivery-locations" placeholder="Select / type location"
                           value={formData.delivery_location}
                           onChange={e => setFormData(p => ({ ...p, delivery_location: e.target.value }))} />
                         <datalist id="delivery-locations">{DELIVERY_LOCATION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
-                      </ZField>
+                      </FormField>
                     </div>
-                    <ZField label="Contact / Mobile">
+                    <FormFieldlabel="Contact / Mobile">
                       <input className={Z_INP} placeholder="+91 …" value={formData.requester_contact}
                         onChange={e => setFormData(p => ({ ...p, requester_contact: e.target.value }))} />
-                    </ZField>
-                    <ZField label="Email for Notification">
+                    </FormField>
+                    <FormFieldlabel="Email for Notification">
                       <input type="email" className={Z_INP} placeholder="name@bcim…" value={formData.requester_email}
                         onChange={e => setFormData(p => ({ ...p, requester_email: e.target.value }))} />
-                    </ZField>
+                    </FormField>
                   </div>
                 </div>
                 <div className="px-4 pb-4">
-                  <ZField label="Site Incharge">
+                  <FormFieldlabel="Site Incharge">
                     <input className={Z_INP} placeholder="Enter name" value={formData.site_incharge}
                       onChange={e => setFormData(p => ({ ...p, site_incharge: e.target.value }))} />
-                  </ZField>
+                  </FormField>
                 </div>
               </div>
               </>}
@@ -2103,35 +2103,35 @@ export default function MRSPage() {
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Justification &amp; Notes</h3>
                 <div className="p-4 space-y-3.5">
-                  <ZField label="Reason / Justification *">
+                  <FormFieldlabel="Reason / Justification *">
                     <textarea rows={3} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
                       placeholder="Why are these materials required?"
                       value={formData.justification}
                       onChange={e => setFormData(p => ({ ...p, justification: e.target.value }))} />
-                  </ZField>
+                  </FormField>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    <ZField label="Linked Activity / Milestone">
+                    <FormFieldlabel="Linked Activity / Milestone">
                       <input className={Z_INP} placeholder="e.g. L3 Slab Casting – Block A"
                         value={formData.linked_activity}
                         onChange={e => setFormData(p => ({ ...p, linked_activity: e.target.value }))} />
-                    </ZField>
-                    <ZField label="Planned Usage Date">
+                    </FormField>
+                    <FormFieldlabel="Planned Usage Date">
                       <input type="date" className={Z_INP} value={formData.planned_usage_date}
                         onChange={e => setFormData(p => ({ ...p, planned_usage_date: e.target.value }))} />
-                    </ZField>
+                    </FormField>
                   </div>
-                  <ZField label="Special Handling / Instructions">
+                  <FormFieldlabel="Special Handling / Instructions">
                     <textarea rows={2} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
                       placeholder="Any special storage, safety, or handling notes…"
                       value={formData.special_handling}
                       onChange={e => setFormData(p => ({ ...p, special_handling: e.target.value }))} />
-                  </ZField>
-                  <ZField label="Remarks">
+                  </FormField>
+                  <FormFieldlabel="Remarks">
                     <textarea rows={2} className={clsx(Z_INP, 'h-auto py-2 resize-none')}
                       placeholder="Additional notes…"
                       value={formData.remarks}
                       onChange={e => setFormData(p => ({ ...p, remarks: e.target.value }))} />
-                  </ZField>
+                  </FormField>
                 </div>
               </div>
 

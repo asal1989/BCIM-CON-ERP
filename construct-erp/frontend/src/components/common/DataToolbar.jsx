@@ -49,10 +49,10 @@ export default function DataToolbar({
         <button className="btn-secondary flex items-center gap-2 border-white/10 hover:bg-white/5 py-1.5 px-3">
           <Upload size={14} /> <span className="hidden sm:inline text-[10px] font-medium uppercase tracking-widest">Import</span>
         </button>
-        <input 
-          type="file" 
-          accept=".csv,.pdf,.jpg,.jpeg,.png" 
-          onChange={handleFileChange} 
+        <input
+          type="file"
+          accept=".csv,.xlsx"
+          onChange={handleFileChange}
           className="absolute inset-0 opacity-0 cursor-pointer" 
           disabled={!onImport}
         />

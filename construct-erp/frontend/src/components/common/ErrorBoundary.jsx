@@ -34,8 +34,8 @@ class ErrorBoundary extends React.Component {
             alignItems: 'center',
             justifyContent: 'center',
             minHeight: '100vh',
-            background: '#0f172a',
-            color: '#f1f5f9',
+            background: '#ffffff',
+            color: '#0f172a',
             fontFamily: 'system-ui, sans-serif',
             padding: '2rem',
             textAlign: 'center',
@@ -45,15 +45,15 @@ class ErrorBoundary extends React.Component {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
             Something went wrong
           </h1>
-          <p style={{ color: '#94a3b8', maxWidth: '480px', marginBottom: '1.5rem' }}>
+          <p style={{ color: '#475569', maxWidth: '480px', marginBottom: '1.5rem' }}>
             An unexpected error occurred. Please reload the page. If the problem
             persists, contact your system administrator.
           </p>
           {process.env.NODE_ENV !== 'production' && this.state.error && (
             <pre
               style={{
-                background: '#1e293b',
-                border: '1px solid #334155',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
                 borderRadius: '8px',
                 padding: '1rem',
                 fontSize: '0.75rem',

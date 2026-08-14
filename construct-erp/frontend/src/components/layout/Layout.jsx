@@ -302,39 +302,9 @@ const navGroups = [
     { to: '/hr-admin/employees/new',                     icon: UserPlus,        label: 'New Employee' },
     { to: '/hr-admin/onboarding/welcome-checklist',      icon: ClipboardCheck,  label: 'Welcome Checklist' },
     { to: '/hr-admin/onboarding/document-verification',  icon: FileCheck2,      label: 'Document Verification' },
-    { to: '/hr-admin/onboarding/document-verification/pending',   icon: Clock,       label: 'Pending Verification' },
-    { to: '/hr-admin/onboarding/document-verification/employees', icon: Users,       label: 'Employee Documents' },
-    { to: '/hr-admin/onboarding/document-verification/upload',    icon: Upload,      label: 'Upload Documents' },
-    { to: '/hr-admin/onboarding/document-verification/verify',    icon: ShieldCheck, label: 'Verify Documents' },
-    { to: '/hr-admin/onboarding/document-verification/rejected',  icon: CircleSlash, label: 'Rejected Documents' },
-    { to: '/hr-admin/onboarding/document-verification/missing',   icon: AlertTriangle, label: 'Missing Documents' },
-    { to: '/hr-admin/onboarding/offer-appointment',                    icon: FileSignature, label: 'Offer & Appointment' },
-    { to: '/hr-admin/onboarding/offer-appointment/requests',           icon: ClipboardList, label: 'Offer Requests' },
-    { to: '/hr-admin/onboarding/offer-appointment/approval',           icon: ShieldCheck,   label: 'Offer Approval' },
-    { to: '/hr-admin/onboarding/offer-appointment/letter',             icon: FileSignature, label: 'Offer Letter' },
-    { to: '/hr-admin/onboarding/offer-appointment/acceptance',         icon: CheckCircle2,  label: 'Candidate Acceptance' },
-    { to: '/hr-admin/onboarding/offer-appointment/appointments',       icon: FileCheck2,    label: 'Appointment Letter' },
-    { to: '/hr-admin/onboarding/offer-appointment/appointment-approval', icon: ShieldCheck, label: 'Appointment Approval' },
-    { to: '/hr-admin/onboarding/offer-appointment/templates',          icon: LayoutTemplate, label: 'Offer Document Templates' },
-    { to: '/hr-admin/onboarding/offer-appointment/signatures',         icon: PenTool,       label: 'Digital Signatures' },
-    { to: '/hr-admin/onboarding/offer-appointment/email',              icon: Mail,          label: 'Offer Email & Delivery' },
-    { to: '/hr-admin/onboarding/offer-appointment/history',            icon: History,       label: 'Offer Letter History' },
-    { to: '/hr-admin/onboarding/offer-appointment/reports',            icon: FileBarChart,  label: 'Offer Reports' },
-    { to: '/hr-admin/onboarding/offer-appointment/settings',           icon: Settings,      label: 'Offer Settings' },
+    { to: '/hr-admin/onboarding/offer-appointment',      icon: FileSignature,   label: 'Offer & Appointment' },
     { to: '/hr-admin/onboarding/asset-allocation',       icon: Package,         label: 'IT Asset Allocation' },
     { to: '/hr-admin/onboarding/id-card',                icon: Contact,         label: 'ID Card Generation' },
-    { to: '/hr-admin/onboarding/id-card/generate',       icon: UserPlus,        label: 'Generate ID Card' },
-    { to: '/hr-admin/onboarding/id-card/employees',      icon: Users,           label: 'ID Card — Employee Selection' },
-    { to: '/hr-admin/onboarding/id-card/templates',      icon: LayoutTemplate,  label: 'Card Templates' },
-    { to: '/hr-admin/onboarding/id-card/preview',        icon: Eye,             label: 'Card Preview' },
-    { to: '/hr-admin/onboarding/id-card/bulk',           icon: Layers3,         label: 'Bulk ID Generation' },
-    { to: '/hr-admin/onboarding/id-card/print-queue',    icon: ListChecks,      label: 'Print Queue' },
-    { to: '/hr-admin/onboarding/id-card/reprint',        icon: RotateCcw,       label: 'Reprint ID Card' },
-    { to: '/hr-admin/onboarding/id-card/lost-damaged',   icon: FileWarning,     label: 'Lost / Damaged Card' },
-    { to: '/hr-admin/onboarding/id-card/qr-codes',       icon: QrCode,          label: 'QR Code Management' },
-    { to: '/hr-admin/onboarding/id-card/history',        icon: History,         label: 'Card History' },
-    { to: '/hr-admin/onboarding/id-card/reports',        icon: FileBarChart,    label: 'ID Card Reports' },
-    { to: '/hr-admin/onboarding/id-card/settings',       icon: Settings,        label: 'ID Card Settings' },
     { to: '/hr-admin/onboarding/email-account',          icon: Mail,            label: 'Email & Account Creation' },
     { to: '/hr-admin/onboarding/access-permissions',     icon: Key,             label: 'Access Permissions' },
     { to: '/hr-admin/onboarding/training',               icon: GraduationCap,   label: 'Training Assignment' },
@@ -669,24 +639,9 @@ const NAV_SECTIONS = {
     { label: 'Onboarding',            paths: [
       '/hr-admin/onboarding','/hr-admin/employees/new','/hr-admin/onboarding/welcome-checklist',
       '/hr-admin/onboarding/document-verification',
-      '/hr-admin/onboarding/document-verification/pending','/hr-admin/onboarding/document-verification/employees',
-      '/hr-admin/onboarding/document-verification/upload','/hr-admin/onboarding/document-verification/verify',
-      '/hr-admin/onboarding/document-verification/rejected','/hr-admin/onboarding/document-verification/missing',
       '/hr-admin/onboarding/offer-appointment',
-      '/hr-admin/onboarding/offer-appointment/requests','/hr-admin/onboarding/offer-appointment/approval',
-      '/hr-admin/onboarding/offer-appointment/letter','/hr-admin/onboarding/offer-appointment/acceptance',
-      '/hr-admin/onboarding/offer-appointment/appointments','/hr-admin/onboarding/offer-appointment/appointment-approval',
-      '/hr-admin/onboarding/offer-appointment/templates','/hr-admin/onboarding/offer-appointment/signatures',
-      '/hr-admin/onboarding/offer-appointment/email','/hr-admin/onboarding/offer-appointment/history',
-      '/hr-admin/onboarding/offer-appointment/reports','/hr-admin/onboarding/offer-appointment/settings',
       '/hr-admin/onboarding/asset-allocation',
       '/hr-admin/onboarding/id-card',
-      '/hr-admin/onboarding/id-card/generate','/hr-admin/onboarding/id-card/employees',
-      '/hr-admin/onboarding/id-card/templates','/hr-admin/onboarding/id-card/preview',
-      '/hr-admin/onboarding/id-card/bulk','/hr-admin/onboarding/id-card/print-queue',
-      '/hr-admin/onboarding/id-card/reprint','/hr-admin/onboarding/id-card/lost-damaged',
-      '/hr-admin/onboarding/id-card/qr-codes','/hr-admin/onboarding/id-card/history',
-      '/hr-admin/onboarding/id-card/reports','/hr-admin/onboarding/id-card/settings',
       '/hr-admin/onboarding/email-account','/hr-admin/onboarding/access-permissions',
       '/hr-admin/onboarding/training','/hr-admin/onboarding/orientation','/hr-admin/onboarding/compliance-forms',
       '/hr-admin/onboarding/probation','/hr-admin/onboarding/confirmation',
@@ -843,7 +798,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
           background: active ? hexToRgba(color, 0.08) : 'transparent',
           color: active ? color : '#0F172A',
           textDecoration: 'none',
-          fontSize: 11, fontWeight: active ? 700 : 600,
+          fontSize: 12, fontWeight: active ? 700 : 600,
           textTransform: 'uppercase', letterSpacing: '0.04em',
           whiteSpace: 'nowrap',
           transition: 'background 0.12s',
@@ -923,7 +878,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
                     background: isOpen ? hexToRgba(color, 0.06) : 'transparent',
                     color: hasActive ? color : '#0F172A',
                     border: 'none', cursor: 'pointer', textAlign: 'left',
-                    fontSize: 11, fontWeight: 800,
+                    fontSize: 12, fontWeight: 800,
                     textTransform: 'uppercase', letterSpacing: '0.04em',
                     whiteSpace: 'nowrap',
                     transition: 'background 0.12s',
@@ -1013,7 +968,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
                 {section.label && (
                   <div style={{
                     padding: '6px 12px 2px',
-                    fontSize: 9, fontWeight: 900, color: color,
+                    fontSize: 11, fontWeight: 900, color: color,
                     textTransform: 'uppercase', letterSpacing: '0.1em',
                   }}>
                     {t(section.label)}
@@ -1134,7 +1089,7 @@ function NavGroupButton({ group, isActive, isOpen, onOpen, onClose, dropPos, set
               : '1px solid transparent',
           borderRadius: 8,
           color: isActive ? '#FFFFFF' : isOpen ? '#FFFFFF' : 'rgba(255,255,255,0.92)',
-          fontSize: 11.5, fontWeight: isActive ? 700 : 600,
+          fontSize: 12, fontWeight: isActive ? 700 : 600,
           cursor: 'pointer', whiteSpace: 'nowrap',
           transition: 'all 0.15s ease',
           textTransform: 'uppercase',
@@ -1174,6 +1129,41 @@ function NavGroupButton({ group, isActive, isOpen, onOpen, onClose, dropPos, set
           }}
         />
       </button>
+    </div>
+  );
+}
+
+// ── Live clock — isolated component so the 1s tick never re-renders Layout ──
+function ClockPill() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const clockTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const clockDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+  return (
+    <div
+      className="erp-clock-pill"
+      title={now.toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'medium' })}
+      style={{
+        marginLeft: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        height: 22,
+        padding: '0 9px',
+        borderRadius: 6,
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        color: '#1E293B',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Clock3 size={12} style={{ color: '#2563EB', flexShrink: 0 }} />
+      <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{clockTime}</span>
+      <span style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>{clockDate}</span>
     </div>
   );
 }
@@ -1261,7 +1251,7 @@ function ProcurementQuickAccessBar() {
         WebkitOverflowScrolling: 'touch',
       }}
     >
-      <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
+      <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
         Quick Access
       </span>
       {PROC_SHORTCUTS.map(({ label, to, icon: Icon }) => {
@@ -1274,7 +1264,7 @@ function ProcurementQuickAccessBar() {
               border: active ? '1px solid rgba(255,255,255,0.45)' : '1px solid rgba(255,255,255,0.12)',
               background: active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)',
               color: active ? '#fff' : 'rgba(255,255,255,0.8)',
-              fontSize: 11, fontWeight: active ? 700 : 500,
+              fontSize: 12, fontWeight: active ? 700 : 500,
               cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
             }}
           >
@@ -1328,7 +1318,7 @@ function MDQuickAccessBar() {
         WebkitOverflowScrolling: 'touch',
       }}
     >
-      <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
+      <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
         Quick Access
       </span>
       {MD_SHORTCUTS.map(({ label, to, icon: Icon }) => {
@@ -1344,7 +1334,7 @@ function MDQuickAccessBar() {
               border: active ? '1px solid rgba(255,255,255,0.45)' : '1px solid rgba(255,255,255,0.12)',
               background: active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)',
               color: active ? '#fff' : 'rgba(255,255,255,0.8)',
-              fontSize: 11, fontWeight: active ? 700 : 500,
+              fontSize: 12, fontWeight: active ? 700 : 500,
               cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
               transition: 'all 0.12s',
             }}
@@ -1362,17 +1352,83 @@ function MDQuickAccessBar() {
 
 // ── Mobile slide-in sidebar ──────────────────────────────────────────────────
 // ── Mobile Bottom Navigation Bar ─────────────────────────────────────────────
-function MobileBottomNav({ onMenuOpen }) {
+const ROLE_BOTTOM_TABS = {
+  hr:                 [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/hr-admin',         icon: Users,           label: 'HR' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/attendance',       icon: ClipboardList,   label: 'Attendance' },
+  ],
+  hr_admin:           [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/hr-admin',         icon: Users,           label: 'HR' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/attendance',       icon: ClipboardList,   label: 'Attendance' },
+  ],
+  hr_manager:         [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/hr-admin',         icon: Users,           label: 'HR' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/attendance',       icon: ClipboardList,   label: 'Attendance' },
+  ],
+  accountant:         [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/finance',          icon: IndianRupee,     label: 'Finance' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/vendors',          icon: Truck,           label: 'Vendors' },
+  ],
+  finance_manager:    [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/finance',          icon: IndianRupee,     label: 'Finance' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/vendors',          icon: Truck,           label: 'Vendors' },
+  ],
+  procurement_manager:[
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/procurement',      icon: ShoppingCart,    label: 'Procure' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/vendors',          icon: Truck,           label: 'Vendors' },
+  ],
+  site_engineer:      [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/qs',               icon: Receipt,         label: 'QS' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/hse',              icon: HardHat,         label: 'HSE' },
+  ],
+  store_keeper:       [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/stores',           icon: Warehouse,       label: 'Stores' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/procurement',      icon: ShoppingCart,    label: 'Procure' },
+  ],
+  security_guard:     [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/hse',              icon: HardHat,         label: 'HSE' },
+    { to: '/attendance',       icon: ClipboardList,   label: 'Attendance' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+  ],
+  qs_engineer:        [
+    { to: '/dashboard',        icon: LayoutDashboard, label: 'Home' },
+    { to: '/qs',               icon: Receipt,         label: 'QS' },
+    { to: '/approvals',        icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/hse',              icon: HardHat,         label: 'HSE' },
+  ],
+};
+
+const DEFAULT_BOTTOM_TABS = [
+  { to: '/dashboard',       icon: LayoutDashboard, label: 'Home' },
+  { to: '/stores',          icon: Warehouse,       label: 'Stores' },
+  { to: '/qs',              icon: Receipt,         label: 'QS' },
+  { to: '/approvals',       icon: BadgeCheck,      label: 'Approvals' },
+];
+
+function MobileBottomNav({ onMenuOpen, user }) {
   const location = useLocation();
   const isActive = (prefix) =>
     location.pathname === prefix || location.pathname.startsWith(prefix + '/');
 
-  const tabs = [
-    { to: '/dashboard',       icon: LayoutDashboard, label: 'Home' },
-    { to: '/stores',          icon: Warehouse,       label: 'Stores' },
-    { to: '/qs',              icon: Receipt,         label: 'QS' },
-    { to: '/approvals',       icon: BadgeCheck,      label: 'Approvals' },
-  ];
+  const role = String(user?.role || '').toLowerCase();
+  const tabs = ROLE_BOTTOM_TABS[role] || DEFAULT_BOTTOM_TABS;
 
   return (
     <nav className="lg-hide print:hidden" style={{
@@ -1490,6 +1546,8 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPage
               <div key={group.label}>
                 <button
                   onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                  aria-expanded={isOpen}
+                  aria-label={group.label}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                     padding: '9px 16px', background: 'transparent', border: 'none',
@@ -1535,6 +1593,8 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPage
                           <div key={key}>
                             <button
                               onClick={() => setExpandedSection(subOpen ? null : key)}
+                              aria-expanded={subOpen}
+                              aria-label={section.label}
                               style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '7px 16px 7px 28px', background: 'transparent', border: 'none',
@@ -1645,8 +1705,8 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
             </div>
             {recentPages.length > 0 && (
               <div style={{ marginBottom: 8 }}>
-                <div style={{ padding: '2px 10px 6px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  <Clock3 size={9} />
+                <div style={{ padding: '2px 10px 6px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  <Clock3 size={10} />
                   Recent
                 </div>
                 {recentPages.slice(0, 5).map(page => {
@@ -1665,7 +1725,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                     >
                       <Icon size={13} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.label}</span>
-                      <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.3)', fontWeight: 500, flexShrink: 0 }}>{page.group}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 500, flexShrink: 0 }}>{page.group}</span>
                     </NavLink>
                   );
                 })}
@@ -1710,6 +1770,8 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                   {/* ── Module header ── */}
                   <button
                     onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                    aria-expanded={isOpen}
+                    aria-label={group.label}
                     style={{
                       width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                       padding: '9px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', textAlign: 'left',
@@ -1747,6 +1809,8 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                           <div key={key}>
                             <button
                               onClick={() => setExpandedSection(subOpen ? null : key)}
+                              aria-expanded={subOpen}
+                              aria-label={section.label}
                               style={{
                                 width: '100%', display: 'flex', alignItems: 'center', gap: 6,
                                 margin: '2px 0', padding: '6px 8px 6px 20px', borderRadius: 6,
@@ -1830,7 +1894,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                     }}
                   >
                     <GroupIcon size={20} />
-                    {hasActive && <span style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: '0 3px 3px 0', background: '#6366f1' }} />}
+                    {hasActive && <span style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: '0 3px 3px 0', background: '#60A5FA' }} />}
                   </button>
                 );
               })}
@@ -1868,7 +1932,7 @@ function WelcomeScreen({ user, onDone }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roleLabel = (user?.role || '').replace(/_/g, ' ');
-  const firstName = `Mr. ${(user?.name || 'there').split(' ')[0]}`;
+  const firstName = (user?.name || 'there').split(' ')[0];
 
   return (
     <>
@@ -2059,7 +2123,7 @@ function LogoutScreen({ user, onDone }) {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const firstName = `Mr. ${(user?.name || 'there').split(' ')[0]}`;
+  const firstName = (user?.name || 'there').split(' ')[0];
 
   return (
     <>
@@ -2247,7 +2311,7 @@ function ProjectChip() {
     >
       <Building2 size={13} style={{ flexShrink: 0, color: '#FBBF24' }} />
       <div style={{ overflow: 'hidden', textAlign: 'left' }}>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.65)', lineHeight: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', lineHeight: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           Project
         </div>
         <div style={{
@@ -2273,8 +2337,8 @@ export default function Layout() {
   const [langOpen,    setLangOpen]    = useState(false);
   const [notifOpen,   setNotifOpen]   = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [toolsOpen,   setToolsOpen]   = useState(false);
   const [activeTool,  setActiveTool]  = useState(null); // null | 'pdf' | 'senddrive'
-  const [now,          setNow]         = useState(() => new Date());
   const notifCount = useNotificationCount();
   const recentPages = useRecentPages();
   const { user, logout } = useAuthStore();
@@ -2329,11 +2393,6 @@ export default function Layout() {
     const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(true); } };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
   }, []);
 
   const matchesPath = (itemTo) => {
@@ -2449,12 +2508,25 @@ export default function Layout() {
 
   const initials = (user?.name || 'U').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
   const roleLabel = (user?.role || '').replace(/_/g, ' ');
-  const clockTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-  const clockDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#F8F9FA' }} className="erp-layout-enter">
+
+      {/* Skip link — keyboard users jump past navigation */}
+      <a
+        href="#main-content"
+        style={{
+          position: 'absolute', top: -40, left: 8, zIndex: 9999,
+          background: '#2563EB', color: '#fff',
+          padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+          textDecoration: 'none', transition: 'top 0.1s',
+        }}
+        onFocus={e => { e.currentTarget.style.top = '8px'; }}
+        onBlur={e => { e.currentTarget.style.top = '-40px'; }}
+      >
+        Skip to main content
+      </a>
 
       {/* ── Top Navigation Bar ── */}
       <header
@@ -2499,7 +2571,7 @@ export default function Layout() {
           </div>
           <div className="sm-show" style={{ display: 'none' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.2, letterSpacing: '0.02em' }}>BCIM ERP</div>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', lineHeight: 1, letterSpacing: '0.03em' }}>ConstructERP · v3.0</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', lineHeight: 1, letterSpacing: '0.03em' }}>ConstructERP · v3.0</div>
           </div>
         </div>
 
@@ -2593,6 +2665,67 @@ export default function Layout() {
             </div>
           )}
 
+          {/* Tools (PDF Toolkit + Send Drive) */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setToolsOpen(o => !o)}
+              title="Tools"
+              aria-label="Tools"
+              aria-expanded={toolsOpen}
+              aria-haspopup="true"
+              style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: toolsOpen ? 'rgba(255,255,255,0.15)' : 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => { if (!toolsOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Wrench size={16} />
+            </button>
+            {toolsOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setToolsOpen(false)} />
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 50, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', minWidth: 180, overflow: 'hidden' }}>
+                  <button
+                    onClick={() => { setActiveTool(t => t === 'pdf' ? null : 'pdf'); setToolsOpen(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#1E293B', fontSize: 12, fontWeight: 600, textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <FileText size={14} style={{ color: '#DC2626', flexShrink: 0 }} />
+                    PDF Toolkit
+                  </button>
+                  <button
+                    onClick={() => { setActiveTool(t => t === 'senddrive' ? null : 'senddrive'); setToolsOpen(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#1E293B', fontSize: 12, fontWeight: 600, textAlign: 'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <Send size={14} style={{ color: '#059669', flexShrink: 0 }} />
+                    Send Drive
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Notifications */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setNotifOpen(o => !o)}
+              title="Notifications"
+              aria-label="Notifications"
+              style={{ position: 'relative', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => { if (!notifOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Bell size={16} />
+              {notifCount > 0 && (
+                <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', border: '2px solid transparent' }}>
+                  {notifCount > 9 ? '9+' : notifCount}
+                </span>
+              )}
+            </button>
+            {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
+          </div>
+
           {/* Profile + Logout */}
           <NavLink to="/profile"
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.18)' }}
@@ -2604,7 +2737,7 @@ export default function Layout() {
             </div>
             <div style={{ display: 'none' }} className="sm-show">
               <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>{user?.name?.split(' ')[0] || 'User'}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.80)', lineHeight: 1, textTransform: 'capitalize' }}>{roleLabel}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', lineHeight: 1, textTransform: 'capitalize' }}>{roleLabel}</div>
             </div>
           </NavLink>
 
@@ -2647,28 +2780,7 @@ export default function Layout() {
           })()}
           <ChevronRight size={11} style={{ color: '#94A3B8' }} />
           <span style={{ color: '#1E293B', fontWeight: 600 }}>{pageTitle}</span>
-          <div
-            className="erp-clock-pill"
-            title={now.toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'medium' })}
-            style={{
-              marginLeft: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              height: 22,
-              padding: '0 9px',
-              borderRadius: 6,
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              color: '#1E293B',
-              boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <Clock3 size={12} style={{ color: '#2563EB', flexShrink: 0 }} />
-            <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{clockTime}</span>
-            <span style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>{clockDate}</span>
-          </div>
+          <ClockPill />
         </div>
       )}
 
@@ -2693,7 +2805,7 @@ export default function Layout() {
             recentPages={recentPages}
           />
         )}
-        <main style={{ flex: 1, minWidth: 0, position: 'relative', overflow: isChatPage ? 'hidden' : 'auto', ...(isChatPage ? { display: 'flex', flexDirection: 'column' } : {}) }} className="print:overflow-visible print:h-auto">
+        <main id="main-content" style={{ flex: 1, minWidth: 0, position: 'relative', overflow: isChatPage ? 'hidden' : 'auto', ...(isChatPage ? { display: 'flex', flexDirection: 'column' } : {}) }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
             <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')} style={isChatPage ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}}>
               <Outlet />
@@ -2715,7 +2827,7 @@ export default function Layout() {
       )}
 
       {/* Mobile bottom navigation bar — hidden on the ESS domain */}
-      {!essOnly && <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />}
+      {!essOnly && <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} user={user} />}
 
       {/* ── Floating Team Chat launcher — visible from anywhere except the chat
           page itself. Hidden on mobile widths where MobileBottomNav already
@@ -2790,26 +2902,6 @@ export default function Layout() {
           </button>
         </div>
       )}
-
-      {/* ── Floating Send Drive launcher — visible on all screen sizes ── */}
-      <button
-        onClick={() => setActiveTool(t => t === 'senddrive' ? null : 'senddrive')}
-        title="Send Drive — send large files"
-        className="flex fixed bottom-[108px] md:bottom-[84px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
-        style={{ background: activeTool === 'senddrive' ? '#047857' : 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
-      >
-        <Send className="w-3.5 h-3.5 md:w-4 md:h-4" />
-      </button>
-
-      {/* ── Floating PDF Tool launcher — visible on all screen sizes ── */}
-      <button
-        onClick={() => setActiveTool(t => t === 'pdf' ? null : 'pdf')}
-        title="PDF Tools — merge, split, convert"
-        className="flex fixed bottom-[156px] md:bottom-[144px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
-        style={{ background: activeTool === 'pdf' ? '#B91C1C' : 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
-      >
-        <FileText className="w-3.5 h-3.5 md:w-4 md:h-4" />
-      </button>
 
       {/* ── Embedded Tool Panel — full-screen on mobile, side panel on desktop ── */}
       {activeTool && createPortal(

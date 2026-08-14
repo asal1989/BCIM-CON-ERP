@@ -23,30 +23,44 @@ html { scrollbar-gutter: stable; }
   * { @apply border-slate-200; }
 
   /* ── Scrollbars ── */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: #F1F5F9; border-radius: 8px; }
-  ::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 8px; border: 2px solid #F1F5F9; }
-  ::-webkit-scrollbar-thumb:hover { background: #4F46E5; }
-  ::-webkit-scrollbar-corner { background: #F1F5F9; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  ::-webkit-scrollbar-corner { background: transparent; }
 
-  /* Horizontal scrollbar — slightly thicker for tables */
-  .overflow-x-auto::-webkit-scrollbar { height: 10px; }
-  .overflow-x-auto::-webkit-scrollbar-track { background: #E2E8F0; border-radius: 0 0 8px 8px; }
-  .overflow-x-auto::-webkit-scrollbar-thumb { background: #6366F1; border-radius: 8px; border: 2px solid #E2E8F0; }
-  .overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #4338CA; }
+  /* Focus ring — visible for keyboard users, invisible for mouse */
+  :focus { outline: none; }
+  :focus-visible {
+    outline: 2px solid #2563EB;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 
-  ::selection { background: rgba(37,99,235,0.1); }
+  /* Horizontal scrollbar — tables */
+  .overflow-x-auto::-webkit-scrollbar { height: 6px; }
+  .overflow-x-auto::-webkit-scrollbar-track { background: transparent; }
+  .overflow-x-auto::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+  .overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #2563EB; }
+
+  ::selection { background: rgba(37,99,235,0.15); color: #1E293B; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 }
 
 @layer components {
   /* ── Cards ────────────────────────────────────────────── */
   .card {
     @apply bg-white border border-slate-200 rounded-xl p-4;
-    box-shadow: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.03);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .card-lg {
     @apply bg-white border border-slate-200 rounded-xl p-6;
-    box-shadow: 0 1px 3px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04);
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 2px 8px rgba(15,23,42,0.03);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   /* ── Buttons ─────────────────────────────────────────── */
@@ -54,16 +68,17 @@ html { scrollbar-gutter: stable; }
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
            text-white transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
     background: #2563EB;
-    border: 1px solid #2563EB;
-    box-shadow: 0 1px 2px rgba(37,99,235,0.2);
+    border: 1px solid #1D4ED8;
+    box-shadow: 0 1px 2px rgba(37,99,235,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    letter-spacing: 0.01em;
   }
   .btn-primary:hover:not(:disabled) {
     background: #1D4ED8;
-    border-color: #1D4ED8;
-    box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+    border-color: #1E40AF;
+    box-shadow: 0 4px 12px rgba(37,99,235,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
     transform: translateY(-1px);
   }
-  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 2px rgba(37,99,235,0.2); }
 
   .btn-secondary {
     @apply inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200
@@ -142,14 +157,15 @@ html { scrollbar-gutter: stable; }
   .data-table thead tr { @apply bg-slate-50; }
   .data-table th {
     @apply px-4 py-3 text-left font-semibold uppercase tracking-wider whitespace-nowrap;
-    font-size: 0.65rem; color: #64748B;
-    border-bottom: 1px solid #E2E8F0;
+    font-size: 0.72rem; color: #475569;
+    border-bottom: 2px solid #E2E8F0;
   }
   .data-table td {
     @apply px-4 py-3 whitespace-nowrap;
-    color: #334155; border-bottom: 1px solid #EEF2F7; font-size: 0.8125rem;
+    color: #1E293B; border-bottom: 1px solid #F1F5F9; font-size: 0.8125rem;
   }
-  .data-table tbody tr:hover td { @apply bg-slate-50; }
+  .data-table tbody tr { transition: background 0.1s ease; }
+  .data-table tbody tr:hover td { background: #F8FAFC; }
   .data-table tbody tr:last-child td { border-bottom: none; }
 
   /* Procurement screens: strengthen light text for better readability */
@@ -264,7 +280,10 @@ html { scrollbar-gutter: stable; }
 
   /* ── Page layout ──────────────────────────────────────── */
   .page-header {
-    @apply sticky top-0 z-40 flex items-center gap-4 px-6 py-4 border-b border-slate-200 bg-white/80 backdrop-blur-md;
+    @apply sticky top-0 z-40 flex items-center gap-4 px-6 py-4 border-b border-slate-200;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
   .inr { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
   .divider { @apply border-t border-slate-200 my-4; }
@@ -310,7 +329,7 @@ html { scrollbar-gutter: stable; }
   .metric-label { font-size: 0.65rem; }
 
   /* Tables: smaller text and padding */
-  .data-table th { @apply px-2.5 py-2; font-size: 0.6rem; }
+  .data-table th { @apply px-2.5 py-2; font-size: 0.68rem; }
   .data-table td { @apply px-2.5 py-2; font-size: 0.75rem; }
 
   /* Table wrappers: sticky first column for readability */
@@ -327,7 +346,7 @@ html { scrollbar-gutter: stable; }
 
   /* Inline tables in page content */
   main table { font-size: 0.75rem; }
-  main table th { @apply px-2 py-1.5; font-size: 0.6rem; }
+  main table th { @apply px-2 py-1.5; font-size: 0.65rem; }
   main table td { @apply px-2 py-1.5; }
 
   /* Buttons — full-width in stacked contexts */
@@ -369,10 +388,10 @@ html { scrollbar-gutter: stable; }
   /* Charts: give them breathing room */
   .recharts-responsive-container { min-height: 220px; }
 
-  /* Tab buttons: smaller on mobile */
+  /* Tab / filter chip buttons: compact on mobile */
   main button[class*="rounded-lg"][class*="text-xs"] {
     padding: 4px 8px !important;
-    font-size: 10px !important;
+    font-size: 11px !important;
   }
 }
 
