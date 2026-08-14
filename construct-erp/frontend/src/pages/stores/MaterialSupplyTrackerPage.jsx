@@ -3,9 +3,12 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Package, Truck, CheckCircle2, Clock, AlertTriangle, XCircle,
-  FileText, BarChart3, Search, X, ChevronDown, ChevronRight,
+  FileText, FileSpreadsheet, BarChart3, Search, X, ChevronDown, ChevronRight,
   RefreshCw, Download, Filter, TrendingUp, IndianRupee,
   ArrowRight, Circle, CheckCircle, Layers, ShoppingCart,
   ClipboardList, Warehouse, Zap, Printer, UserCheck,
@@ -15,6 +18,53 @@ import { PageHeader, Theme } from '../../theme';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 import bcimLogo from '../../assets/bcim-logo.png';
+
+function exportXLSX(filename, sheetName, headers, dataRows) {
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+  ws['!cols'] = headers.map(() => ({ wch: 16 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+// Shared PDF letterhead — Times New Roman, black text, navy accents (house
+// style established for statement/report PDFs elsewhere in the app).
+function pdfLetterhead(doc, { title, subtitle, projectName, W = 269, L = 14 }) {
+  const NAVY = [27, 58, 107], INK = [15, 23, 42], MUTED = [107, 124, 147];
+  doc.setFont('times', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...INK);
+  doc.text('BCIM ENGINEERING PVT. LTD.', L, 14);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...MUTED);
+  doc.text('Bengaluru, Karnataka, India', L, 19);
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(...INK);
+  doc.text(title, L + W, 14, { align: 'right' });
+  if (subtitle) {
+    doc.setFont('times', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MUTED);
+    doc.text(subtitle, L + W, 19, { align: 'right' });
+  }
+  if (projectName) {
+    doc.setFont('times', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...NAVY);
+    doc.text(`Project: ${projectName}`, L + W, 24, { align: 'right' });
+  }
+  doc.setFont('times', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text(`Generated: ${dayjs().format('DD MMM YYYY, hh:mm A')}`, L, 24);
+
+  doc.setFillColor(...NAVY);
+  doc.rect(L, 27, W, 0.6, 'F');
+  return { NAVY, INK, MUTED, headY: 31 };
+}
 
 function exportCSV(filename, headers, dataRows) {
   const csv = [headers, ...dataRows]
@@ -861,14 +911,37 @@ function SummaryTab({ projectId, projectName, projectAddress, clientName }) {
     `,
   });
 
+  const summaryHeaders = ['Name', 'Items', 'Requested Qty', 'Ordered Qty', 'Received Qty', 'POs', 'GRNs', 'Supply %'];
+  const summaryRows = () => data.map(r => [
+    r.label, r.item_count, n(r.requested_qty), n(r.ordered_qty),
+    n(r.received_qty), r.po_count, r.grn_count,
+    pct(r.received_qty, r.ordered_qty || r.requested_qty) + '%',
+  ]);
+
   const handleExportCSV = () => {
-    const headers = ['Name', 'Items', 'Requested Qty', 'Ordered Qty', 'Received Qty', 'POs', 'GRNs', 'Supply %'];
-    const csvRows = data.map(r => [
-      r.label, r.item_count, n(r.requested_qty), n(r.ordered_qty),
-      n(r.received_qty), r.po_count, r.grn_count,
-      pct(r.received_qty, r.ordered_qty || r.requested_qty) + '%',
-    ]);
-    exportCSV(`Supply_Summary_${groupBy}_${dayjs().format('YYYY-MM-DD')}.csv`, headers, csvRows);
+    exportCSV(`Supply_Summary_${groupBy}_${dayjs().format('YYYY-MM-DD')}.csv`, summaryHeaders, summaryRows());
+  };
+
+  const handleExportXLSX = () => {
+    exportXLSX(`Supply_Summary_${groupBy}_${dayjs().format('YYYY-MM-DD')}.xlsx`, 'Summary', summaryHeaders, summaryRows());
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const { NAVY, INK } = pdfLetterhead(doc, {
+      title: 'MATERIAL SUPPLY — SUMMARY', subtitle: `Grouped by ${groupBy}`, projectName,
+    });
+    autoTable(doc, {
+      startY: 34,
+      margin: { left: 14, right: 14 },
+      head: [summaryHeaders],
+      body: summaryRows(),
+      theme: 'striped',
+      styles: { font: 'times', fontSize: 8, cellPadding: 2, textColor: INK },
+      headStyles: { font: 'times', fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { fontStyle: 'bold' } },
+    });
+    doc.save(`Supply_Summary_${groupBy}_${dayjs().format('YYYY-MM-DD')}.pdf`);
   };
 
   return (
@@ -885,11 +958,19 @@ function SummaryTab({ projectId, projectName, projectAddress, clientName }) {
         <div className="flex-1" />
         <button onClick={handleExportCSV}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-          <Download className="w-3.5 h-3.5" /> Export CSV
+          <Download className="w-3.5 h-3.5" /> CSV
+        </button>
+        <button onClick={handleExportXLSX}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 transition-colors">
+          <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+        </button>
+        <button onClick={handleExportPDF}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition-colors">
+          <FileText className="w-3.5 h-3.5" /> Download PDF
         </button>
         <button onClick={handlePrint}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-          <Printer className="w-3.5 h-3.5" /> Print PDF
+          <Printer className="w-3.5 h-3.5" /> Print
         </button>
       </div>
       {isLoading ? (
@@ -1016,23 +1097,53 @@ export default function MaterialSupplyTrackerPage() {
     `,
   });
 
+  const trackerHeaders = ['MR Number', 'Date', 'Priority', 'Item Code', 'Material', 'Category', 'Project',
+    'Unit', 'Req Qty', 'Approved Qty', 'Ordered', 'Received', 'Balance', 'Unit Rate', 'Order Value',
+    'Supply %', 'Status', 'PO Number', 'PO Status', 'Vendor', 'Vendor Phone',
+    'Exp. Delivery', 'Actual Delivery', 'GRN Count', 'Department', 'Cost Centre', 'Raised By'];
+  const trackerRows = () => rows.map(r => [
+    r.mr_number, fmtDate(r.mr_date), r.priority || '', r.item_code || '',
+    r.material_name, r.material_category || '', r.project_name,
+    r.unit, n(r.requested_qty), n(r.approved_qty || 0), n(r.ordered_qty || 0),
+    n(r.received_qty), n(r.balance_qty),
+    r.unit_rate || '', (parseFloat(r.ordered_qty || 0) * parseFloat(r.unit_rate || 0)).toFixed(2),
+    r.supply_pct + '%', r.overall_status,
+    r.po_number || '', r.po_status || '', r.vendor_name || '', r.vendor_phone || '',
+    fmtDate(r.expected_delivery_date), fmtDate(r.actual_delivery_date), r.grn_count || 0,
+    r.department || '', r.cost_center || '', r.raised_by || '',
+  ]);
+
   const exportTrackerCSV = () => {
-    const headers = ['MR Number', 'Date', 'Priority', 'Item Code', 'Material', 'Category', 'Project',
-      'Unit', 'Req Qty', 'Approved Qty', 'Ordered', 'Received', 'Balance', 'Unit Rate', 'Order Value',
-      'Supply %', 'Status', 'PO Number', 'PO Status', 'Vendor', 'Vendor Phone',
-      'Exp. Delivery', 'Actual Delivery', 'GRN Count', 'Department', 'Cost Centre', 'Raised By'];
-    const csvRows = rows.map(r => [
-      r.mr_number, fmtDate(r.mr_date), r.priority || '', r.item_code || '',
-      r.material_name, r.material_category || '', r.project_name,
-      r.unit, n(r.requested_qty), n(r.approved_qty || 0), n(r.ordered_qty || 0),
-      n(r.received_qty), n(r.balance_qty),
-      r.unit_rate || '', (parseFloat(r.ordered_qty || 0) * parseFloat(r.unit_rate || 0)).toFixed(2),
-      r.supply_pct + '%', r.overall_status,
-      r.po_number || '', r.po_status || '', r.vendor_name || '', r.vendor_phone || '',
-      fmtDate(r.expected_delivery_date), fmtDate(r.actual_delivery_date), r.grn_count || 0,
-      r.department || '', r.cost_center || '', r.raised_by || '',
-    ]);
-    exportCSV(`Supply_Tracker_${dayjs().format('YYYY-MM-DD')}.csv`, headers, csvRows);
+    exportCSV(`Supply_Tracker_${dayjs().format('YYYY-MM-DD')}.csv`, trackerHeaders, trackerRows());
+  };
+
+  const exportTrackerXLSX = () => {
+    exportXLSX(`Supply_Tracker_${dayjs().format('YYYY-MM-DD')}.xlsx`, 'Tracker', trackerHeaders, trackerRows());
+  };
+
+  // Condensed column set for the PDF — the full 27-column CSV/Excel layout
+  // doesn't fit legibly on A4 landscape, so the PDF keeps the columns that
+  // matter for a printed handoff and drops the rest (still in CSV/Excel).
+  const exportTrackerPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const { NAVY, INK } = pdfLetterhead(doc, {
+      title: 'MATERIAL SUPPLY TRACKER', subtitle: 'MR → PO → Delivery → GRN', projectName: currentProjectName,
+    });
+    autoTable(doc, {
+      startY: 34,
+      margin: { left: 14, right: 14 },
+      head: [['MR Number', 'Material', 'Project', 'Req', 'Ordered', 'Received', 'Balance', 'Status', 'PO Number', 'Vendor', 'Exp. Delivery']],
+      body: rows.map(r => [
+        r.mr_number, r.material_name, r.project_name,
+        n(r.requested_qty), n(r.ordered_qty || 0), n(r.received_qty), n(r.balance_qty),
+        r.overall_status, r.po_number || '-', r.vendor_name || '-', fmtDate(r.expected_delivery_date),
+      ]),
+      theme: 'striped',
+      styles: { font: 'times', fontSize: 7, cellPadding: 1.6, textColor: INK },
+      headStyles: { font: 'times', fillColor: NAVY, textColor: 255, fontStyle: 'bold', fontSize: 7 },
+      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+    });
+    doc.save(`Supply_Tracker_${dayjs().format('YYYY-MM-DD')}.pdf`);
   };
 
   const handleKpiClick = useCallback((statusFilter) => {
@@ -1070,7 +1181,15 @@ export default function MaterialSupplyTrackerPage() {
               <>
                 <button onClick={exportTrackerCSV}
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-white/15 text-white hover:bg-white/25 border border-white/20">
-                  <Download className="w-3.5 h-3.5" /> Export CSV
+                  <Download className="w-3.5 h-3.5" /> CSV
+                </button>
+                <button onClick={exportTrackerXLSX}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-white/15 text-white hover:bg-white/25 border border-white/20">
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                </button>
+                <button onClick={exportTrackerPDF}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-white/15 text-white hover:bg-white/25 border border-white/20">
+                  <FileText className="w-3.5 h-3.5" /> Download PDF
                 </button>
                 <button onClick={handlePrintTracker}
                   className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-white/15 text-white hover:bg-white/25 border border-white/20">
