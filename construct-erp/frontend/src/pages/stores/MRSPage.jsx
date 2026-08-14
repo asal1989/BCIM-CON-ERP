@@ -964,6 +964,8 @@ export default function MRSPage() {
   const [showMDModal, setShowMDModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [clientForm, setClientForm] = useState({ contact: '', ref: '', remarks: '' });
+  // itemDecisions: { [itemId]: { included: bool, qty: string, remarks: string } }
+  const [clientItemDecisions, setClientItemDecisions] = useState({});
   const [showEditModal, setShowEditModal] = useState(false);
 
   // MD/super_admin can edit any MRS; stores staff can edit while still pending/stores stage
@@ -1105,7 +1107,7 @@ export default function MRSPage() {
                   <table className="w-full text-sm min-w-[760px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-white">
-                        {['#', 'Material', 'Unit', 'Requested Qty', ['approved_md','client_approved'].includes(liveStatus) ? 'MD Approved Qty' : null, 'PO Raised', 'Balance', 'Purpose', canCancelItems ? 'Action' : null].filter(Boolean).map(h => (
+                        {['#', 'Material', 'Unit', 'Requested Qty', ['approved_md','client_approved'].includes(liveStatus) ? 'MD Approved Qty' : null, liveStatus === 'client_approved' ? 'Client Decision' : null, 'PO Raised', 'Balance', 'Purpose', canCancelItems ? 'Action' : null].filter(Boolean).map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
                         ))}
                       </tr>
@@ -1116,8 +1118,9 @@ export default function MRSPage() {
                         const reqQty = Number(it.effective_qty ?? it.md_approved_qty ?? it.quantity ?? it.qty ?? 0);
                         const orderedQty = Number(it.ordered_qty || 0);
                         const balanceQty = Math.max(reqQty - orderedQty, 0);
+                        const clientRejected = liveStatus === 'client_approved' && it.client_effective_included === false;
                         return (
-                          <tr key={i} className={clsx('hover:bg-slate-50', excluded && 'opacity-40 line-through')}>
+                          <tr key={i} className={clsx('hover:bg-slate-50', excluded && 'opacity-40 line-through', clientRejected && 'bg-red-50/60')}>
                             <td className="px-4 py-3 text-xs font-mono text-slate-500">{i + 1}</td>
                             <td className="px-4 py-3 font-semibold text-slate-900">
                               {it.material_name || it.material}
@@ -1128,6 +1131,24 @@ export default function MRSPage() {
                             {['approved_md','client_approved'].includes(liveStatus) && (
                               <td className="px-4 py-3 font-bold text-green-700">
                                 {excluded ? 'â€”' : (it.md_approved_qty ?? it.quantity ?? it.qty)}
+                              </td>
+                            )}
+                            {liveStatus === 'client_approved' && (
+                              <td className="px-4 py-3">
+                                {excluded ? (
+                                  <span className="text-slate-400 text-[10px]">â€”</span>
+                                ) : clientRejected ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold border border-red-200">
+                                      <XCircle className="w-3 h-3" /> Rejected
+                                    </span>
+                                    {it.client_item_remarks && <div className="text-[10px] text-red-500 mt-0.5">{it.client_item_remarks}</div>}
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200">
+                                    <CheckCircle2 className="w-3 h-3" /> {it.client_effective_qty ?? (it.md_approved_qty ?? it.quantity)}
+                                  </span>
+                                )}
                               </td>
                             )}
                             <td className="px-4 py-3">
@@ -1243,7 +1264,11 @@ export default function MRSPage() {
                   </div>
                 </div>
 
-                {liveStatus === 'client_approved' && detailedMRS && (
+                {liveStatus === 'client_approved' && detailedMRS && (() => {
+                  const allItems = detailedMRS.items || [];
+                  const clientRejectedItems = allItems.filter(it => it.client_effective_included === false && it.md_included !== false);
+                  const clientApprovedItems = allItems.filter(it => it.client_effective_included !== false && it.md_included !== false);
+                  return (
                   <div className="rounded-xl p-4 shadow-sm border bg-teal-50 border-teal-200">
                     <div className="flex items-center gap-2 mb-2">
                       <CheckCircle2 className="w-4 h-4 text-teal-600" />
@@ -1256,7 +1281,7 @@ export default function MRSPage() {
                       </div>
                       {detailedMRS.client_reference_no && (
                         <div className="flex justify-between gap-3">
-                          <dt className="text-teal-600">Client reference no.</dt>
+                          <dt className="text-teal-600">Client MIS / Ref</dt>
                           <dd className="font-mono font-semibold text-teal-900 text-right">{detailedMRS.client_reference_no}</dd>
                         </div>
                       )}
@@ -1270,6 +1295,18 @@ export default function MRSPage() {
                         <dt className="text-teal-600">Logged by</dt>
                         <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_approved_by_name || 'â€”'}</dd>
                       </div>
+                      {allItems.length > 0 && (
+                        <div className="pt-1.5 mt-1.5 border-t border-teal-200 flex gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold border border-teal-300">
+                            <CheckCircle2 className="w-3 h-3" /> {clientApprovedItems.length} items approved
+                          </span>
+                          {clientRejectedItems.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold border border-red-200">
+                              <XCircle className="w-3 h-3" /> {clientRejectedItems.length} rejected
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {detailedMRS.client_approval_remarks && (
                         <div className="pt-1.5 mt-1.5 border-t border-teal-200">
                           <dt className="text-teal-600 mb-0.5">Remarks</dt>
@@ -1278,7 +1315,8 @@ export default function MRSPage() {
                       )}
                     </dl>
                   </div>
-                )}
+                  );
+                })()}
 
                 {currentAction && (
                   <div className={`rounded-xl p-4 space-y-3 shadow-sm border ${
@@ -1392,10 +1430,19 @@ export default function MRSPage() {
         )}
 
         {/* Client Approval Modal â€” records a decision the client made offline */}
-        {showClientModal && detailedMRS && (
+        {showClientModal && detailedMRS && (() => {
+          const modalItems = detailedMRS.items || [];
+          const toggleClientItem = (id, field, value) =>
+            setClientItemDecisions(prev => ({
+              ...prev,
+              [id]: { included: true, qty: '', remarks: '', ...(prev[id] || {}), [field]: value },
+            }));
+          const rejectedCount = modalItems.filter(it => clientItemDecisions[it.id]?.included === false).length;
+          const approvedCount = modalItems.length - rejectedCount;
+          return (
           <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-              <div className="px-5 py-4 bg-teal-600 flex items-center justify-between">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="px-5 py-4 bg-teal-600 flex items-center justify-between flex-shrink-0">
                 <div>
                   <h3 className="text-white text-sm font-bold">Record Client Approval</h3>
                   <p className="text-teal-100 text-[11px] mt-0.5">{selectedMRS?.serial_no_formatted || selectedMRS?.mrs_number}</p>
@@ -1404,46 +1451,139 @@ export default function MRSPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="overflow-y-auto flex-1 p-5 space-y-5">
                 <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                  The client approves outside this system. Enter their decision here as received by email, WhatsApp, or a signed copy.
+                  The client reviews offline and may reject or reduce individual line items. Record each item's decision below.
                 </p>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client contact name *</label>
-                  <input
-                    autoFocus
-                    value={clientForm.contact}
-                    onChange={e => setClientForm(f => ({ ...f, contact: e.target.value }))}
-                    placeholder="Who at the client approved this"
-                    className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
-                  />
+
+                {/* Header fields */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client contact name *</label>
+                    <input
+                      autoFocus
+                      value={clientForm.contact}
+                      onChange={e => setClientForm(f => ({ ...f, contact: e.target.value }))}
+                      placeholder="Who at the client approved this"
+                      className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client MIS / Reference no.</label>
+                    <input
+                      value={clientForm.ref}
+                      onChange={e => setClientForm(f => ({ ...f, ref: e.target.value }))}
+                      placeholder="e.g. MIS-124, WRF-133"
+                      className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs font-mono outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Overall remarks</label>
+                    <input
+                      value={clientForm.remarks}
+                      onChange={e => setClientForm(f => ({ ...f, remarks: e.target.value }))}
+                      placeholder="Any conditions from the client"
+                      className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client reference no.</label>
-                  <input
-                    value={clientForm.ref}
-                    onChange={e => setClientForm(f => ({ ...f, ref: e.target.value }))}
-                    placeholder="Their own tracking number, e.g. WRF 134"
-                    className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs font-mono outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Remarks</label>
-                  <textarea
-                    rows={3}
-                    value={clientForm.remarks}
-                    onChange={e => setClientForm(f => ({ ...f, remarks: e.target.value }))}
-                    placeholder="Any conditions or notes from the client"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400">
-                  Attach the client's written approval using the Attachments section after saving.
-                </p>
+
+                {/* Per-item decisions */}
+                {modalItems.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Line Item Decisions</p>
+                      <div className="flex gap-2 text-[10px]">
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">{approvedCount} approved</span>
+                        {rejectedCount > 0 && <span className="px-2 py-0.5 rounded bg-red-50 text-red-700 font-semibold border border-red-200">{rejectedCount} rejected</span>}
+                      </div>
+                    </div>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Material</th>
+                            <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-500 uppercase">Req'd</th>
+                            <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-500 uppercase">Decision</th>
+                            <th className="px-3 py-2 text-center text-[10px] font-bold text-slate-500 uppercase">Client Qty</th>
+                            <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase">Reason (if rejected)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {modalItems.map((it) => {
+                            const dec = clientItemDecisions[it.id] || {};
+                            const included = dec.included !== false;
+                            return (
+                              <tr key={it.id} className={clsx(!included && 'bg-red-50')}>
+                                <td className="px-3 py-2 font-medium text-slate-800 max-w-[160px]">
+                                  <div className="truncate" title={it.material_name}>{it.material_name}</div>
+                                  <div className="text-slate-400 text-[10px]">{it.unit}</div>
+                                </td>
+                                <td className="px-3 py-2 text-center font-bold text-indigo-700 whitespace-nowrap">
+                                  {it.md_approved_qty ?? it.quantity}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-1 justify-center">
+                                    <button
+                                      onClick={() => toggleClientItem(it.id, 'included', true)}
+                                      className={clsx(
+                                        'px-2 py-1 rounded text-[10px] font-bold border transition-colors',
+                                        included
+                                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                                          : 'bg-white border-slate-200 text-slate-400 hover:border-emerald-400'
+                                      )}
+                                    >✓ Approve</button>
+                                    <button
+                                      onClick={() => toggleClientItem(it.id, 'included', false)}
+                                      className={clsx(
+                                        'px-2 py-1 rounded text-[10px] font-bold border transition-colors',
+                                        !included
+                                          ? 'bg-red-500 border-red-500 text-white'
+                                          : 'bg-white border-slate-200 text-slate-400 hover:border-red-400'
+                                      )}
+                                    >✗ Reject</button>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2">
+                                  {included ? (
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="any"
+                                      value={dec.qty ?? ''}
+                                      onChange={e => toggleClientItem(it.id, 'qty', e.target.value)}
+                                      placeholder={String(it.md_approved_qty ?? it.quantity ?? '')}
+                                      className="w-20 h-7 rounded border border-slate-300 px-2 text-xs text-center outline-none focus:border-teal-400"
+                                    />
+                                  ) : (
+                                    <span className="text-red-400 text-[10px] font-semibold">Rejected</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {!included ? (
+                                    <input
+                                      value={dec.remarks ?? ''}
+                                      onChange={e => toggleClientItem(it.id, 'remarks', e.target.value)}
+                                      placeholder="Reason for rejection"
+                                      className="w-full h-7 rounded border border-red-200 px-2 text-xs outline-none focus:border-red-400 bg-red-50"
+                                    />
+                                  ) : (
+                                    <span className="text-slate-300 text-[10px]">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5">Leave Client Qty blank to use the MD-approved quantity. Rejected items will be excluded from PO generation.</p>
+                  </div>
+                )}
               </div>
-              <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+              <div className="px-5 py-4 border-t border-slate-100 flex gap-3 flex-shrink-0">
                 <button
-                  onClick={() => setShowClientModal(false)}
+                  onClick={() => { setShowClientModal(false); setClientItemDecisions({}); }}
                   className="flex-1 h-9 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50"
                 >
                   Cancel
@@ -1451,6 +1591,12 @@ export default function MRSPage() {
                 <button
                   disabled={!clientForm.contact.trim() || approveMutation.isPending}
                   onClick={() => {
+                    const client_approved_items = modalItems.map(it => {
+                      const dec = clientItemDecisions[it.id] || {};
+                      const included = dec.included !== false;
+                      const qty = dec.qty !== '' && dec.qty !== undefined ? parseFloat(dec.qty) : null;
+                      return { id: it.id, included, qty, remarks: dec.remarks || null };
+                    });
                     approveMutation.mutate({
                       id: selectedMRS.id,
                       stage: 'client-approve',
@@ -1458,19 +1604,22 @@ export default function MRSPage() {
                         client_contact_name: clientForm.contact.trim(),
                         client_reference_no: clientForm.ref.trim() || undefined,
                         remarks: clientForm.remarks.trim() || undefined,
+                        client_approved_items,
                       },
                     });
                     setShowClientModal(false);
                     setClientForm({ contact: '', ref: '', remarks: '' });
+                    setClientItemDecisions({});
                   }}
                   className="flex-[2] h-9 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold disabled:opacity-50"
                 >
-                  {approveMutation.isPending ? 'Savingâ€¦' : 'Mark client approved'}
+                  {approveMutation.isPending ? 'Saving…' : `Save Client Decision (${approvedCount} approved${rejectedCount > 0 ? `, ${rejectedCount} rejected` : ''})`}
                 </button>
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* MD Edit Modal */}
         {showEditModal && detailedMRS && (

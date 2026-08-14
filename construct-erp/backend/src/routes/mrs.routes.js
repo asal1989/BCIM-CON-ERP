@@ -456,6 +456,10 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS md_included BOOLEAN DEFAULT TRUE`);
   // Reason captured when MD / Procurement cancel an item after full approval
   await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS cancel_reason TEXT`);
+  // Client item-level authorization: mirrors md_approved_qty / md_included but for the client stage
+  await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS client_approved_qty NUMERIC(12,3)`);
+  await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS client_included BOOLEAN DEFAULT TRUE`);
+  await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS client_item_remarks TEXT`);
   // New "Create Material Request" wizard fields (mockup parity)
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS mr_type TEXT`);
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS cost_center TEXT`);
@@ -785,6 +789,8 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
        SELECT mi.*,
               COALESCE(mi.md_approved_qty, mi.quantity) AS effective_qty,
               COALESCE(mi.md_included, TRUE) AS effective_included,
+              COALESCE(mi.client_approved_qty, mi.md_approved_qty, mi.quantity) AS client_effective_qty,
+              COALESCE(mi.client_included, TRUE) AS client_effective_included,
               COALESCE(direct.ordered_qty, 0) + COALESCE(fallback.ordered_qty, 0) AS ordered_qty,
               pv.name AS preferred_vendor_name
        FROM mrs_items mi
@@ -1371,6 +1377,25 @@ router.patch('/:id/:stage', async (req, res) => {
             ai.qty != null ? parseFloat(ai.qty) : null,
             ai.included !== false,
             ai.id,
+            req.params.id,
+          ]
+        );
+      }
+    }
+
+    // Save Client item-level decisions (which items client approved, at what qty, any remarks)
+    if (stage === 'client-approve' && Array.isArray(req.body.client_approved_items) && req.body.client_approved_items.length) {
+      for (const ci of req.body.client_approved_items) {
+        if (!ci.id) continue;
+        await query(
+          `UPDATE mrs_items
+           SET client_approved_qty = $1, client_included = $2, client_item_remarks = $3
+           WHERE id = $4 AND mrs_id = $5`,
+          [
+            ci.qty != null ? parseFloat(ci.qty) : null,
+            ci.included !== false,
+            ci.remarks || null,
+            ci.id,
             req.params.id,
           ]
         );
