@@ -118,10 +118,10 @@ const PO_STATUS_CONFIG = {
 };
 
 const PRIORITY_CONFIG = {
-  low:    { label: 'Low',    emoji: 'ðŸŸ¢', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  medium: { label: 'Medium', emoji: 'ðŸŸ¡', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-  high:   { label: 'High',   emoji: 'ðŸŸ ', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-  urgent: { label: 'Urgent', emoji: 'ðŸ”´', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  low:    { label: 'Low',    emoji: '🟢', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  medium: { label: 'Medium', emoji: '🟡', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  high:   { label: 'High',   emoji: '🟠', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+  urgent: { label: 'Urgent', emoji: '🔴', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
 // Older records used a 3-value priority scheme — map them onto the new 4-value set for display
 const PRIORITY_ALIAS = { normal: 'medium', critical: 'urgent' };
@@ -147,13 +147,13 @@ function PriorityBadge({ priority }) {
   );
 }
 
-/* â”€â”€ Master stage definitions (mirrors backend ALL_STAGES) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Master stage definitions (mirrors backend ALL_STAGES) ─────────────── */
 const ALL_STAGES = [
-  { id: 'stores-approve', label: 'Stores Verification',  short: 'Stores',       color: 'bg-orange-500 hover:bg-orange-600',  btnLabel: 'âœ“ Stores Verified',       status: 'pending'         },
-  { id: 'verify-tower',   label: 'Tower Manager/Incharge', short: 'Tower Mgr',  color: 'bg-blue-600 hover:bg-blue-700',      btnLabel: 'âœ“ Verify',                status: 'stores_verified' },
-  { id: 'approve-pm',     label: 'Project Head',          short: 'Proj Head',   color: 'bg-emerald-600 hover:bg-emerald-700',btnLabel: 'âœ“ Approve',               status: 'verified_tower'  },
-  { id: 'approve-srpm',   label: 'Sr. Project Manager',   short: 'Sr. PM',      color: 'bg-teal-600 hover:bg-teal-700',      btnLabel: 'âœ“ Approve',               status: 'approved_pm'     },
-  { id: 'approve-mgmt',   label: 'Management Director',   short: 'Mgmt Dir',    color: 'bg-indigo-600 hover:bg-indigo-700',  btnLabel: 'âœ“ Release',               status: 'approved_srpm'   },
+  { id: 'stores-approve', label: 'Stores Verification',  short: 'Stores',       color: 'bg-orange-500 hover:bg-orange-600',  btnLabel: '✓ Stores Verified',       status: 'pending'         },
+  { id: 'verify-tower',   label: 'Tower Manager/Incharge', short: 'Tower Mgr',  color: 'bg-blue-600 hover:bg-blue-700',      btnLabel: '✓ Verify',                status: 'stores_verified' },
+  { id: 'approve-pm',     label: 'Project Head',          short: 'Proj Head',   color: 'bg-emerald-600 hover:bg-emerald-700',btnLabel: '✓ Approve',               status: 'verified_tower'  },
+  { id: 'approve-srpm',   label: 'Sr. Project Manager',   short: 'Sr. PM',      color: 'bg-teal-600 hover:bg-teal-700',      btnLabel: '✓ Approve',               status: 'approved_pm'     },
+  { id: 'approve-mgmt',   label: 'Management Director',   short: 'Mgmt Dir',    color: 'bg-indigo-600 hover:bg-indigo-700',  btnLabel: '✓ Release',               status: 'approved_srpm'   },
   { id: 'approve-md',     label: 'Managing Director',     short: 'MD',          color: 'bg-green-700 hover:bg-green-800',    btnLabel: 'Authorize (MD)',                 status: 'approved_mgmt'   },
 ];
 
@@ -194,7 +194,7 @@ const STAGE_NEXT = {
 };
 function getNextStatus(stageId) { return STAGE_NEXT[stageId]; }
 
-/* â”€â”€ Per-project MR numbering editor (prefix / shared pool / next number) â”€â”€ */
+/* ── Per-project MR numbering editor (prefix / shared pool / next number) ── */
 function NumberingCell({ project }) {
   const qc = useQueryClient();
   const [prefix, setPrefix] = useState(project.mrs_prefix || '');
@@ -240,7 +240,7 @@ function NumberingCell({ project }) {
   );
 }
 
-/* â”€â”€ WorkflowConfigModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── WorkflowConfigModal ───────────────────────────────────────────────── */
 function WorkflowConfigModal({ onClose }) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(null);
@@ -255,9 +255,9 @@ function WorkflowConfigModal({ onClose }) {
   const allStagesMeta = cfg?.allStages || ACTIVE_STAGES.map(s => ({ id: s.id, label: s.label }));
 
   const PRESETS = [
-    { label: 'SM â†’ PM â†’ MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
-    { label: 'Full (SM â†’ PM â†’ Dir â†’ MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
-    { label: 'SM â†’ PM â†’ MD â†’ Client', stages: ['stores-approve', 'approve-pm', 'approve-md', 'client-approve'] },
+    { label: 'SM → PM → MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
+    { label: 'Full (SM → PM → Dir → MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
+    { label: 'SM → PM → MD → Client', stages: ['stores-approve', 'approve-pm', 'approve-md', 'client-approve'] },
     { label: 'Full + Client', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md', 'client-approve'] },
   ];
 
@@ -654,7 +654,7 @@ export default function MRSPage() {
 
   const visibleProjects = projectsData ?? [];
 
-  // â”€â”€ Stock lookup helpers for the requisition item table â”€â”€â”€â”€â”€
+  // ── Stock lookup helpers for the requisition item table ─────
   const stockOf = (materialName) => inventoryItems.find(i => i.material_name === materialName);
   const itemStockStatus = (materialName) => {
     const inv = stockOf(materialName);
@@ -994,7 +994,7 @@ export default function MRSPage() {
     cancelItemsMutation.mutate({ id: selectedMRS.id, item_ids: [it.id], reason: reason || null });
   };
 
-  // Admin / PM / Stores may correct an MR's serial number (e.g. a stray -001 â†’ -053)
+  // Admin / PM / Stores may correct an MR's serial number (e.g. a stray -001 → -053)
   const canRenumber = ['admin', 'super_admin', 'managing_director', 'md', 'procurement_manager',
     'procurement', 'project_manager', 'pm', 'stores_manager', 'store_keeper'].includes(userRoleLower);
   const renumberMutation = useMutation({
@@ -1220,7 +1220,7 @@ export default function MRSPage() {
                             </div>
                             <div className="flex items-center justify-between mt-1.5 text-xs text-slate-500">
                               <span className="truncate">{po.vendor_name || '-'}</span>
-                              <span className="font-semibold text-slate-700">â‚¹{Number(po.grand_total || 0).toLocaleString('en-IN')}</span>
+                              <span className="font-semibold text-slate-700">₹{Number(po.grand_total || 0).toLocaleString('en-IN')}</span>
                             </div>
                             {po.po_date && (
                               <div className="text-[11px] text-slate-400 mt-1">{dayjs(po.po_date).format('DD-MM-YYYY')}</div>
@@ -1340,7 +1340,7 @@ export default function MRSPage() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
                           {canActOnCurrent
-                            ? (currentAction.id === 'stores-approve' ? 'âš  Awaiting Stores Verification' : 'Action Required')
+                            ? (currentAction.id === 'stores-approve' ? '⚠ Awaiting Stores Verification' : 'Action Required')
                             : `Awaiting ${currentAction.label} Approval`
                           }
                         </p>
@@ -1363,7 +1363,7 @@ export default function MRSPage() {
                             disabled={!detailedMRS || approveMutation.isPending}
                             className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-green-700 hover:bg-green-800"
                           >
-                            {!detailedMRS ? 'Loading…' : 'Review & Authorize (MD) â†’'}
+                            {!detailedMRS ? 'Loading…' : 'Review & Authorize (MD) →'}
                           </button>
                         ) : currentAction.id === 'client-approve' ? (
                           <button
@@ -1371,7 +1371,7 @@ export default function MRSPage() {
                             disabled={!detailedMRS || approveMutation.isPending}
                             className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-teal-600 hover:bg-teal-700"
                           >
-                            {!detailedMRS ? 'Loading…' : 'Record Client Approval â†’'}
+                            {!detailedMRS ? 'Loading…' : 'Record Client Approval →'}
                           </button>
                         ) : (
                           <button
@@ -1643,7 +1643,7 @@ export default function MRSPage() {
     );
   }
 
-  // â”€â”€ Wizard derived values (New MR form footer / summary panels) â”€â”€
+  // ── Wizard derived values (New MR form footer / summary panels) ──
   const readyItems = items.filter(i => i.material && i.qty);
   const itemsWithValue = readyItems.map(i => {
     const qty = parseFloat(i.qty) || 0;
@@ -1654,7 +1654,7 @@ export default function MRSPage() {
   const needPurchaseCount = itemsWithValue.filter(i => !i.stock || i.stock.state === 'out' || i.stock.state === 'low').length;
   const inStockCount = itemsWithValue.filter(i => i.stock && i.stock.state === 'ok').length;
   const afterThisMr = budgetAvailable !== null ? budgetAvailable - estTotalValue : null;
-  const fmtINR = (n) => `â‚¹${Math.round(n || 0).toLocaleString('en-IN')}`;
+  const fmtINR = (n) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
   const requesterInitials = (formData.requester_name || '?')
     .split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
 
@@ -1707,7 +1707,7 @@ export default function MRSPage() {
       <div className="p-4 md:p-6 xl:p-8 max-w-[1600px] mx-auto">
 
 
-      {/* â”€â”€ KPI Row â”€â”€ */}
+      {/* ── KPI Row ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 mb-5">
         <StatCard icon={ClipboardList} label="Total MRS"         value={allMRS.length}       sub="All requisitions"   color="slate"
           onClick={() => setStatusFilter('all')}         active={statusFilter === 'all'} />
@@ -1976,8 +1976,8 @@ export default function MRSPage() {
       </div>
 
 
-      {/* â”€â”€ Detail Slide-over â”€â”€ */}
-      {/* â”€â”€ New MRS Form Modal â”€â”€ */}
+      {/* ── Detail Slide-over ── */}
+      {/* ── New MRS Form Modal ── */}
       {showForm && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
@@ -2002,10 +2002,10 @@ export default function MRSPage() {
             <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
               <div className="flex flex-col lg:flex-row gap-4">
 
-              {/* â”€â”€ Main column â”€â”€ */}
+              {/* ── Main column ── */}
               <div className="flex-1 min-w-0 space-y-5">
 
-              {/* â•â•â•â•â•â•â•â• STEP 1 — Request Info â•â•â•â•â•â•â•â• */}
+              {/* ════════ STEP 1 — Request Info ════════ */}
               {step === 1 && <>
               {/* Request Header */}
               <div className={Z_CARD}>
@@ -2088,7 +2088,7 @@ export default function MRSPage() {
                       <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{requesterInitials}</div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-blue-700 truncate">{formData.requester_name || 'Requester'}</p>
-                        <p className="text-[11px] text-slate-600 truncate">{formData.department || '—'}{formData.project_id ? ` Â· ${visibleProjects.find(p => p.id === formData.project_id)?.name || ''}` : ''}</p>
+                        <p className="text-[11px] text-slate-600 truncate">{formData.department || '—'}{formData.project_id ? ` · ${visibleProjects.find(p => p.id === formData.project_id)?.name || ''}` : ''}</p>
                         <div className="flex gap-1.5 mt-1">
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Active</span>
                         </div>
@@ -2134,7 +2134,7 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* â•â•â•â•â•â•â•â• STEP 2 — Material Items â•â•â•â•â•â•â•â• */}
+              {/* ════════ STEP 2 — Material Items ════════ */}
               {step === 2 && <>
               <div className="flex gap-2.5 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
                 <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
@@ -2247,7 +2247,7 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* â•â•â•â•â•â•â•â• STEP 3 — Justification â•â•â•â•â•â•â•â• */}
+              {/* ════════ STEP 3 — Justification ════════ */}
               {step === 3 && <>
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Justification &amp; Notes</h3>
@@ -2325,7 +2325,7 @@ export default function MRSPage() {
               </div>
               </>}
 
-              {/* â•â•â•â•â•â•â•â• STEP 4 — Review & Submit â•â•â•â•â•â•â•â• */}
+              {/* ════════ STEP 4 — Review & Submit ════════ */}
               {step === 4 && <>
               <div className={Z_CARD}>
                 <h3 className={Z_HEAD}>Request Header</h3>
@@ -2426,11 +2426,11 @@ export default function MRSPage() {
 
               </div>
 
-              {/* â”€â”€ Sidebar (visible all steps) â”€â”€ */}
+              {/* ── Sidebar (visible all steps) ── */}
               <div className="w-full lg:w-[300px] shrink-0 space-y-4">
                 {/* MR Summary panel */}
                 <div className="rounded-md border border-slate-200 overflow-hidden bg-white">
-                  <div className="px-4 py-2.5 bg-blue-600 text-white text-xs font-semibold uppercase tracking-wide">ðŸ“‹ MR Summary</div>
+                  <div className="px-4 py-2.5 bg-blue-600 text-white text-xs font-semibold uppercase tracking-wide">📋 MR Summary</div>
                   {[
                     ['Total Items', readyItems.length, ''],
                     ['Need Purchase', `${needPurchaseCount} items`, 'text-rose-600'],
@@ -2494,7 +2494,7 @@ export default function MRSPage() {
                           <div key={m.id} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{fmtMRSDate(m.request_date || m.created_at)} Â· {m.item_count ?? '—'} items</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">{fmtMRSDate(m.request_date || m.created_at)} · {m.item_count ?? '—'} items</p>
                             </div>
                             <StatusBadge status={m.status} />
                           </div>
@@ -2557,7 +2557,7 @@ export default function MRSPage() {
         </div>
       )}
 
-      {/* â•â•â• Copy Items from Existing MR Modal â•â•â• */}
+      {/* ═══ Copy Items from Existing MR Modal ═══ */}
       {showCopyModal && (() => {
         const needle = copySearch.trim().toLowerCase();
         const filtered = allMRSForCopy.filter(m =>
@@ -2619,7 +2619,7 @@ export default function MRSPage() {
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">{itemCount} items</span>
                         </div>
                         <div className="text-[11px] text-slate-500 truncate mt-0.5">{m.project_name || '—'}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{m.department || ''}{m.department && m.status ? ' Â· ' : ''}{m.status || ''}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{m.department || ''}{m.department && m.status ? ' · ' : ''}{m.status || ''}</div>
                       </button>
                     );
                   })}
@@ -2698,7 +2698,7 @@ export default function MRSPage() {
         );
       })()}
 
-      {/* â”€â”€ New Inventory Item Modal â”€â”€ */}
+      {/* ── New Inventory Item Modal ── */}
       {showNewItemModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
@@ -2765,13 +2765,13 @@ export default function MRSPage() {
                         onClick={() => { setCategoryMode('select'); setNewItemForm(f => ({ ...f, category_custom: '' })); }}
                         className="flex items-center gap-1 px-3 h-9 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 transition-colors"
                       >
-                        â† Back
+                        ← Back
                       </button>
                     </div>
                   )}
                   {categoryMode === 'custom' && newItemForm.category_custom && (
                     <p className="text-xs text-indigo-600 font-bold">
-                      âœ“ New category "<span className="font-bold">{newItemForm.category_custom}</span>" will be created
+                      ✓ New category "<span className="font-bold">{newItemForm.category_custom}</span>" will be created
                     </p>
                   )}
                 </div>
@@ -2826,7 +2826,7 @@ export default function MRSPage() {
       )}
 
 
-      {/* â”€â”€ Workflow Config Modal â”€â”€ */}
+      {/* ── Workflow Config Modal ── */}
       {showWorkflowConfig && (
         <WorkflowConfigModal onClose={() => setShowWorkflowConfig(false)} />
       )}
@@ -2845,7 +2845,7 @@ function Field({ label, children }) {
   );
 }
 
-/* â”€â”€ StatCard — modern white KPI tile (icon chip Â· big value Â· accent Â· click-to-filter) â”€â”€ */
+/* ── StatCard — modern white KPI tile (icon chip · big value · accent · click-to-filter) ── */
 function StatCard({ icon: Icon, label, value, sub, color = 'slate', onClick, active = false }) {
   const C = {
     slate:   { chip: 'bg-slate-100 text-slate-600',     bar: 'bg-slate-400',   ring: 'ring-slate-300' },
@@ -2900,7 +2900,7 @@ function InsightCard({ icon: Icon, label, value, sub, tone = 'slate' }) {
   );
 }
 
-/* â”€â”€ MD Authorization Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── MD Authorization Modal ─────────────────────────────────────────────── */
 function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
   const [approvedItems, setApprovedItems] = useState(() =>
     items.map(it => ({
@@ -2944,7 +2944,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
         {/* Toolbar */}
         <div className="flex items-center justify-between px-5 py-2.5 bg-green-50 border-b border-green-100 flex-shrink-0">
           <p className="text-xs text-green-800 font-medium">
-            Check items to include Â· edit quantities if needed Â· uncheck to exclude
+            Check items to include · edit quantities if needed · uncheck to exclude
           </p>
           <div className="flex items-center gap-2">
             <button onClick={selectAll} className="text-[10px] font-bold text-green-700 hover:underline">Select All</button>
@@ -3024,7 +3024,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
               disabled={loading || includedCount === 0}
               className="px-5 h-9 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition shadow-sm"
             >
-              {loading ? 'Authorizing…' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} â†’`}
+              {loading ? 'Authorizing…' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} →`}
             </button>
           </div>
         </div>
@@ -3033,7 +3033,7 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
   );
 }
 
-// â”€â”€ MD Edit Modal — correct an MRS's header/item details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MD Edit Modal — correct an MRS's header/item details ──────────────────────
 // Existing items are kept and updated in place (id preserved); new rows have no
 // id and are appended. Items are never removed here — that stays on
 // /cancel-items so removals stay audit-tracked.
