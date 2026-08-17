@@ -1593,9 +1593,10 @@ router.post('/bulk-update-dates', async (req, res) => {
 });
 
 // POST /stores/mrs/bulk-update-client-approved-dates
-// Body: { rows: [{ mrs_number: 'BCIM-DQS-BLR-MR001', client_approved_date: '2026-06-05' }] }
-// Corrects client_approved_at for MRs where it was previously set correctly, without
-// touching status — only fixes the timestamp, does not advance/change workflow state.
+// Body: { rows: [{ mrs_number: 'BCIM-DQS-BLR-MR001', client_approved_date: '2026-06-05', mis_number: 'MIS 114' }] }
+// Corrects client_approved_at (and optionally client_reference_no, the client's own
+// MIS/voucher number) for MRs where it was previously set correctly, without
+// touching status — only fixes these two fields, does not advance/change workflow state.
 router.post('/bulk-update-client-approved-dates', async (req, res) => {
   try {
     const { rows } = req.body;
@@ -1607,6 +1608,7 @@ router.post('/bulk-update-client-approved-dates', async (req, res) => {
     for (const row of rows) {
       const num = (row.mrs_number || row.serial_no || '').trim();
       const dt  = row.client_approved_date;
+      const mis = row.mis_number ? String(row.mis_number).trim() : null;
       if (!num || !dt) { skipped++; continue; }
       let iso;
       if (/^\d{2}-\d{2}-\d{4}$/.test(dt)) {
@@ -1617,13 +1619,15 @@ router.post('/bulk-update-client-approved-dates', async (req, res) => {
       }
       const r = await query(
         `UPDATE material_requisitions mr
-         SET client_approved_at = $1::date, updated_at = NOW()
+         SET client_approved_at = $1::date,
+             client_reference_no = COALESCE($4, client_reference_no),
+             updated_at = NOW()
          FROM projects p
          WHERE mr.project_id = p.id
            AND p.company_id = $2
            AND mr.status = 'client_approved'
            AND (mr.serial_no_formatted = $3 OR mr.mrs_number = $3)`,
-        [iso, cid, num]
+        [iso, cid, num, mis]
       );
       if (r.rowCount > 0) updated++; else skipped++;
     }

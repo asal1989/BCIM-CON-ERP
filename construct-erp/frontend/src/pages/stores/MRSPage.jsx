@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 // Show date only if it's today or in the past (guards against wrong DB timestamps)
 const fmtMRSDate = (d) => {
   if (!d) return '—';
@@ -462,6 +463,7 @@ export default function MRSPage() {
   };
   const [statusFilter, setStatusFilter] = useState('all');
   const [showWorkflowConfig, setShowWorkflowConfig] = useState(false);
+  const [showTracker, setShowTracker] = useState(false);
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
   const [sortBy, setSortBy]   = useState('mrs');   // 'mrs' | 'required_by' | 'created_at'
   const [sortDir, setSortDir] = useState('desc');  // 'asc' | 'desc'
@@ -1684,6 +1686,12 @@ export default function MRSPage() {
               title="Configure per-project approval workflows">
               <Settings className="w-4 h-4" /> Workflows
             </button>
+            <button onClick={() => setShowTracker(true)}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
+              title="Track BCIM MR No against the client's MIS/reference No and approval date">
+              <ClipboardCheck className="w-4 h-4" /> Client Approval Tracker
+            </button>
             <button onClick={exportToCSV}
               className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition"
               style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>
@@ -2830,6 +2838,15 @@ export default function MRSPage() {
       {showWorkflowConfig && (
         <WorkflowConfigModal onClose={() => setShowWorkflowConfig(false)} />
       )}
+
+      {/* ── Client Approval Tracker Modal ── */}
+      {showTracker && (
+        <ClientApprovalTrackerModal
+          rows={mrsData || []}
+          projectName={(projectsData || []).find(p => p.id === selectedProjectId)?.name}
+          onClose={() => setShowTracker(false)}
+        />
+      )}
       </div>
     </div>
     </>
@@ -3181,6 +3198,87 @@ function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
               {loading ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Client Approval Tracker ──────────────────────────────────────────────
+// BCIM MR serial vs the client's own MIS/voucher reference (client_reference_no)
+// vs the recorded client-approval date, side by side, for whichever project
+// is currently selected on the MRS page. Read-only — client_reference_no is
+// still entered at the normal client-approve workflow step for new MRs.
+function ClientApprovalTrackerModal({ rows, projectName, onClose }) {
+  const tracked = rows
+    .filter(r => r.status === 'client_approved' || r.client_reference_no)
+    .sort((a, b) => (a.serial_no_formatted || '').localeCompare(b.serial_no_formatted || '', undefined, { numeric: true }));
+
+  const exportExcel = () => {
+    const headers = ['BCIM MR No', 'Client MIS / Reference No', 'Client Approved By', 'Client Approved Date', 'Status'];
+    const data = tracked.map(r => [
+      r.serial_no_formatted || r.mrs_number || '',
+      r.client_reference_no || '',
+      r.client_approved_by_name || '',
+      r.client_approved_at ? dayjs(r.client_approved_at).format('DD-MM-YYYY') : '',
+      (r.status || '').replace(/_/g, ' '),
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    ws['!cols'] = [{ wch: 22 }, { wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Client Approval Tracker');
+    XLSX.writeFile(wb, `client-approval-tracker-${(projectName || 'all-projects').replace(/\s+/g, '-')}-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-semibold text-black">Client Approval Tracker</h3>
+            <p className="text-[11px] text-slate-400">{projectName || 'All Projects'} · BCIM MR No vs client MIS/reference No</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={exportExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition">
+              <Download className="w-3.5 h-3.5" /> Export Excel
+            </button>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition">
+              <X className="w-4 h-4 text-slate-400" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500">BCIM MR No</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Client MIS / Reference No</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Client Approved By</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Client Approved Date</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tracked.map(r => (
+                <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-2 font-mono font-semibold text-slate-700">{r.serial_no_formatted || r.mrs_number}</td>
+                  <td className="px-4 py-2 font-mono text-teal-700">{r.client_reference_no || <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-2 text-slate-600">{r.client_approved_by_name || <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-2 text-slate-600">{r.client_approved_at ? dayjs(r.client_approved_at).format('DD-MM-YYYY') : <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-2">
+                    <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase',
+                      r.status === 'client_approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                      {(r.status || '').replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {tracked.length === 0 && (
+                <tr><td colSpan={5} className="text-center text-slate-400 py-8">No client-approved MRs for this project yet.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
