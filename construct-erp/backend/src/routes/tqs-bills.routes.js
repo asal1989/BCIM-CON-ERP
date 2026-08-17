@@ -1401,6 +1401,101 @@ router.get('/ap-aging', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// Outstanding Payables Report — per-project automated email (daily by
+// default), same "outstanding" definition as GET /ap-aging above. Config
+// pattern mirrors hr-attendance.routes.js's manpower-report/configs.
+// ═══════════════════════════════════════════════════════════
+router.post('/outstanding-payables-report/test-email', async (req, res) => {
+  try {
+    if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
+    const { runOutstandingPayablesReport } = require('../utils/outstanding-payables-report.service');
+    const result = await runOutstandingPayablesReport({
+      date: req.body.date,
+      manual: true,
+      recipients: [req.user.email],
+      notify_roles: '',
+      company_id: req.user.company_id,
+      project_id: req.body.project_id,
+      project_name: req.body.project_name,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/outstanding-payables-report/configs', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM outstanding_payables_report_configs WHERE company_id=$1 ORDER BY project_name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/outstanding-payables-report/configs', async (req, res) => {
+  try {
+    const { project_id, project_name, recipients, notify_roles, enabled = true } = req.body;
+    if (!project_id || !project_name) return res.status(400).json({ error: 'project_id and project_name are required' });
+    const { rows } = await query(
+      `INSERT INTO outstanding_payables_report_configs (company_id, project_id, project_name, recipients, notify_roles, enabled, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.company_id, project_id, project_name, recipients || '', notify_roles || '', enabled, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/outstanding-payables-report/configs/:id', async (req, res) => {
+  try {
+    const { project_id, project_name, recipients, notify_roles, enabled } = req.body;
+    const { rows } = await query(
+      `UPDATE outstanding_payables_report_configs
+       SET project_id=COALESCE($1,project_id), project_name=COALESCE($2,project_name),
+           recipients=COALESCE($3,recipients), notify_roles=COALESCE($4,notify_roles),
+           enabled=COALESCE($5,enabled), updated_at=NOW()
+       WHERE id=$6 AND company_id=$7 RETURNING *`,
+      [project_id, project_name, recipients, notify_roles, enabled, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/outstanding-payables-report/configs/:id/send-now', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM outstanding_payables_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    const cfg = rows[0];
+
+    const { runOutstandingPayablesReport } = require('../utils/outstanding-payables-report.service');
+    const result = await runOutstandingPayablesReport({
+      date: req.body.date,
+      manual: true,
+      company_id: cfg.company_id,
+      project_id: cfg.project_id,
+      project_name: cfg.project_name,
+      recipients: cfg.recipients,
+      notify_roles: cfg.notify_roles,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/outstanding-payables-report/configs/:id', async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM outstanding_payables_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Config not found' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── GET /tqs/bills/untagged-items ──────────────────────────────────────────
 // Line items with no cost head, grouped by description so they can be
 // bulk-tagged in one action instead of opening each bill individually.
