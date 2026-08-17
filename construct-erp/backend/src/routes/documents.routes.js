@@ -525,6 +525,9 @@ router.get('/:id/file', async (req, res) => {
     const { rows } = await query('SELECT local_url, onedrive_id, file_name FROM documents WHERE id=$1', [doc.id]);
     const row = rows[0];
     if (!row) return res.status(404).json({ error: 'Document not found' });
+    if (req.query.download) {
+      res.setHeader('Content-Disposition', `attachment; filename="${row.file_name}"`);
+    }
 
     if (row.local_url) {
       const filePath = documentPath(row.local_url);

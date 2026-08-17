@@ -20,11 +20,15 @@ const canonicalizeRole = (role) => {
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Plain <a href> / new-tab file links can't set an Authorization header, so
+    // file-viewing endpoints pass the JWT as ?token=... instead — fall back to
+    // that only when no Bearer header was sent.
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
+    if ((!authHeader || !authHeader.startsWith('Bearer ')) && !queryToken) {
       return res.status(401).json({ error: 'Access denied. No token provided.' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Fetch fresh user data

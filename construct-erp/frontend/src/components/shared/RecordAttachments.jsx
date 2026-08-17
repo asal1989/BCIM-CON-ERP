@@ -27,6 +27,17 @@ import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 
 const BASE = process.env.REACT_APP_API_URL?.replace('/api/v1', '') || '';
+const API = process.env.REACT_APP_API_URL || '/api/v1';
+
+// OneDrive-backed docs have no local_url — route the "view" link through our
+// own authenticated proxy (GET /documents/:id/file) instead of the raw
+// onedrive_web_url, which forces a Microsoft 365 login for anyone without a
+// BCIM tenant account. A plain <a href target="_blank"> can't send an
+// Authorization header, so the JWT rides along as ?token=.
+const fileViewUrl = (docId) => {
+  const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken') || '';
+  return `${API}/documents/${docId}/file?token=${encodeURIComponent(token)}`;
+};
 
 function fileIcon(type = '') {
   const t = type.toLowerCase();
@@ -173,15 +184,22 @@ export default function RecordAttachments({
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {doc.onedrive_web_url && (
-                  <a href={doc.onedrive_web_url} target="_blank" rel="noreferrer"
+                {!doc.local_url && (
+                  <a href={fileViewUrl(doc.id)} target="_blank" rel="noreferrer"
                     className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-blue-500 hover:bg-blue-50 transition-all"
-                    title="View on OneDrive">
+                    title="View">
                     <Eye className="w-3 h-3" />
                   </a>
                 )}
                 {doc.local_url && (
                   <a href={`${BASE}${doc.local_url}`} download={doc.file_name}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-emerald-500 hover:bg-emerald-50 transition-all"
+                    title="Download">
+                    <Download className="w-3 h-3" />
+                  </a>
+                )}
+                {!doc.local_url && (
+                  <a href={`${fileViewUrl(doc.id)}&download=1`} download={doc.file_name}
                     className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-emerald-500 hover:bg-emerald-50 transition-all"
                     title="Download">
                     <Download className="w-3 h-3" />
