@@ -568,6 +568,27 @@ async function nextSlNumber(billType = 'po', companyId) {
   return `P0-${next}`;
 }
 
+// ── Helper: reject obviously-corrupted dates ────────────────────────────────
+// A bill's inv_date/received_date were found live with year "0206" instead
+// of "2026" — a digit-transposition typo that HTML5 <input type="date">
+// doesn't reliably prevent (some browsers accept partial/pasted text entry).
+// Every date field these bill routes accept gets checked here before it can
+// reach the database, rather than relying on the frontend picker alone.
+const BILL_DATE_FIELDS = ['po_date', 'inv_date', 'received_date', 'hire_period_from', 'hire_period_to', 'payment_date'];
+const MIN_BILL_YEAR = 2000, MAX_BILL_YEAR = 2100;
+function assertSaneDates(fields) {
+  for (const key of BILL_DATE_FIELDS) {
+    const v = fields[key];
+    if (!v) continue;
+    const year = parseInt(String(v).slice(0, 4), 10);
+    if (!Number.isFinite(year) || year < MIN_BILL_YEAR || year > MAX_BILL_YEAR) {
+      const e = new Error(`${key} "${v}" doesn't look like a valid date (year must be ${MIN_BILL_YEAR}-${MAX_BILL_YEAR})`);
+      e.statusCode = 400;
+      throw e;
+    }
+  }
+}
+
 // ── Helper: log history ────────────────────────────────────────────────────
 const normInvoiceText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 const runDbQuery = (db, sql, params) => (typeof db === 'function' ? db(sql, params) : db.query(sql, params));
@@ -1548,18 +1569,27 @@ router.post('/bulk-import', multerMem.single('file'), async (req, res) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
+    // A bill's inv_date/received_date were found live with year "0206"
+    // instead of "2026" — treat any resulting year outside a sane range as
+    // unparseable (null) rather than silently importing it, same guard as
+    // assertSaneDates() applies to the manual create/update routes below.
+    const saneYear = (yr) => yr >= 2000 && yr <= 2100 ? yr : null;
     const parseDate = (v) => {
       if (!v) return null;
-      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      if (v instanceof Date) {
+        return saneYear(v.getFullYear()) ? v.toISOString().slice(0, 10) : null;
+      }
       const s = String(v).trim();
       // dd-mm-yyyy
       const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
       if (m) {
         const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+        if (!saneYear(parseInt(yr, 10))) return null;
         return `${yr}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
       }
       const d = new Date(s);
-      return isNaN(d) ? null : d.toISOString().slice(0, 10);
+      if (isNaN(d) || !saneYear(d.getFullYear())) return null;
+      return d.toISOString().slice(0, 10);
     };
 
     const created = [], skipped = [], errors = [];
@@ -2224,6 +2254,8 @@ router.post('/', async (req, res) => {
       tcs_pct = 0,
       remarks, items = [],
     } = req.body;
+
+    assertSaneDates({ po_date, inv_date, received_date, hire_period_from, hire_period_to });
 
     const gst_amount = parseFloat(cgst_amt) + parseFloat(sgst_amt) + parseFloat(igst_amt);
     const preTcsTotal = parseFloat(basic_amount) + gst_amount +
@@ -3100,6 +3132,7 @@ router.put('/:id', async (req, res) => {
       'total_amount',
     ];
     const fields = req.body;
+    assertSaneDates(fields);
     // UUID/date columns — empty string must become NULL or Postgres throws
     // "invalid input syntax for type uuid/date"
     const UUID_COLS = new Set(['vendor_id', 'po_id', 'grn_id']);

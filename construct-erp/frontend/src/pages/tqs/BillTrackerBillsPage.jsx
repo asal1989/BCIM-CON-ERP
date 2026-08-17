@@ -95,6 +95,12 @@ const EMPTY_FORM = {
 const EMPTY_ITEM = { category: '', item_name: '', unit: '', quantity: '', rate: '', discount_amount: '', gst_pct: '18', po_item_id: '', wo_item_id: '', remaining_qty: null, boq_item_id: '', cost_head: '' };
 
 const F = `w-full h-10 rounded-lg px-3 text-sm font-medium text-slate-900 outline-none transition-all border placeholder:text-slate-500 ${FIELD_HL}`;
+// Constrains the native date picker's allowed range — most browsers enforce
+// min/max even on typed input, not just picker clicks. A live bill was found
+// with inv_date year "0206" (a typo the picker didn't stop), which the
+// backend now also rejects outright — this is the first line of defense.
+const DATE_MIN = '2000-01-01';
+const DATE_MAX = '2100-12-31';
 
 function Lbl({ children, req }) {
   return <label className="block text-[11px] font-medium text-slate-500 mb-1 tracking-wide">{children}{req && <span className="text-red-400 ml-0.5">*</span>}</label>;
@@ -843,12 +849,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Lbl req>Hire From</Lbl>
-                      <input type="date" className={F} value={form.hire_period_from}
+                      <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.hire_period_from}
                         onChange={e => set('hire_period_from', e.target.value)} />
                     </div>
                     <div>
                       <Lbl req>Hire To</Lbl>
-                      <input type="date" className={F} value={form.hire_period_to}
+                      <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.hire_period_to}
                         onChange={e => set('hire_period_to', e.target.value)} />
                     </div>
                   </div>
@@ -926,7 +932,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   {/* PO Date */}
                   <div>
                     <Lbl>{form.bill_type === 'wo' || form.bill_type === 'hire' ? 'WO Date' : 'PO Date'}</Lbl>
-                    <input type="date" className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
+                    <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
                   </div>
                 </div>
 
@@ -970,7 +976,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Lbl req>Invoice Date</Lbl>
-                    <input type="date" className={F} value={form.inv_date}
+                    <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.inv_date}
                       onChange={e => {
                         const d = e.target.value;
                         const autoMonth = d
@@ -993,7 +999,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 {/* Received Date */}
                 <div>
                   <Lbl>Received Date</Lbl>
-                  <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
+                  <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
                 </div>
               </div>
             </SectionCard>
@@ -2509,7 +2515,7 @@ function EditBillModal({ bill, projects, onClose }) {
               </div>
               <div>
                 <Lbl req>Invoice Date</Lbl>
-                <input type="date" className={F} value={form.inv_date}
+                <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.inv_date}
                   onChange={e => {
                     const d = e.target.value;
                     const autoMonth = d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }).toUpperCase().replace(' ', '-') : '';
@@ -2542,11 +2548,11 @@ function EditBillModal({ bill, projects, onClose }) {
               </div>
               <div>
                 <Lbl>PO / WO Date</Lbl>
-                <input type="date" className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
+                <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
               </div>
               <div>
                 <Lbl>Received Date</Lbl>
-                <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
+                <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
               </div>
               <div>
                 <Lbl>Bill Type</Lbl>
@@ -2585,12 +2591,12 @@ function EditBillModal({ bill, projects, onClose }) {
                 </div>
                 <div>
                   <Lbl req>Hire Period From</Lbl>
-                  <input type="date" className={F} value={form.hire_period_from}
+                  <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.hire_period_from}
                     onChange={e => set('hire_period_from', e.target.value)} />
                 </div>
                 <div>
                   <Lbl req>Hire Period To</Lbl>
-                  <input type="date" className={F} value={form.hire_period_to}
+                  <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.hire_period_to}
                     onChange={e => set('hire_period_to', e.target.value)} />
                 </div>
               </>)}
@@ -3065,7 +3071,7 @@ function RecordAdvanceModal({ onClose, projects, vendors, defaultProjectId }) {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Payment Date *</label>
-              <input type="date" className={F} value={form.payment_date} onChange={e => set('payment_date', e.target.value)} />
+              <input type="date" min={DATE_MIN} max={DATE_MAX} className={F} value={form.payment_date} onChange={e => set('payment_date', e.target.value)} />
             </div>
           </div>
 
