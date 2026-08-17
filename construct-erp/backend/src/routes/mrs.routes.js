@@ -1592,4 +1592,45 @@ router.post('/bulk-update-dates', async (req, res) => {
   }
 });
 
+// POST /stores/mrs/bulk-update-client-approved-dates
+// Body: { rows: [{ mrs_number: 'BCIM-DQS-BLR-MR001', client_approved_date: '2026-06-05' }] }
+// Corrects client_approved_at for MRs where it was previously set correctly, without
+// touching status — only fixes the timestamp, does not advance/change workflow state.
+router.post('/bulk-update-client-approved-dates', async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(400).json({ error: 'rows array required' });
+    }
+    const cid = req.user.company_id;
+    let updated = 0, skipped = 0;
+    for (const row of rows) {
+      const num = (row.mrs_number || row.serial_no || '').trim();
+      const dt  = row.client_approved_date;
+      if (!num || !dt) { skipped++; continue; }
+      let iso;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(dt)) {
+        const [dd, mm, yyyy] = dt.split('-');
+        iso = `${yyyy}-${mm}-${dd}`;
+      } else {
+        iso = dt;
+      }
+      const r = await query(
+        `UPDATE material_requisitions mr
+         SET client_approved_at = $1::date, updated_at = NOW()
+         FROM projects p
+         WHERE mr.project_id = p.id
+           AND p.company_id = $2
+           AND mr.status = 'client_approved'
+           AND (mr.serial_no_formatted = $3 OR mr.mrs_number = $3)`,
+        [iso, cid, num]
+      );
+      if (r.rowCount > 0) updated++; else skipped++;
+    }
+    res.json({ message: `Updated ${updated} MRS, skipped ${skipped}`, updated, skipped });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
