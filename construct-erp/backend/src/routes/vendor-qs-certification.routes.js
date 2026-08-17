@@ -699,7 +699,12 @@ router.get('/:id', async (req, res) => {
               -- "WO Certification" placeholder. work_orders has no notes
               -- column (its print template's own Narration line has always
               -- been blank) — scope_of_work is the closest equivalent.
-              COALESCE(wo.scope_of_work, po.notes) AS order_narration,
+              -- po.notes doubles as an auto-stamped "Against MR <serial>"
+              -- traceability note when the PO is created straight from an MR
+              -- (see POPage.jsx) — that internal note isn't a package
+              -- description, so exclude it rather than leak an MR number
+              -- onto the vendor-facing certificate.
+              COALESCE(wo.scope_of_work, CASE WHEN po.notes !~* '^Against MR ' THEN po.notes END) AS order_narration,
               creator.name AS created_by_name,
               approver.name AS approved_by_name,
               rejecter.name AS rejected_by_name

@@ -119,13 +119,22 @@ function requireDates(form, fields) {
 function OverviewTab({ bill }) {
   const items = bill.line_items || [];
   const upd = bill.bill_updates || {};
+  // Some vendors' transport cost is booked as a dedicated field (bill.transport_charges);
+  // others put it on the invoice as its own line item (e.g. "Transportation Charges").
+  // Only reading the dedicated field made the summary card show ₹0 even when transport
+  // was fully captured and certified via a line item — fall back to summing any
+  // transport-named line items so the card reflects what was actually billed.
+  const lineItemTransport = items
+    .filter(it => /transport/i.test(it.item_name || ''))
+    .reduce((sum, it) => sum + Number(it.total_amount || it.basic_amount || 0), 0);
+  const transportDisplay = Number(bill.transport_charges || 0) > 0 ? bill.transport_charges : lineItemTransport;
   return (
     <div className="space-y-5">
       <div className={`grid gap-3 grid-cols-2 ${(bill.credit_note_val > 0 && bill.debit_note_val > 0) ? 'md:grid-cols-6' : (bill.credit_note_val > 0 || bill.debit_note_val > 0) ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
         {[
           { label: 'Basic Amount',  value: `₹${inr(bill.basic_amount)}`,     accent: '#1a3a6b' },
           { label: 'GST Amount',    value: `₹${inr(bill.gst_amount)}`,        accent: '#d97706' },
-          { label: 'Transport',     value: `₹${inr(bill.transport_charges)}`, accent: '#0891b2' },
+          { label: 'Transport',     value: `₹${inr(transportDisplay)}`, accent: '#0891b2' },
           { label: 'Total Invoice', value: `₹${inr(bill.total_amount)}`,      accent: '#1d4ed8' },
           ...(bill.credit_note_val > 0 ? [{ label: `Credit Note${bill.credit_note_num ? ` (${bill.credit_note_num})` : ''}`, value: `− ₹${inr(bill.credit_note_val)}`, accent: '#dc2626' }] : []),
           ...(bill.debit_note_val > 0  ? [{ label: `Debit Note${bill.debit_note_num   ? ` (${bill.debit_note_num})`   : ''}`, value: `− ₹${inr(bill.debit_note_val)}`,  accent: '#7c3aed' }] : []),
