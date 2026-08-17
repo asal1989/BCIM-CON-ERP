@@ -1858,17 +1858,21 @@ export default function SCBillPreparation() {
   // is immediately editable instead of leaving the user stranded on the
   // NMR screen with no way back to the bill it just created).
   const [searchParams, setSearchParams] = useSearchParams();
-  const deepLinkWoId = searchParams.get('wo_id') || '';
-  const deepLinkBillId = searchParams.get('bill_id') || '';
+  // Captured once into state — setShowForm(true) and setSearchParams({}) below
+  // fire in the same effect, so React batches them into one re-render; reading
+  // wo_id live off searchParams (rather than this captured copy) would see it
+  // already cleared by the time RaiseBillModal mounts, passing initialWoId=''.
+  const [deepLinkWoId, setDeepLinkWoId] = useState('');
   useEffect(() => {
-    if (deepLinkBillId) {
-      setDrawerBill(deepLinkBillId);
-      setSearchParams({}, { replace: true });
-    }
-    if (deepLinkWoId && searchParams.get('open') === '1') {
+    const woId = searchParams.get('wo_id');
+    const billId = searchParams.get('bill_id');
+    const open = searchParams.get('open');
+    if (billId) setDrawerBill(billId);
+    if (woId && open === '1') {
+      setDeepLinkWoId(woId);
       setShowForm(true);
-      setSearchParams({}, { replace: true });
     }
+    if (billId || (woId && open === '1')) setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
