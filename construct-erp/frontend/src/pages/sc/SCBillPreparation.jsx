@@ -1858,10 +1858,6 @@ export default function SCBillPreparation() {
   // is immediately editable instead of leaving the user stranded on the
   // NMR screen with no way back to the bill it just created).
   const [searchParams, setSearchParams] = useSearchParams();
-  // Captured once into state — setShowForm(true) and setSearchParams({}) below
-  // fire in the same effect, so React batches them into one re-render; reading
-  // wo_id live off searchParams (rather than this captured copy) would see it
-  // already cleared by the time RaiseBillModal mounts, passing initialWoId=''.
   const [deepLinkWoId, setDeepLinkWoId] = useState('');
   useEffect(() => {
     const woId = searchParams.get('wo_id');
@@ -1872,9 +1868,18 @@ export default function SCBillPreparation() {
       setDeepLinkWoId(woId);
       setShowForm(true);
     }
-    if (billId || (woId && open === '1')) setSearchParams({}, { replace: true });
+    // Deliberately NOT clearing ?wo_id/&open here. A deploy can land right as
+    // this page loads — the service worker's controllerchange listener
+    // (index.html) force-reloads the tab, which would otherwise wipe this
+    // captured state before RaiseBillModal ever mounted, silently dropping
+    // the user back on the bare list. Leaving the params in the URL until
+    // the modal actually closes means a mid-flight reload just re-reads them
+    // and reopens the same modal instead of losing the deep link.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const clearDeepLinkParams = () => {
+    if (searchParams.get('wo_id') || searchParams.get('bill_id')) setSearchParams({}, { replace: true });
+  };
 
   const { data: projects = [] } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data??[]) });
   // Scoped to the selected project — previously fetched with no project_id at
@@ -2082,8 +2087,8 @@ export default function SCBillPreparation() {
         </div>
       </div>
 
-      {showForm    && <RaiseBillModal wos={wos} onClose={() => setShowForm(false)} initialWoId={deepLinkWoId} />}
-      {drawerBillId && <BillDetailPage billId={drawerBillId} onClose={() => setDrawerBill(null)} />}
+      {showForm    && <RaiseBillModal wos={wos} onClose={() => { setShowForm(false); clearDeepLinkParams(); }} initialWoId={deepLinkWoId} />}
+      {drawerBillId && <BillDetailPage billId={drawerBillId} onClose={() => { setDrawerBill(null); clearDeepLinkParams(); }} />}
     </div>
   );
 }
