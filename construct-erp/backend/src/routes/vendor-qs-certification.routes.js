@@ -288,12 +288,7 @@ async function nextCertNumber(companyId, db = query) {
 
 async function buildSummaryFromBills(executor, billIds, companyId, excludeCertificationId = null) {
   const billsRes = await executor.query(`
-    SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount,
-           -- po_id / wo_number drive the "rest of the order scope" pass at the
-           -- end, which restates every order line so the running account
-           -- continues. tqs_bills has no wo_id column — work orders are linked
-           -- by number only — so the WO lookup below joins on wo_number.
-           po_id, wo_number
+    SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount
     FROM tqs_bills
     WHERE id = ANY($1::uuid[])
       AND company_id = $2
@@ -449,80 +444,6 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
       remarks: '',
     });
   });
-
-  // ── Carry the rest of the order's scope into the abstract ────────────────
-  // An RA bill is a RUNNING ACCOUNT: every RA restates the full order scope so
-  // "Previous + Present = Cumulative" continues across the series. The grouping
-  // above only ever sees line items present on THIS certificate's invoices, so
-  // an item billed on RA-01 but absent from RA-02's invoice vanished from RA-02
-  // entirely — taking its previously-certified quantity with it and breaking
-  // the running total.
-  //
-  // Live example: PO PODQSMB009 has 31 lines. RA-01's invoice happened to list
-  // all 31 so its abstract was complete; RA-02's invoice listed only its own 15,
-  // so the 13 items RA-01 had certified disappeared instead of carrying forward
-  // as Previous Qty.
-  //
-  // Add every remaining order item with present qty 0. They contribute nothing
-  // to the certified amount (0 x rate) but restore Previous / Cumulative /
-  // Balance for the whole order.
-  const orderItemRows = [];
-  const poIds = [...new Set(billsRes.rows.map(b => b.po_id).filter(Boolean))];
-  if (poIds.length) {
-    const { rows: poItems } = await executor.query(
-      `SELECT pi.id, pi.material_name, pi.quantity, pi.rate, pi.unit
-         FROM po_items pi WHERE pi.po_id = ANY($1::uuid[])`, [poIds]);
-    orderItemRows.push(...poItems.map(r => ({
-      id: r.id, name: r.material_name, qty: n(r.quantity), rate: n(r.rate), unit: r.unit,
-    })));
-  }
-  const woNumbers = [...new Set(billsRes.rows.map(b => b.wo_number).filter(Boolean))];
-  if (woNumbers.length) {
-    const { rows: woItems } = await executor.query(
-      `SELECT wi.id, wi.description, wi.quantity, wi.rate, wi.unit
-         FROM work_order_items wi
-         JOIN work_orders wo ON wo.id = wi.wo_id
-        WHERE UPPER(TRIM(wo.wo_number)) = ANY($1::text[])`,
-      [woNumbers.map(w => String(w).trim().toUpperCase())]);
-    orderItemRows.push(...woItems.map(r => ({
-      id: r.id, name: r.description, qty: n(r.quantity), rate: n(r.rate), unit: r.unit,
-    })));
-  }
-
-  const coveredRefs = new Set();
-  for (const it of grouped.values()) {
-    if (it.item_ref_id) coveredRefs.add(String(it.item_ref_id));
-    const ch = chainCache.get(it.item_ref_id);
-    if (ch) for (const sib of ch.chainItemIds) coveredRefs.add(String(sib));
-  }
-
-  for (const oi of orderItemRows) {
-    if (coveredRefs.has(String(oi.id))) continue;
-    const chain = chainCache.get(oi.id) || await resolveGradeChain(executor, oi.id, chainCache);
-    if (chain && chain.chainItemIds.some(s => coveredRefs.has(String(s)))) continue;
-    const key = chain ? chain.chainKey : `order-item:${oi.id}`;
-    if (grouped.has(key)) continue;
-    const chainPrior = chain ? (priorByChainKey.get(chain.chainKey) || 0) : (priorByRawKey.get(oi.id) || 0);
-    const descPrior  = priorByDescInOrder.get(normName(oi.name)) || 0;
-    const qsPrevQty  = Math.max(chainPrior, descPrior);
-    const orderQty   = chain ? chain.currentQty : oi.qty;
-    grouped.set(key, {
-      bill_id: null, bill_ids: [], bill_line_item_id: null, bill_line_item_ids: [],
-      source_inv_number: null,
-      item_ref_id: chain?.currentItemId || oi.id,
-      description: oi.name || '',
-      unit: chain?.currentUnit || oi.unit || '',
-      order_qty: orderQty,
-      order_rate: chain ? chain.currentRate : oi.rate,
-      inv_prev_qty: 0, inv_pres_qty: 0,
-      qs_prev_qty: qsPrevQty,
-      qs_pres_qty: 0,
-      tax_amount: 0,
-      amount: 0,
-      balance_qty: Math.max(0, orderQty - qsPrevQty),
-      remarks: '',
-    });
-  }
 
   return { bills: billsRes.rows, items: Array.from(grouped.values()) };
 }
