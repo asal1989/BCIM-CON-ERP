@@ -14,18 +14,28 @@ const ESI_EMPLOYER = 0.0325;   // 3.25%
 const PF_WAGE_CEILING = 15000; // PF applies on wages up to ₹15,000
 const ESI_WAGE_CEILING = 21000; // ESI applies on wages up to ₹21,000
 
-const calculatePayroll = (dailyRate, daysPresent, otHours, otRate) => {
+// Both statutory ceilings are defined per CALENDAR MONTH. This route bills an
+// arbitrary period_from–period_to window, so the ceilings have to be scaled to
+// the period being paid: run a weekly cycle against the raw monthly figures and
+// every worker's gross falls under ₹21,000, making the whole workforce look
+// ESI-eligible, and the PF ceiling effectively stops applying at all.
+// `periodFraction` is periodDays/30, clamped to a sane range.
+const calculatePayroll = (dailyRate, daysPresent, otHours, otRate, periodFraction = 1) => {
   const basicWages  = dailyRate * daysPresent;
   const otWages     = (otRate || dailyRate * 2 / 8) * otHours;
   const grossWages  = basicWages + otWages;
 
-  // PF on basic wages (capped at ₹15,000)
-  const pfBase = Math.min(basicWages, PF_WAGE_CEILING);
+  const frac = Math.min(Math.max(periodFraction || 1, 0.01), 12);
+
+  // PF on basic wages, capped at the period-proportionate share of ₹15,000/month
+  const pfBase = Math.min(basicWages, PF_WAGE_CEILING * frac);
   const pfEmployee = parseFloat((pfBase * PF_EMPLOYEE).toFixed(2));
   const pfEmployer = parseFloat((pfBase * PF_EMPLOYER).toFixed(2));
 
-  // ESI on gross wages (if wage <= ₹21,000/month)
-  const esiApplicable = grossWages <= ESI_WAGE_CEILING;
+  // ESI eligibility is a MONTHLY wage test — normalise this period's gross to a
+  // monthly equivalent before comparing against the ₹21,000 ceiling.
+  const monthlyEquivalentGross = grossWages / frac;
+  const esiApplicable = monthlyEquivalentGross <= ESI_WAGE_CEILING;
   const esiEmployee = esiApplicable ? parseFloat((grossWages * ESI_EMPLOYEE).toFixed(2)) : 0;
   const esiEmployer = esiApplicable ? parseFloat((grossWages * ESI_EMPLOYER).toFixed(2)) : 0;
 
@@ -58,7 +68,7 @@ router.get('/', authorize('super_admin', 'admin', 'hr', 'accountant'), async (re
 router.post('/generate', authorize('super_admin','admin','hr','accountant'), async (req, res) => {
   const { project_id, period_from, period_to } = req.body;
 
-  const result = await withTransaction(async (client) => {
+  const txResult = await withTransaction(async (client) => {
     // Get attendance summary
     const workers = await client.query(
       `SELECT w.id,w.daily_rate,w.ot_rate,
@@ -73,11 +83,20 @@ router.post('/generate', authorize('super_admin','admin','hr','accountant'), asy
       [project_id, period_from, period_to]
     );
 
+    // Length of the billing window, as a fraction of a 30-day month — drives the
+    // proportionate PF/ESI ceilings in calculatePayroll.
+    const periodDays = Math.max(
+      1,
+      Math.round((new Date(period_to) - new Date(period_from)) / 86400000) + 1
+    );
+    const periodFraction = periodDays / 30;
+
     const generated = [];
+    let skippedNoWages = 0;
     for (const w of workers.rows) {
       const days = parseFloat(w.days_present) + parseFloat(w.half_days || 0);
-      const calc = calculatePayroll(w.daily_rate, days, parseFloat(w.ot_hours), w.ot_rate);
-      if (calc.grossWages === 0) continue;
+      const calc = calculatePayroll(w.daily_rate, days, parseFloat(w.ot_hours), w.ot_rate, periodFraction);
+      if (calc.grossWages === 0) { skippedNoWages++; continue; }
 
       const r = await client.query(
         `INSERT INTO payroll (project_id,worker_id,period_from,period_to,days_present,ot_hours,
@@ -90,10 +109,23 @@ router.post('/generate', authorize('super_admin','admin','hr','accountant'), asy
       );
       if (r.rows[0]) generated.push(r.rows[0]);
     }
-    return generated;
+    return { generated, skippedNoWages, totalWorkers: workers.rows.length };
   });
 
+  const { generated: result, skippedNoWages, totalWorkers } = txResult;
+
   if (result.length === 0) {
+    // Distinguish the two very different reasons for an empty run — reporting
+    // "already generated" when the real cause is that nobody had any attendance
+    // sends the user off deleting records that were never created.
+    if (!totalWorkers) {
+      return res.status(400).json({ error: 'No active workers found for this project.' });
+    }
+    if (skippedNoWages === totalWorkers) {
+      return res.status(400).json({
+        error: `No wages to pay: none of the ${totalWorkers} active worker(s) have attendance recorded between ${period_from} and ${period_to}.`,
+      });
+    }
     return res.status(409).json({ error: 'Payroll already generated for this period. Delete existing records first to regenerate.' });
   }
 

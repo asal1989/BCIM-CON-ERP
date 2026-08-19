@@ -140,6 +140,18 @@ const initPayrollCtcColumns = async () => {
 };
 runSchemaInit('hr-payroll-ctc-columns', initPayrollCtcColumns);
 
+// Paid non-working days (declared holidays + non-Sunday rostered offs) credited
+// in the run. Kept as its own column so a reviewer can see why paid_days exceeds
+// the days actually attended, instead of it looking like an attendance error.
+// NOTE: deliberately a NEW runSchemaInit key — appending to the already-consumed
+// 'hr-payroll-ctc-columns' key would never execute in production.
+runSchemaInit('hr-payroll-paid-holiday-column', async () => {
+  await query(`ALTER TABLE hr_monthly_payroll ADD COLUMN IF NOT EXISTS paid_holiday_days NUMERIC(5,1) DEFAULT 0`);
+  // Deductions that could not be recovered because they exceeded the month's
+  // gross (net pay is floored at zero). Surfaced so HR can carry it forward.
+  await query(`ALTER TABLE hr_monthly_payroll ADD COLUMN IF NOT EXISTS unrecovered_deductions NUMERIC(12,2) DEFAULT 0`);
+});
+
 // ─── Statutory calc helpers ──────────────────────────────────────────────────
 const PF_CEILING  = 15000;
 const ESI_CEILING = 21000;
@@ -154,8 +166,17 @@ function calcPF(basic, applicable) {
   return { emp: Math.round(pfWage * PF_RATE_EMP), er: Math.round(pfWage * PF_RATE_ER) };
 }
 
+// `applicable` is the eligibility decision made ONCE by the caller against the
+// employee's configured (unprorated) gross, per the ESI Act — eligibility is
+// fixed for the contribution period and does not flip mid-period.
+//
+// This function must NOT re-test the ceiling against the gross passed in: that
+// value is the pro-rated gross PLUS incentive, so an eligible employee (say
+// ₹20,000 configured) who earned a ₹2,000 incentive crossed ₹21,000 here and
+// silently lost their ESI for the month. Contributions are always computed on
+// wages actually paid, which is exactly the `gross` handed in.
 function calcESI(gross, applicable) {
-  if (!applicable || parseFloat(gross) > ESI_CEILING) return { emp: 0, er: 0 };
+  if (!applicable) return { emp: 0, er: 0 };
   return {
     emp: Math.round(parseFloat(gross) * ESI_RATE_EMP),
     er:  Math.round(parseFloat(gross) * ESI_RATE_ER),
@@ -405,6 +426,8 @@ router.post('/run', async (req, res) => {
     // `gross`, itemised silently exceeds gross and the other-earnings clamp
     // below absorbs the difference without a trace. Surface it instead.
     const componentMismatches = [];
+    // Employees whose deductions exceeded their gross — net pay floored at zero.
+    const negativeNetWarnings = [];
     for (const emp of employees.rows) {
       // Count attendance for the month
       const att = await query(
@@ -412,7 +435,16 @@ router.post('/run', async (req, res) => {
            COUNT(*) FILTER (WHERE status='present')  as present,
            COUNT(*) FILTER (WHERE status='half_day') as half_day,
            COUNT(*) FILTER (WHERE status='absent')   as absent,
-           COUNT(*) FILTER (WHERE status='leave')    as on_leave
+           COUNT(*) FILTER (WHERE status='leave')    as on_leave,
+           -- Declared holidays / rostered offs are PAID days. workingDaysInMonth()
+           -- counts every non-Sunday as a working day, so a public holiday falling
+           -- Mon–Sat (e.g. 15-Aug-2026, a Saturday, marked 'holiday' for 122 staff)
+           -- was previously counted in workDays but NOT in paidDays — silently
+           -- docking a full day's LOP for a paid holiday. Sundays are already
+           -- excluded from workDays, so they are excluded here too to avoid
+           -- double-crediting them.
+           COUNT(*) FILTER (WHERE status IN ('holiday','week_off')
+                              AND EXTRACT(DOW FROM attendance_date) <> 0) as paid_off
          FROM hr_attendance
          WHERE user_id=$1
            AND EXTRACT(MONTH FROM attendance_date)=$2
@@ -420,7 +452,9 @@ router.post('/run', async (req, res) => {
         [emp.user_id, m, y]
       );
       const a = att.rows[0];
-      const paidDays = parseFloat(a.present || 0) + parseFloat(a.half_day || 0) * 0.5 + parseFloat(a.on_leave || 0);
+      const paidOffDays = parseFloat(a.paid_off || 0);
+      const paidDays = parseFloat(a.present || 0) + parseFloat(a.half_day || 0) * 0.5
+                     + parseFloat(a.on_leave || 0) + paidOffDays;
       const absentDays = parseFloat(a.absent || 0);
 
       // CL/SL/EL availed this month — reported on the pay sheet alongside LOP so
@@ -507,8 +541,17 @@ router.post('/run', async (req, res) => {
       const grossMonthly = Math.round(parseFloat(emp.gross_monthly || 0) * lopFactor);
       const gross = (grossMonthly > 0 ? grossMonthly : componentSum) + incentive;
       // Unprorated entitlement, kept for reference so a reviewer can see at a
-      // glance how much LOP cost the employee without recomputing it.
-      const fullGross = Math.round(parseFloat(emp.gross_monthly || 0));
+      // glance how much LOP cost the employee without recomputing it. Falls back
+      // to the unprorated component sum on legacy rows with no gross_monthly —
+      // otherwise the payslip showed "Full Gross ₹0" next to a real gross.
+      const fullGrossConfigured = Math.round(parseFloat(emp.gross_monthly || 0));
+      const fullGross = fullGrossConfigured > 0
+        ? fullGrossConfigured
+        : Math.round(
+            parseFloat(emp.basic || 0) + parseFloat(emp.hra || 0)
+            + parseFloat(emp.conveyance || 0) + parseFloat(emp.medical || 0)
+            + parseFloat(emp.special_allowance || 0) + parseFloat(emp.other_allowance || 0)
+          );
       // "Other" is now only the genuine remainder — everything the itemised
       // component columns above don't already account for. Before those columns
       // existed this bucket absorbed the whole allowance structure, which is why
@@ -528,9 +571,12 @@ router.post('/run', async (req, res) => {
       const esi = calcESI(gross, esiEligible);
       const pt  = calcPT(gross, m, emp.pt_applicable, ptSlabs);
 
-      // Loan deduction (active loans)
+      // Loan deduction (active loans). Each loan contributes the LESSER of its EMI
+      // and its outstanding balance — recovering the full EMI on the final
+      // instalment would over-collect from the employee and drive the balance
+      // negative.
       const loanQ = await query(
-        `SELECT COALESCE(SUM(emi_amount),0) as total_emi
+        `SELECT COALESCE(SUM(LEAST(emi_amount, balance_amount)),0) as total_emi
          FROM hr_loans WHERE user_id=$1 AND status='approved' AND balance_amount>0`,
         [emp.user_id]
       );
@@ -557,8 +603,18 @@ router.post('/run', async (req, res) => {
       const messDed  = parseFloat(emp.mess_deduction || 0);
       const accomDed = parseFloat(emp.accommodation_deduction || 0);
 
-      const totalDed = pf.emp + esi.emp + pt + loanDed + prevTds + prevAdv + messDed + accomDed;
-      const netPay   = gross - totalDed;
+      const rawTotalDed = pf.emp + esi.emp + pt + loanDed + prevTds + prevAdv + messDed + accomDed;
+      // Net pay can never be negative. Mess/accommodation recoveries are flat
+      // (not pro-rated), so an employee with heavy LOP could previously end up
+      // with a negative net pay that was written and paid out as-is. Cap the
+      // recovery at what the employee actually earned and carry the shortfall
+      // forward as an arrear for HR to recover next month.
+      const totalDed        = Math.min(rawTotalDed, gross);
+      const netPay          = gross - totalDed;
+      const unrecoveredDed  = Math.round((rawTotalDed - totalDed) * 100) / 100;
+      if (unrecoveredDed > 0) {
+        negativeNetWarnings.push(`${emp.employee_name || emp.user_id} (deductions ₹${Math.round(rawTotalDed)} exceed gross ₹${gross} — ₹${unrecoveredDed} not recovered)`);
+      }
 
       // Built from a keyed map rather than a positional list: this row now carries
       // 45+ columns, and hand-numbering $1…$45 twice (once for VALUES, once for
@@ -581,7 +637,9 @@ router.post('/run', async (req, res) => {
         mess_deduction: messDed, accommodation_deduction: accomDed,
         absent_days: absentDays, cl_availed: clAvailed, sl_availed: slAvailed,
         el_availed: elAvailed, total_leave_availed: totalLeaveAvailed,
+        paid_holiday_days: paidOffDays,
         total_deductions: totalDed, net_pay: netPay,
+        unrecovered_deductions: unrecoveredDed,
         status: 'draft',
       };
       const keyCols = ['company_id', 'user_id', 'month', 'year'];
@@ -614,6 +672,9 @@ router.post('/run', async (req, res) => {
       ...(ptSlabs.length === 0 ? { pt_warning: 'No PT slabs configured for this company — Professional Tax was not deducted for anyone this run. Configure PT slabs under HR Masters.' } : {}),
       ...(componentMismatches.length ? {
         component_warning: `${componentMismatches.length} employee(s) have earning components that exceed their configured gross salary — some pay may have been silently dropped: ${componentMismatches.slice(0, 3).join('; ')}${componentMismatches.length > 3 ? '…' : ''}`,
+      } : {}),
+      ...(negativeNetWarnings.length ? {
+        negative_net_warning: `${negativeNetWarnings.length} employee(s) had deductions exceeding their gross pay — net pay was floored at ₹0 and the balance was NOT recovered. Carry it forward manually: ${negativeNetWarnings.slice(0, 3).join('; ')}${negativeNetWarnings.length > 3 ? '…' : ''}`,
       } : {}),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -776,6 +837,27 @@ router.post('/bulk-pay', async (req, res) => {
            WHERE id=$4`,
           [payment_date, payment_mode || 'bank_transfer', payment_ref || null, p.id]
         );
+
+        // Apply the loan recovery to the loan subledger. Payroll deducts the EMI
+        // from the employee's salary and the JV credits 2440 Loan/Advance
+        // Recovery, but nothing ever reduced hr_loans.balance_amount — so the
+        // same EMI would be recovered again every month, forever, and the
+        // subledger never reconciled with the GL. Each loan is reduced by the
+        // same LEAST(emi, balance) the run used, and closed when fully repaid.
+        // Safe against double-application: this loop only ever sees rows that
+        // were still 'approved', and it flips them to 'paid' immediately above.
+        if (parseFloat(p.loan_deduction || 0) > 0) {
+          await client.query(
+            `UPDATE hr_loans
+                SET repaid_amount  = repaid_amount  + LEAST(emi_amount, balance_amount),
+                    balance_amount = balance_amount - LEAST(emi_amount, balance_amount),
+                    status = CASE WHEN balance_amount - LEAST(emi_amount, balance_amount) <= 0
+                                  THEN 'closed' ELSE status END
+              WHERE user_id = $1 AND company_id = $2
+                AND status = 'approved' AND balance_amount > 0`,
+            [p.user_id, req.user.company_id]
+          );
+        }
         totals.gross   += parseFloat(p.gross_earnings  || 0);
         totals.netPay  += parseFloat(p.net_pay         || 0);
         totals.tds     += parseFloat(p.tds             || 0);
@@ -889,6 +971,9 @@ router.get('/:id/payslip', async (req, res) => {
 router.get('/reports/pf-ecr', async (req, res) => {
   try {
     const { month, year } = req.query;
+    // Only employees who actually had a PF contribution belong in the ECR —
+    // including zero-contribution, blank-UAN rows gets the whole file rejected
+    // by the EPFO portal.
     const { rows } = await query(
       `SELECT u.name, ep.uan_number, ep.pf_account_number,
               p.basic, p.pf_employee, p.pf_employer,
@@ -897,10 +982,20 @@ router.get('/reports/pf-ecr', async (req, res) => {
        JOIN users u ON u.id = p.user_id
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        WHERE p.company_id=$1 AND p.month=$2 AND p.year=$3 AND p.status IN ('approved','paid')
+         AND p.pf_employee > 0
        ORDER BY u.name`,
       [req.user.company_id, month, year]
     );
-    res.json({ data: rows });
+    // A missing UAN silently breaks the upload, so name the employees instead of
+    // letting the preparer discover it on the portal.
+    const missingUan = rows.filter(r => !r.uan_number || !String(r.uan_number).trim()).map(r => r.name);
+    res.json({
+      data: rows,
+      ...(missingUan.length ? {
+        warning: `${missingUan.length} employee(s) have a PF contribution but no UAN on file — the ECR upload will be rejected until these are filled in: ${missingUan.slice(0, 10).join(', ')}${missingUan.length > 10 ? '…' : ''}`,
+        missing_uan_employees: missingUan,
+      } : {}),
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1023,7 +1118,11 @@ router.get('/reports/bank-transfer', async (req, res) => {
     const year  = parseInt(req.query.year)  || new Date().getFullYear();
     const fmt   = (req.query.format || 'csv').toLowerCase(); // csv | text
 
-    const { rows } = await query(`
+    // Fetch EVERY payable employee, then split — previously the bank-detail
+    // check lived in the WHERE clause, so anyone missing an account number or
+    // IFSC was silently dropped from the file and simply never got paid, with
+    // nothing anywhere to say so.
+    const { rows: allRows } = await query(`
       SELECT
         u.name          AS employee_name,
         u.employee_code AS emp_code,
@@ -1039,15 +1138,46 @@ router.get('/reports/bank-transfer', async (req, res) => {
       LEFT JOIN employee_profiles ep ON ep.user_id = p.user_id
       WHERE p.company_id = $1 AND p.month = $2 AND p.year = $3
         AND p.status IN ('approved','paid')
-        AND ep.bank_account_number IS NOT NULL
-        AND ep.bank_account_number != ''
-        AND ep.bank_ifsc IS NOT NULL
-        AND ep.bank_ifsc != ''
       ORDER BY u.name`,
       [req.user.company_id, month, year]
     );
 
-    if (!rows.length) return res.status(404).json({ error: 'No payroll records with bank details found for this period' });
+    const hasBank = (r) => r.account_number && String(r.account_number).trim()
+                        && r.ifsc_code && String(r.ifsc_code).trim();
+    const rows     = allRows.filter(hasBank);
+    const excluded = allRows.filter(r => !hasBank(r));
+    const excludedTotal = excluded.reduce((s, r) => s + parseFloat(r.net_pay || 0), 0);
+
+    if (!allRows.length) return res.status(404).json({ error: 'No approved or paid payroll records found for this period' });
+    if (!rows.length) {
+      return res.status(404).json({
+        error: `None of the ${allRows.length} payroll record(s) for this period have bank account details on file.`,
+        excluded_employees: excluded.map(r => r.employee_name),
+      });
+    }
+
+    // Surfaced as headers so the caller sees the omission even when the body is
+    // a raw CSV/NEFT file that must stay machine-parseable for the bank portal.
+    if (excluded.length) {
+      res.setHeader('X-Excluded-Count', String(excluded.length));
+      res.setHeader('X-Excluded-Amount', excludedTotal.toFixed(2));
+      res.setHeader('X-Excluded-Employees', excluded.map(r => r.employee_name).join('; ').slice(0, 900));
+    }
+
+    // format=json lets the UI check for omissions BEFORE downloading the file.
+    if ((req.query.format || '').toLowerCase() === 'json') {
+      return res.json({
+        data: rows,
+        total_amount: rows.reduce((s, r) => s + parseFloat(r.net_pay || 0), 0),
+        count: rows.length,
+        excluded_count: excluded.length,
+        excluded_amount: excludedTotal,
+        excluded_employees: excluded.map(r => ({ name: r.employee_name, emp_code: r.emp_code, net_pay: r.net_pay })),
+        ...(excluded.length ? {
+          warning: `${excluded.length} employee(s) totalling ₹${Math.round(excludedTotal).toLocaleString('en-IN')} are NOT in this transfer file because they have no bank account/IFSC on record: ${excluded.map(r => r.employee_name).slice(0, 10).join(', ')}${excluded.length > 10 ? '…' : ''}`,
+        } : {}),
+      });
+    }
 
     const totalAmount = rows.reduce((s, r) => s + parseFloat(r.net_pay || 0), 0);
     const monthName   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month - 1];

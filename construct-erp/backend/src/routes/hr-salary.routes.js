@@ -147,6 +147,26 @@ const initSalaryCtcColumns = async () => {
 };
 runSchemaInit('hr-salary-ctc-columns', initSalaryCtcColumns);
 
+// One-off repair for rows written before the GREATEST(...) guard in
+// POST /employee-salaries: a same-day salary supersede set effective_to to the
+// day BEFORE the row's own effective_from, leaving impossible ranges like
+// "from 2026-07-03 to 2026-07-02" in production.
+//
+// Clamping effective_to up to effective_from is provably behaviour-neutral —
+// payroll matches on `effective_from <= month_start AND effective_to >=
+// month_start`, and a row whose effective_to is at or before its own
+// effective_from can never satisfy both for any month. It simply makes the
+// stored range valid so date-range reports and constraints stop tripping over it.
+runSchemaInit('hr-salary-repair-inverted-ranges', async () => {
+  const { rowCount } = await query(
+    `UPDATE hr_employee_salaries
+        SET effective_to = effective_from
+      WHERE effective_to IS NOT NULL
+        AND effective_to < effective_from`
+  );
+  if (rowCount) console.log(`[hr-salary] repaired ${rowCount} inverted salary effective-date range(s)`);
+});
+
 // ─── CTC Breakup calculator — BCIM Salary Structure (from GreytHR extract) ───
 // Basic = max(40% of CTC, ₹15,000). Employer side: PF 12%, EDLI ₹75,
 // EPF Admin ₹75, Gratuity 4.81%. Employee deductions: PF 12% (capped at the
@@ -541,16 +561,27 @@ router.post('/employee-salaries', async (req, res) => {
     const userCheck = await query('SELECT id FROM users WHERE id = $1 AND company_id = $2', [user_id, req.user.company_id]);
     if (!userCheck.rows.length) return res.status(404).json({ error: 'Employee not found' });
 
+    if (!effective_from) return res.status(400).json({ error: 'effective_from is required.' });
+    if (effective_to && new Date(effective_to) < new Date(effective_from)) {
+      return res.status(400).json({ error: `effective_to (${effective_to}) cannot be earlier than effective_from (${effective_from}).` });
+    }
+
     // Close any salary record that overlaps the new effective_from. Set its
     // effective_to to the day BEFORE the new record starts, so there is never
     // more than one salary in force on any given date. Using `effective_from <= $1`
     // (not `<`) also supersedes a record dated the SAME day — previously a same-date
     // update left both rows open, so payroll matched two salaries for one employee
     // and the gross flipped between them on each run.
+    // GREATEST(...) guard: when the superseded row starts on the SAME day as the
+    // new one, `$1 - 1 day` lands before that row's own effective_from and
+    // writes an impossible range (effective_to < effective_from) — which is how
+    // rows like "from 2026-07-03 to 2026-07-02" got into production. Clamping to
+    // effective_from collapses a same-day supersede into a valid zero-length
+    // range instead, which the payroll LATERAL then correctly never matches.
     if (effective_from) {
       await query(
         `UPDATE hr_employee_salaries
-            SET effective_to = ($1::date - INTERVAL '1 day')
+            SET effective_to = GREATEST(effective_from, ($1::date - INTERVAL '1 day'))
           WHERE user_id = $2
             AND effective_from <= $1
             AND (effective_to IS NULL OR effective_to >= $1)`,
@@ -600,6 +631,14 @@ router.put('/employee-salaries/:id', async (req, res) => {
     if (!existing.rows.length) return res.status(404).json({ error: 'Salary record not found' });
     const p = existing.rows[0];
     const v = (key) => (b[key] !== undefined && b[key] !== null ? b[key] : p[key]);
+
+    // Same range guard as POST — this endpoint can move effective_from, which
+    // could otherwise push it past an existing effective_to and invert the range.
+    const newFrom = v('effective_from');
+    const newTo   = v('effective_to');
+    if (newFrom && newTo && new Date(newTo) < new Date(newFrom)) {
+      return res.status(400).json({ error: `effective_to (${String(newTo).slice(0, 10)}) cannot be earlier than effective_from (${String(newFrom).slice(0, 10)}).` });
+    }
 
     const { rows } = await query(
       `UPDATE hr_employee_salaries SET
