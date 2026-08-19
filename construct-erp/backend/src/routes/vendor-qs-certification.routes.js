@@ -209,7 +209,21 @@ async function resolveGradeChain(executor, poItemId, cache) {
   const gradeMatch = String(item.material_name || '').match(/^([A-Za-z]+\s?\d+)/);
   const grade = gradeMatch ? gradeMatch[1].replace(/\s+/g, '').toUpperCase() : null;
 
-  if (!grade || !baseNumber) {
+  // Identity used to recognise "the same line item" across PO amendments.
+  // The grade prefix (M30, M25…) only exists for concrete-style names; every
+  // other material ("Cement Concrete Blocks Size: 300mm x …", steel, fittings)
+  // produced no grade at all, so the chain collapsed to this single item and
+  // quantities already certified against the PRE-amendment po_item_id were
+  // dropped from "previously certified" on the next certificate — understating
+  // previous qty, overstating balance, and risking over-certification beyond
+  // the PO. Fall back to the normalised full material name in that case.
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const selfName = normName(item.material_name);
+  const matchesSibling = grade
+    ? (name) => String(name || '').toUpperCase().startsWith(grade)
+    : (name) => normName(name) === selfName;
+
+  if ((!grade && !selfName) || !baseNumber) {
     const result = {
       chainKey: `item:${poItemId}`,
       currentItemId: poItemId,
@@ -233,7 +247,7 @@ async function resolveGradeChain(executor, poItemId, cache) {
     const its = await executor.query(
       `SELECT id, material_name, quantity, rate, unit FROM po_items WHERE po_id=$1`, [po.id]);
     for (const it of its.rows) {
-      if (String(it.material_name || '').toUpperCase().startsWith(grade)) {
+      if (matchesSibling(it.material_name)) {
         chainItemIds.push(it.id);
         if (!current) current = it; // chainPOs sorted DESC by date → first hit is the latest
       }
@@ -242,7 +256,7 @@ async function resolveGradeChain(executor, poItemId, cache) {
 
   const result = chainItemIds.length
     ? {
-        chainKey: `chain:${baseNumber.toUpperCase()}:${grade}`,
+        chainKey: `chain:${baseNumber.toUpperCase()}:${grade || selfName}`,
         currentItemId: current.id,
         currentQty: n(current.quantity), currentRate: n(current.rate), currentUnit: current.unit,
         chainItemIds,
