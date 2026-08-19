@@ -66,14 +66,23 @@ router.get('/', authorize('super_admin', 'admin', 'hr', 'accountant'), async (re
 
 // POST /payroll/generate — auto-generate from attendance
 router.post('/generate', authorize('super_admin','admin','hr','accountant'), async (req, res) => {
+ try {
   const { project_id, period_from, period_to } = req.body;
+  if (!project_id || !period_from || !period_to) {
+    return res.status(400).json({ error: 'project_id, period_from and period_to are required.' });
+  }
 
   const txResult = await withTransaction(async (client) => {
     // Get attendance summary
     const workers = await client.query(
+      // NOTE: FILTER must bind directly to the aggregate call. This previously
+      // read `COUNT(*)*0.5 FILTER (WHERE …)`, which is a Postgres syntax error —
+      // it made this whole endpoint fail with a bare 500 (the route had no
+      // try/catch, so the parse error never surfaced). The *0.5 belongs OUTSIDE
+      // the filtered aggregate.
       `SELECT w.id,w.daily_rate,w.ot_rate,
          COUNT(*) FILTER (WHERE a.status='present') as days_present,
-         COUNT(*)*0.5 FILTER (WHERE a.status='half_day') as half_days,
+         COUNT(*) FILTER (WHERE a.status='half_day') * 0.5 as half_days,
          COALESCE(SUM(a.ot_hours),0) as ot_hours
        FROM workers w
        LEFT JOIN attendance a ON a.worker_id=w.id
@@ -140,6 +149,7 @@ router.post('/generate', authorize('super_admin','admin','hr','accountant'), asy
   }), { gross:0, pf_employee:0, pf_employer:0, esi_employee:0, esi_employer:0, net:0 });
 
   res.status(201).json({ message: `Payroll generated for ${result.length} workers`, data: result, totals });
+ } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // PATCH /payroll/:id/pay
