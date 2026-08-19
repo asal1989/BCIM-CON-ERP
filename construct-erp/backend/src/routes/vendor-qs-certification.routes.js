@@ -193,6 +193,12 @@ const billPayableCap = (bill = {}) => {
 // qty is whatever the LATEST amendment says — not the specific revision a
 // historical bill happened to be linked against. Grouped by a leading grade
 // token (M10/M25/M30/M35…) since the mix-design text differs per revision.
+// Canonical form of a material/description string, used to recognise the same
+// line item when ids can't be trusted (PO line items get deleted and re-inserted
+// with fresh UUIDs when a PO is edited in place, orphaning every item_ref_id
+// recorded on earlier certifications).
+const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
 async function resolveGradeChain(executor, poItemId, cache) {
   if (cache.has(poItemId)) return cache.get(poItemId);
   const itemRes = await executor.query(`
@@ -217,7 +223,6 @@ async function resolveGradeChain(executor, poItemId, cache) {
   // dropped from "previously certified" on the next certificate — understating
   // previous qty, overstating balance, and risking over-certification beyond
   // the PO. Fall back to the normalised full material name in that case.
-  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const selfName = normName(item.material_name);
   const matchesSibling = grade
     ? (name) => String(name || '').toUpperCase().startsWith(grade)
@@ -325,6 +330,42 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
   `, [companyId, excludeCertificationId]);
   const priorByRawKey = new Map(priorRes.rows.map(r => [r.item_key, n(r.qty)]));
 
+  // Second prior-quantity index, keyed by NORMALISED DESCRIPTION and scoped to
+  // the same order (amendment suffix stripped, so POTQS001 / -A1 / -A3 are one
+  // scope). item_ref_id alone is not a stable identity: editing a PO deletes and
+  // re-inserts its po_items with new UUIDs, so quantities certified earlier are
+  // stranded under an id nothing references any more, and the next certificate
+  // reports a "previously certified" figure that silently omits them.
+  // Live case — SVR Nirman / POLANLH10003, "Cement Concrete Blocks 300mm":
+  // RA-1 certified 2100 against a po_item id that no longer exists, so RA-3
+  // showed previous = 1200 instead of 3300, overstating the balance quantity.
+  // Scoping to the order keeps unrelated POs that happen to share a description
+  // (e.g. "Cement") from bleeding into each other.
+  const orderRes = await executor.query(`
+    SELECT DISTINCT UPPER(REGEXP_REPLACE(
+             COALESCE(NULLIF(TRIM(po_number), ''), NULLIF(TRIM(wo_number), ''), ''),
+             '-A[0-9]+$', '', 'i')) AS base_order
+      FROM tqs_bills
+     WHERE id = ANY($1::uuid[]) AND company_id = $2
+  `, [billIds, companyId]);
+  const baseOrders = orderRes.rows.map(r => r.base_order).filter(Boolean);
+
+  let priorByDescInOrder = new Map();
+  if (baseOrders.length) {
+    const descRes = await executor.query(`
+      SELECT REGEXP_REPLACE(LOWER(TRIM(i.description)), '[^a-z0-9]+', '', 'g') AS desc_key,
+             SUM(i.qs_pres_qty) AS qty
+        FROM vendor_qs_certification_items i
+        JOIN vendor_qs_certifications c ON c.id = i.certification_id
+       WHERE c.company_id = $1
+         AND c.status NOT IN ('cancelled', 'rejected')
+         AND ($2::uuid IS NULL OR c.id <> $2::uuid)
+         AND UPPER(REGEXP_REPLACE(COALESCE(c.order_number, ''), '-A[0-9]+$', '', 'i')) = ANY($3::text[])
+       GROUP BY 1
+    `, [companyId, excludeCertificationId, baseOrders]);
+    priorByDescInOrder = new Map(descRes.rows.map(r => [r.desc_key, n(r.qty)]));
+  }
+
   // Sum prior-certified qty across every sibling PO item in the same
   // amendment chain (POTQS001 + A1 + A3 + A4…), not just the one this bill
   // happens to reference — otherwise "previously certified" undercounts.
@@ -357,10 +398,17 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
     const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
     const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
     const rawKey = row.po_item_id || row.wo_item_id || String(row.item_name || '').trim().toLowerCase();
-    const qsPrevQty = chain ? (priorByChainKey.get(chain.chainKey) || 0) : (priorByRawKey.get(rawKey) || 0);
+    const description = effectiveRow?.po_item_name || effectiveRow?.wo_item_name || row.item_name || '';
+    // Take the LARGER of the two prior-quantity measures. Both estimate the same
+    // thing (qty already certified for this line) via different identities, so
+    // max() closes the gap when one of them is blind — the id-based index misses
+    // certs written against since-deleted po_items, and the description index
+    // misses lines whose description was later reworded. It cannot double-count.
+    const chainPrior = chain ? (priorByChainKey.get(chain.chainKey) || 0) : (priorByRawKey.get(rawKey) || 0);
+    const descPrior  = priorByDescInOrder.get(normName(description)) || 0;
+    const qsPrevQty  = Math.max(chainPrior, descPrior);
     const qsPresQty = Math.max(0, invQty);
     const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
-    const description = effectiveRow?.po_item_name || effectiveRow?.wo_item_name || row.item_name || '';
     const unit = chain?.currentUnit || effectiveRow?.po_ordered_unit || effectiveRow?.wo_ordered_unit || row.unit || '';
     const key = chain ? chain.chainKey : (singleLinkedRef || row.po_item_id || row.wo_item_id || `${description.trim().toLowerCase()}|${unit}|${rate}`);
     const existing = grouped.get(key);
