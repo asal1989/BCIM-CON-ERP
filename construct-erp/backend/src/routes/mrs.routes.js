@@ -7,7 +7,30 @@ const { sendMail } = require('../services/mail.service');
 const { createNotification } = require('../controllers/notification.controller');
 const { sendPushToUsersByEmail, sendPushToUser } = require('../services/fcm.service');
 const wa = require('../services/whatsapp.service');
+const { runSchemaInit } = require('../utils/schemaInit');
 const router = express.Router();
+
+// Material descriptions are free text and routinely run long — e.g.
+// "oxygen gas pressure regulator for welding and cutting | brass body double
+// gauge regulator | compatible with oxygen cylinders | adjustable control valve
+// for welding, cutting and industrial use" is 191 characters against the old
+// VARCHAR(200) cap (3 items already sit above 180), so raising an MRS failed
+// outright with:  value too long for type character varying(200)
+//
+// po_items.material_name was already widened to TEXT (po.routes.js) — this does
+// the same for the rest of the requisition → issue chain, so a long name that
+// is accepted on the MRS doesn't simply fail further downstream at GRN/MIN
+// instead. Runs under its own key: ALTER … TYPE rewrites the table, so it must
+// not repeat on every boot.
+runSchemaInit('widen_material_name_to_text_2026_08', async () => {
+  for (const t of ['mrs_items', 'indent_items', 'grn_items', 'min_items', 'inventory', 'invoice_items']) {
+    try {
+      await query(`ALTER TABLE ${t} ALTER COLUMN material_name TYPE TEXT`);
+    } catch (e) {
+      console.warn(`[widen] ${t}.material_name skipped: ${e.message}`);
+    }
+  }
+});
 
 const DEFAULT_STORES_MRS_EMAILS = 'vijayan@bcim.in';
 const DEFAULT_PROCUREMENT_MRS_EMAILS = 'bkmanjunath@bcim.in,praveen@bcim.in';
