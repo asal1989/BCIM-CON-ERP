@@ -20,9 +20,69 @@ runSchemaInit('tqs_bills_sc_bill_id', async () => {
   `);
 });
 
+// Bring an existing tracker copy back in step with its SC bill.
+//
+// pushScBillToTracker used to just return early when a copy already existed, so
+// any correction made to the SC bill AFTER it first reached the tracker never
+// propagated — the copy kept whatever figures it was created with. That is how
+// BILL-LANCOH-009 ended up carrying 18% GST (Rs 70,200) in Bill Tracker and on
+// its QS certification while the SC bill itself is 0% GST: the tracker copy was
+// made while the bill still had GST on it, the SC bill was later corrected, and
+// nothing re-synced.
+//
+// Only refreshed while the tracker row is still untouched by QS/Accounts —
+// once anything is certified or paid the figures are part of a financial trail
+// and must not be silently rewritten.
+async function resyncScTrackerBill(tqsBillId, scBillId) {
+  const guard = await query(`
+    SELECT tb.id
+      FROM tqs_bills tb
+      LEFT JOIN tqs_bill_updates u ON u.bill_id = tb.id
+     WHERE tb.id = $1
+       AND COALESCE(u.certified_net, 0) = 0
+       AND COALESCE(u.paid_amount,   0) = 0
+  `, [tqsBillId]);
+  if (!guard.rows.length) return;
+
+  const r = await query(`
+    SELECT b.*, wo.wo_number FROM sc_bills b
+    JOIN sc_work_orders wo ON wo.id = b.wo_id
+    WHERE b.id = $1
+  `, [scBillId]);
+  if (!r.rows.length) return;
+  const bill = r.rows[0];
+
+  const basic = parseFloat(bill.gross_amount || 0);
+  const gst   = parseFloat(bill.gst_amount   || 0);
+  const half  = Math.round((gst / 2) * 100) / 100;
+
+  await withTransaction(async (client) => {
+    await client.query(`
+      UPDATE tqs_bills
+         SET basic_amount = $2, gst_amount = $3,
+             cgst_amt = $4, sgst_amt = $4, igst_amt = 0,
+             total_amount = $5, updated_at = NOW()
+       WHERE id = $1
+    `, [tqsBillId, basic, gst, half, basic + gst]);
+
+    await client.query(`DELETE FROM tqs_bill_line_items WHERE bill_id = $1`, [tqsBillId]);
+    await copyScItemsToLineItems(client, scBillId, tqsBillId, bill);
+
+    await client.query(`
+      UPDATE tqs_bill_updates SET balance_to_pay = $2 WHERE bill_id = $1
+    `, [tqsBillId, basic + gst]);
+  });
+}
+
 async function pushScBillToTracker(billId, actorId) {
   const existing = await query(`SELECT id FROM tqs_bills WHERE sc_bill_id=$1`, [billId]);
-  if (existing.rows.length) return existing.rows[0].id;
+  if (existing.rows.length) {
+    // Re-approval (e.g. after a send-back and correction) refreshes the copy
+    // instead of leaving stale figures behind.
+    await resyncScTrackerBill(existing.rows[0].id, billId).catch(e =>
+      console.error('[sc-tracker] resync failed:', e.message));
+    return existing.rows[0].id;
+  }
 
   const r0 = await query(`
     SELECT b.*, wo.wo_number, sc.name AS sc_name
