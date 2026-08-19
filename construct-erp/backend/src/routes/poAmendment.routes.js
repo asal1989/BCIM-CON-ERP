@@ -103,6 +103,20 @@ const ensureSchema = async () => {
 };
 runSchemaInit('po_amendments', ensureSchema);
 
+// `new_po_id` was appended to ensureSchema()'s statement list above long AFTER
+// the 'po_amendments' key had already been recorded in schema_migrations — and
+// runSchemaInit runs a key exactly once ever, so that ALTER never executed on
+// any existing database. Result: every write touching new_po_id failed with
+// «column "new_po_id" of relation "po_amendments" does not exist» (the
+// /purchase-orders/:id/amend handler, and the amended-PO sync below).
+//
+// Adding it under its own key is the same pattern wo_amendments already uses
+// for new_wo_id ('wo_amendments_v2_status'). Anything appended to ensureSchema
+// in future needs a NEW key like this one, not another line in that array.
+runSchemaInit('po_amendments_new_po_id', async () => {
+  await query(`ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS new_po_id UUID REFERENCES purchase_orders(id) ON DELETE SET NULL`);
+});
+
 const WRITE_ROLES = ['super_admin', 'admin', 'procurement_manager', 'procurement', 'manager'];
 // Editing/deleting an amendment record is restricted to procurement & super admin users
 const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
