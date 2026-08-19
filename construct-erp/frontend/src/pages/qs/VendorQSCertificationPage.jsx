@@ -717,11 +717,16 @@ export default function VendorQSCertificationPage() {
   const [showModal, setShowModal] = useState(false);
   const [modalInitial, setModalInitial] = useState({});
   const [search, setSearch] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
+  const { user, selectedProjectId } = useAuthStore();
+  // Seed (and keep in sync with) the header's global project picker — this list
+  // previously always started on "All projects", so selecting e.g. LANCO Hills
+  // in the header still showed every project's certifications. Same pattern the
+  // other project-scoped pages use.
+  const [projectFilter, setProjectFilter] = useState(selectedProjectId || '');
+  useEffect(() => { setProjectFilter(selectedProjectId || ''); }, [selectedProjectId]);
   const [statusTab, setStatusTab] = useState('all');
   const [view, setView] = useState('table'); // 'table' | 'vendors'
   const [expandedVendor, setExpandedVendor] = useState(null);
-  const { user } = useAuthStore();
   const canApprove = (user?.email || '').toLowerCase() === CERT_APPROVER_EMAIL;
   const qc = useQueryClient();
   const navigate = useNavigate();
