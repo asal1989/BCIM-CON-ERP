@@ -664,11 +664,21 @@ router.post('/action', loadProjectScope, async (req, res) => {
           const isFinal  = idx < 0 || idx === stages.length - 1;
           const nextStage = !isFinal ? stages[idx + 1] : stage;
           const newStatus = isFinal ? 'approved' : 'under_review';
+          // $1 is cast explicitly because it is used in two different type
+          // contexts in one statement: `status=$1` makes Postgres deduce the
+          // column's type (sc_bills.status is VARCHAR(20)) while `$1='approved'`
+          // deduces text from the literal. Postgres refuses to settle on one and
+          // fails the whole statement with:
+          //   "inconsistent types deduced for parameter $1"
+          // The same CASE-WHEN-$1 shape is used in ess/hr-advanced/hr-employees
+          // without trouble only because those status columns are TEXT, so both
+          // contexts already agree — this is the one VARCHAR case.
+          // Also scoped to company_id: the UPDATE previously matched on id alone.
           await query(
-            `UPDATE sc_bills SET status=$1, current_stage=$2, approved_by=$3,
-                    approved_at=CASE WHEN $1='approved' THEN NOW() ELSE NULL END, updated_at=NOW()
-             WHERE id=$4`,
-            [newStatus, nextStage, uid, entity_id]);
+            `UPDATE sc_bills SET status=$1::text, current_stage=$2::text, approved_by=$3::uuid,
+                    approved_at=CASE WHEN $1::text='approved' THEN NOW() ELSE NULL END, updated_at=NOW()
+             WHERE id=$4::uuid AND company_id=$5::uuid`,
+            [newStatus, nextStage, uid, entity_id, CID(req)]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'approved',$3,$4,$5)`,
             [entity_id, stage, uid, uname, comments||'Approved']);
           if (newStatus === 'approved') {
@@ -682,9 +692,9 @@ router.post('/action', loadProjectScope, async (req, res) => {
             notifyScBillApproved(CID(req), b, uname);
           }
         } else {
-          await query(`UPDATE sc_bills SET status='rejected', rejected_by=$1, rejection_remarks=$2, updated_at=NOW() WHERE id=$3`,
-            [uid, comments||'Rejected', entity_id]);
-          const bill = await query(`SELECT * FROM sc_bills WHERE id=$1`, [entity_id]);
+          await query(`UPDATE sc_bills SET status='rejected', rejected_by=$1::uuid, rejection_remarks=$2::text, updated_at=NOW() WHERE id=$3::uuid AND company_id=$4::uuid`,
+            [uid, comments||'Rejected', entity_id, CID(req)]);
+          const bill = await query(`SELECT * FROM sc_bills WHERE id=$1::uuid AND company_id=$2::uuid`, [entity_id, CID(req)]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'rejected',$3,$4,$5)`,
             [entity_id, bill.rows[0]?.current_stage||'unknown', uid, uname, comments||'Rejected']);
           notifyScBillRejected(CID(req), bill.rows[0] || { id: entity_id }, uname, comments);

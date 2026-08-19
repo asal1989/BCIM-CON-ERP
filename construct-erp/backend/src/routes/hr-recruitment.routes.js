@@ -578,8 +578,8 @@ router.patch('/requisitions/:id/hr-review', authorize(...HR_ROLES), async (req, 
   if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
   const status = action === 'approve' ? 'pending_management_approval' : 'rejected';
   const { rows } = await query(`
-    UPDATE hr_job_requisitions SET status=$1, hr_reviewed_by=$2, hr_reviewed_at=NOW(), hr_remarks=$3,
-      rejection_reason = CASE WHEN $1='rejected' THEN $3 ELSE rejection_reason END
+    UPDATE hr_job_requisitions SET status=$1::text, hr_reviewed_by=$2, hr_reviewed_at=NOW(), hr_remarks=$3,
+      rejection_reason = CASE WHEN $1::text='rejected' THEN $3 ELSE rejection_reason END
     WHERE id=$4 AND company_id=$5 AND status='pending_hr_review' RETURNING *
   `, [status, req.user.id, remarks || null, req.params.id, req.user.company_id]);
   if (!rows.length) return res.status(404).json({ error: 'Requisition not found or not pending HR review' });
@@ -591,8 +591,8 @@ router.patch('/requisitions/:id/management-approval', authorize(...HR_ROLES, 'ma
   if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
   const status = action === 'approve' ? 'approved' : 'rejected';
   const { rows } = await query(`
-    UPDATE hr_job_requisitions SET status=$1, management_approved_by=$2, management_approved_at=NOW(), management_remarks=$3,
-      rejection_reason = CASE WHEN $1='rejected' THEN $3 ELSE rejection_reason END
+    UPDATE hr_job_requisitions SET status=$1::text, management_approved_by=$2, management_approved_at=NOW(), management_remarks=$3,
+      rejection_reason = CASE WHEN $1::text='rejected' THEN $3 ELSE rejection_reason END
     WHERE id=$4 AND company_id=$5 AND status='pending_management_approval' RETURNING *
   `, [status, req.user.id, remarks || null, req.params.id, req.user.company_id]);
   if (!rows.length) return res.status(404).json({ error: 'Requisition not found or not pending management approval' });
