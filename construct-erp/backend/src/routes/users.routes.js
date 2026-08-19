@@ -10,11 +10,12 @@ const { createPasswordResetToken, getResetBaseUrl } = require('../controllers/au
 const { logAudit } = require('../utils/auditLog');
 
 // Fire-and-forget welcome email with a 24-hour password reset link
-const sendWelcomeMail = (req, { id, name, email, role, department }) => {
+const sendWelcomeMail = (req, { id, name, email, role, department, cc }) => {
   const baseUrl = getResetBaseUrl();
   createPasswordResetToken(id)
     .then(token => sendWelcomeLoginMail({
       to:       email,
+      cc,
       name,
       role,
       department,
@@ -461,6 +462,23 @@ router.patch('/:id/reset-password', admin, async (req, res) => {
 
     await logAudit(req, { action: 'reset_password', tableName: 'users', recordId: req.params.id, newValues: { name: check.rows[0].name, email: check.rows[0].email } });
     res.json({ message: 'Password reset successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/users/:id/resend-welcome — re-send the welcome/login email
+// (fresh 24h password-reset link), optionally CC'ing another address.
+router.post('/:id/resend-welcome', admin, async (req, res) => {
+  try {
+    const check = await query(
+      'SELECT id, name, email, role, department FROM users WHERE id = $1 AND company_id = $2',
+      [req.params.id, req.user.company_id]
+    );
+    if (!check.rows[0]) return res.status(404).json({ error: 'User not found.' });
+
+    sendWelcomeMail(req, { ...check.rows[0], cc: req.body.cc || undefined });
+    res.json({ message: `Welcome email queued for ${check.rows[0].email}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
