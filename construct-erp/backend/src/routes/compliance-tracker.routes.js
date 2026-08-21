@@ -181,6 +181,28 @@ runSchemaInit('compliance-tracker-legacy-link-column-v1', async () => {
   }
 });
 
+// syncLegacyComplianceItems runs on every GET /obligations and /entries call
+// with no locking, and the frontend fires both in parallel on page load —
+// without a unique constraint, two concurrent requests both seeing the same
+// not-yet-synced legacy item would each insert their own obligation for it.
+// This closes that gap: dedupe anything already double-inserted, then add
+// the constraint so the sync's ON CONFLICT DO NOTHING can rely on it.
+runSchemaInit('compliance-tracker-legacy-unique-index-v1', async () => {
+  await query(`
+    DELETE FROM compliance_obligations o
+    WHERE o.legacy_hr_item_id IS NOT NULL
+      AND o.id NOT IN (
+        SELECT MIN(o2.id) FROM compliance_obligations o2
+        WHERE o2.legacy_hr_item_id = o.legacy_hr_item_id
+        GROUP BY o2.legacy_hr_item_id
+      )
+  `);
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_compliance_obligations_legacy_unique
+    ON compliance_obligations(legacy_hr_item_id) WHERE legacy_hr_item_id IS NOT NULL
+  `);
+});
+
 function categorizeLegacyItem(name, type) {
   const s = `${name || ''} ${type || ''}`;
   if (/shop.*establishment|establishment.*shop/i.test(s)) return 'Shop & Establishment Registration';
@@ -219,12 +241,19 @@ async function syncLegacyComplianceItems(companyId) {
         projectId ? [companyId, projectId] : [companyId]
       );
       const code = `BCIM-${token}-COM-${String(parseInt(countRes.rows[0].count, 10) + 1).padStart(3, '0')}`;
+      // ON CONFLICT DO NOTHING against the unique index on legacy_hr_item_id
+      // — if a concurrent request already synced this exact legacy item
+      // between the SELECT above and here, this insert is a no-op and
+      // returns no row, so we skip creating a duplicate entry too.
       const ob = await query(
         `INSERT INTO compliance_obligations
            (company_id, project_id, category, title, frequency, responsible_person, legal_reference, created_by, code, legacy_hr_item_id)
-         VALUES ($1,$2,$3,$4,'Annual',$5,$6,$7,$8,$9) RETURNING id`,
+         VALUES ($1,$2,$3,$4,'Annual',$5,$6,$7,$8,$9)
+         ON CONFLICT (legacy_hr_item_id) WHERE legacy_hr_item_id IS NOT NULL DO NOTHING
+         RETURNING id`,
         [companyId, projectId, category, item.name, item.owner || 'HR', item.legal_ref || null, item.created_by, code, item.id]
       );
+      if (!ob.rows.length) continue;
       await query(
         `INSERT INTO compliance_entries
            (obligation_id, company_id, due_date, due_amount, amount_paid, outstanding_amount,
@@ -250,6 +279,15 @@ const n = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
 
 // Auto-flip Pending -> Overdue for anything past due, and (re)compute
 // outstanding/delay so the tracker never silently drifts stale.
+//
+// Two things this must NOT do (both were bugs in an earlier version):
+// 1. Treat due_amount=0 as automatically "settled" — a non-monetary
+//    compliance (e.g. a licence renewal with no fee) has due_amount=0 by
+//    default, and silently forcing it to 'Paid' meant it could never be
+//    flagged Overdue even after its due date passed with nothing done.
+// 2. Only compute Overdue from the outstanding amount — a zero-fee item
+//    past its due date is exactly as much a compliance miss as an unpaid
+//    one, so overdue detection must key off due_date, not money.
 function deriveEntry({ due_date, actual_payment_date, due_amount, amount_paid, status }) {
   const dueAmt = n(due_amount);
   const paidAmt = n(amount_paid);
@@ -263,12 +301,29 @@ function deriveEntry({ due_date, actual_payment_date, due_amount, amount_paid, s
   }
   let finalStatus = status;
   if (status !== 'Closed' && status !== 'Not Applicable') {
-    if (outstanding <= 0.5 && due_amount !== undefined) finalStatus = 'Paid';
-    else if (due_date && new Date(due_date) < new Date() && outstanding > 0.5) finalStatus = 'Overdue';
+    const isPastDue = !!(due_date && new Date(due_date) < new Date());
+    const settled = !!actual_payment_date || (dueAmt > 0 && outstanding <= 0.5);
+    if (settled) finalStatus = 'Paid';
+    else if (isPastDue) finalStatus = 'Overdue';
     else if (!finalStatus) finalStatus = 'Pending';
   }
   return { outstanding, delayDays, finalStatus };
 }
+
+// The stored `status` column only gets recomputed when someone edits that
+// specific entry — with nothing to touch it, a Pending item just sits
+// there forever even after its due date passes, so Overdue counts and the
+// weekly report both silently undercount. This computes the SAME status
+// live at read time instead of trusting the (possibly stale) stored value.
+// Relies on Postgres row-to-object conversion taking the LAST column of a
+// given name, so this alias overrides e.status in e.* without needing to
+// enumerate every other column.
+const EFFECTIVE_STATUS_SQL = `
+  CASE
+    WHEN e.status IN ('Closed','Not Applicable','Paid') THEN e.status
+    WHEN e.due_date IS NOT NULL AND e.due_date < CURRENT_DATE THEN 'Overdue'
+    ELSE COALESCE(e.status, 'Pending')
+  END`;
 
 // ── Categories ───────────────────────────────────────────────────────────
 router.get('/categories', (req, res) => res.json({ data: CATEGORIES }));
@@ -356,12 +411,16 @@ router.get('/entries', async (req, res) => {
     let where = 'e.company_id = $1';
     if (project_id === 'HO') where += ' AND o.project_id IS NULL';
     else if (project_id) { params.push(project_id); where += ` AND o.project_id = $${params.length}`; }
-    if (status) { params.push(status); where += ` AND e.status = $${params.length}`; }
+    // Filters against the live-computed status below, not the possibly-stale
+    // stored column — otherwise an "Overdue" filter would miss anything that
+    // passed its due date without ever being re-saved.
+    if (status) { params.push(status); where += ` AND (${EFFECTIVE_STATUS_SQL}) = $${params.length}`; }
     if (category) { params.push(category); where += ` AND o.category = $${params.length}`; }
     const { rows } = await query(
       `SELECT e.*, o.category, o.title AS obligation_title, o.project_id, o.frequency, o.code AS obligation_code,
               p.name AS project_name,
-              COALESCE((SELECT COUNT(*) FROM compliance_documents d WHERE d.entry_id = e.id), 0) AS document_count
+              COALESCE((SELECT COUNT(*) FROM compliance_documents d WHERE d.entry_id = e.id), 0) AS document_count,
+              ${EFFECTIVE_STATUS_SQL} AS status
        FROM compliance_entries e
        JOIN compliance_obligations o ON o.id = e.obligation_id
        LEFT JOIN projects p ON p.id = o.project_id
@@ -421,6 +480,11 @@ router.put('/entries/:id', async (req, res) => {
     };
     const { outstanding, delayDays, finalStatus } = deriveEntry(merged);
 
+    // Date columns reject '' outright ("invalid input syntax for type
+    // date"), and the edit form always submits every field (a controlled
+    // form, not a partial patch) — so a cleared date field arrives as ''
+    // here, not undefined, and would otherwise crash this endpoint with a
+    // 500 the moment anyone actually used the edit button.
     const { rows } = await query(
       `UPDATE compliance_entries SET
          period=COALESCE($1,period), due_date=$2, actual_payment_date=$3,
@@ -431,10 +495,10 @@ router.put('/entries/:id', async (req, res) => {
          action_required=COALESCE($13,action_required), responsible_person=COALESCE($14,responsible_person),
          updated_at=NOW()
        WHERE id=$15 AND company_id=$16 RETURNING *`,
-      [req.body.period, merged.due_date, merged.actual_payment_date, n(merged.due_amount), n(merged.amount_paid),
+      [req.body.period, merged.due_date || null, merged.actual_payment_date || null, n(merged.due_amount), n(merged.amount_paid),
        outstanding, req.body.penalty_interest !== undefined ? n(req.body.penalty_interest) : undefined,
        req.body.damages_charges !== undefined ? n(req.body.damages_charges) : undefined,
-       delayDays, req.body.validity_expiry_date, finalStatus, req.body.reason_for_delay,
+       delayDays, req.body.validity_expiry_date || null, finalStatus, req.body.reason_for_delay,
        req.body.action_required, req.body.responsible_person, req.params.id, req.user.company_id]
     );
     res.json({ data: rows[0] });
@@ -512,10 +576,10 @@ router.get('/summary', async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT
-         COUNT(*) FILTER (WHERE e.status = 'Overdue')                                  AS overdue_count,
-         COALESCE(SUM(e.outstanding_amount) FILTER (WHERE e.status IN ('Pending','Overdue')), 0) AS total_outstanding,
-         COALESCE(SUM(e.penalty_interest + e.damages_charges) FILTER (WHERE e.status <> 'Closed'), 0) AS total_penalty_damages,
-         COUNT(*) FILTER (WHERE e.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 30 AND e.status IN ('Pending','Overdue')) AS due_in_30_days
+         COUNT(*) FILTER (WHERE (${EFFECTIVE_STATUS_SQL}) = 'Overdue')                                  AS overdue_count,
+         COALESCE(SUM(e.outstanding_amount) FILTER (WHERE (${EFFECTIVE_STATUS_SQL}) IN ('Pending','Overdue')), 0) AS total_outstanding,
+         COALESCE(SUM(e.penalty_interest + e.damages_charges) FILTER (WHERE (${EFFECTIVE_STATUS_SQL}) <> 'Closed'), 0) AS total_penalty_damages,
+         COUNT(*) FILTER (WHERE e.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 30 AND (${EFFECTIVE_STATUS_SQL}) IN ('Pending','Overdue')) AS due_in_30_days
        FROM compliance_entries e
        WHERE e.company_id = $1`,
       [req.user.company_id]

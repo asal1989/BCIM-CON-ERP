@@ -7,7 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText, UploadCloud, Download, File as FileIcon, FileSpreadsheet, Image as ImageIcon, Printer } from 'lucide-react';
+import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText, UploadCloud, Download, File as FileIcon, FileSpreadsheet, Image as ImageIcon, Printer, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { complianceTrackerAPI, projectAPI } from '../../../api/client';
 import CompliancePrintTemplate from './CompliancePrintTemplate';
@@ -108,17 +108,25 @@ function ObligationForm({ projects, onClose, onSaved, categories }) {
   );
 }
 
-function EntryForm({ obligations, onClose, onSaved }) {
+function EntryForm({ obligations, entry, onClose, onSaved }) {
+  const isEditing = !!entry;
   const [form, setForm] = useState({
-    obligation_id: obligations[0]?.id || '', period: '', due_date: '', actual_payment_date: '',
-    due_amount: '', amount_paid: '', penalty_interest: '', damages_charges: '', validity_expiry_date: '',
-    status: 'Pending', reason_for_delay: '', action_required: '', responsible_person: '',
+    obligation_id: entry?.obligation_id || obligations[0]?.id || '',
+    period: entry?.period || '',
+    due_date: entry?.due_date ? entry.due_date.slice(0, 10) : '',
+    actual_payment_date: entry?.actual_payment_date ? entry.actual_payment_date.slice(0, 10) : '',
+    due_amount: entry?.due_amount ?? '', amount_paid: entry?.amount_paid ?? '',
+    penalty_interest: entry?.penalty_interest ?? '', damages_charges: entry?.damages_charges ?? '',
+    validity_expiry_date: entry?.validity_expiry_date ? entry.validity_expiry_date.slice(0, 10) : '',
+    status: entry?.status || 'Pending',
+    reason_for_delay: entry?.reason_for_delay || '', action_required: entry?.action_required || '',
+    responsible_person: entry?.responsible_person || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const mut = useMutation({
-    mutationFn: () => complianceTrackerAPI.createEntry(form),
-    onSuccess: () => { toast.success('Entry added'); onSaved(); onClose(); },
-    onError: (e) => toast.error(e.response?.data?.error || 'Failed to add'),
+    mutationFn: () => isEditing ? complianceTrackerAPI.updateEntry(entry.id, form) : complianceTrackerAPI.createEntry(form),
+    onSuccess: () => { toast.success(isEditing ? 'Entry updated' : 'Entry added'); onSaved(); onClose(); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed to save'),
   });
   const field = (label, key, type = 'text', extra = {}) => (
     <div>
@@ -130,10 +138,10 @@ function EntryForm({ obligations, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-slate-900 mb-4">Add Compliance Entry</h3>
+        <h3 className="text-base font-bold text-slate-900 mb-4">{isEditing ? 'Edit Compliance Entry' : 'Add Compliance Entry'}</h3>
         <div>
           <label className="text-xs font-semibold text-slate-500">Compliance Item</label>
-          <select className="w-full mt-1 h-9 rounded-lg border border-slate-200 px-2 text-sm" value={form.obligation_id} onChange={e => set('obligation_id', e.target.value)}>
+          <select disabled={isEditing} className="w-full mt-1 h-9 rounded-lg border border-slate-200 px-2 text-sm disabled:bg-slate-50 disabled:text-slate-500" value={form.obligation_id} onChange={e => set('obligation_id', e.target.value)}>
             {obligations.map(o => <option key={o.id} value={o.id}>{o.project_name || 'Head Office'} — {o.title}</option>)}
           </select>
         </div>
@@ -162,7 +170,7 @@ function EntryForm({ obligations, onClose, onSaved }) {
           <button onClick={onClose} className="flex-1 h-10 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200">Cancel</button>
           <button disabled={!form.obligation_id || mut.isPending} onClick={() => mut.mutate()}
             className="flex-1 h-10 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#1B3A6B' }}>
-            {mut.isPending ? 'Saving…' : 'Add Entry'}
+            {mut.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Entry'}
           </button>
         </div>
       </div>
@@ -471,6 +479,7 @@ export default function StatutoryTracker() {
                       className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-semibold">
                       <Paperclip size={13} /> {e.document_count > 0 ? e.document_count : ''}
                     </button>
+                    <button onClick={() => setEnForm(e)} title="Edit"><Pencil size={13} className="text-slate-400 hover:text-blue-600" /></button>
                     <button onClick={() => handlePrintEntry(e)} title="Print"><Printer size={13} className="text-slate-400 hover:text-blue-600" /></button>
                   </div>
                 </td>
@@ -481,7 +490,7 @@ export default function StatutoryTracker() {
       </div>
 
       {obForm && <ObligationForm projects={projects || []} categories={categories || []} onClose={() => setObForm(false)} onSaved={refreshAll} />}
-      {enForm && <EntryForm obligations={obligations || []} onClose={() => setEnForm(false)} onSaved={refreshAll} />}
+      {enForm && <EntryForm obligations={obligations || []} entry={enForm === true ? null : enForm} onClose={() => setEnForm(false)} onSaved={refreshAll} />}
       {docsEntry && <DocumentsPanel entryId={docsEntry} onClose={() => setDocsEntry(null)} />}
 
       {/* Hidden print zone — content captured via ref, printed in new window */}

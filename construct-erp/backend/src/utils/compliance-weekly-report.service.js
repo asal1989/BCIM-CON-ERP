@@ -40,13 +40,26 @@ function todayIST() {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ });
 }
 
+// A stored status only updates when someone edits that entry, so a Pending
+// item just sits there even after its due date passes if nobody touches it
+// — this computes the same live status compliance-tracker.routes.js uses,
+// so the weekly report doesn't silently skip anything that's gone overdue
+// with no stored update to trigger on.
+const EFFECTIVE_STATUS_SQL = `
+  CASE
+    WHEN e.status IN ('Closed','Not Applicable','Paid') THEN e.status
+    WHEN e.due_date IS NOT NULL AND e.due_date < CURRENT_DATE THEN 'Overdue'
+    ELSE COALESCE(e.status, 'Pending')
+  END`;
+
 async function fetchOpenEntries(companyId) {
   const { rows } = await query(`
-    SELECT e.*, o.category, o.title AS obligation_title, p.name AS project_name
+    SELECT e.*, o.category, o.title AS obligation_title, p.name AS project_name,
+           ${EFFECTIVE_STATUS_SQL} AS status
     FROM compliance_entries e
     JOIN compliance_obligations o ON o.id = e.obligation_id
     LEFT JOIN projects p ON p.id = o.project_id
-    WHERE e.company_id = $1 AND e.status IN ('Pending','Overdue')
+    WHERE e.company_id = $1 AND (${EFFECTIVE_STATUS_SQL}) IN ('Pending','Overdue')
     ORDER BY COALESCE(p.name, 'Head Office'), e.due_date NULLS LAST
   `, [companyId]);
   return rows;
