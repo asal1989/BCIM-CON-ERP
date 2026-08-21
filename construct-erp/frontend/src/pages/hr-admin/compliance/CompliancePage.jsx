@@ -14,6 +14,7 @@ import ComplianceDrawer from './ComplianceDrawer';
 import ComplianceForm from './ComplianceForm';
 import ComplianceAnalytics from './ComplianceAnalytics';
 import StatutoryCompliance from './StatutoryCompliance';
+import StatutoryTracker from './StatutoryTracker';
 import { hrComplianceAPI, hrMastersAPI } from '../../../api/client';
 import { daysUntil } from './complianceData';
 
@@ -47,6 +48,7 @@ function DeleteDialog({ item, onCancel, onConfirm }) {
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'statutory', label: 'Statutory Compliance' },
+  { key: 'tracker', label: 'Statutory Tracker (Projects/HO)' },
 ];
 
 export default function CompliancePage() {
@@ -223,8 +225,10 @@ export default function CompliancePage() {
             <ComplianceAnalytics rows={items} />
           </div>
         </>
-      ) : (
+      ) : tab === 'statutory' ? (
         <StatutoryCompliance />
+      ) : (
+        <StatutoryTracker />
       )}
 
       {/* ── Overlays ── */}

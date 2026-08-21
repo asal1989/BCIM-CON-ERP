@@ -130,6 +130,7 @@ const hrImportRoutes      = require('./routes/hr-import.routes');
 const hrEsslRoutes        = require('./routes/hr-essl.routes');
 const hrAdvancedRoutes    = require('./routes/hr-advanced.routes');
 const hrComplianceRoutes  = require('./routes/hr-compliance.routes');
+const complianceTrackerRoutes = require('./routes/compliance-tracker.routes');
 const hrShiftsRoutes      = require('./routes/hr-shifts.routes');
 const hrFnfRoutes         = require('./routes/hr-fnf.routes');
 const hrExitRoutes        = require('./routes/hr-exit.routes');
@@ -604,6 +605,7 @@ app.use(`${API}/hr-admin/import`,      hrImportRoutes);
 app.use(`${API}/hr-admin/essl`,        hrEsslRoutes);
 app.use(`${API}/hr-admin/advanced`,    hrAdvancedRoutes);
 app.use(`${API}/hr-admin/compliance`, hrComplianceRoutes);
+app.use(`${API}/compliance-tracker`, complianceTrackerRoutes);
 app.use(`${API}/hr-admin/fnf`,         hrFnfRoutes);
 app.use(`${API}/hr-admin/exit`,        hrExitRoutes);
 app.use(`${API}/hr-admin/letters`,     hrLettersRoutes);
@@ -1316,6 +1318,9 @@ if (require.main === module) {
 
     const { initOutstandingPayablesReport } = require('./utils/outstanding-payables-report.service');
     initOutstandingPayablesReport();
+
+    const { initComplianceWeeklyReport } = require('./utils/compliance-weekly-report.service');
+    initComplianceWeeklyReport();
 
     const { initTimesheetReport } = require('./utils/timesheet-report.service');
     initTimesheetReport();

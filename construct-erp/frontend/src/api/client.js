@@ -2445,6 +2445,25 @@ export const hrComplianceAPI = {
   trackerInsights:     ()         => api.get('/hr-admin/compliance/tracker-insights'),
 };
 
+// Statutory Compliance Tracker (project/HO-scoped, weekly-reported)
+export const complianceTrackerAPI = {
+  categories:       ()         => api.get('/compliance-tracker/categories'),
+  obligations:      (p)        => api.get('/compliance-tracker/obligations', { params: p }),
+  createObligation: (d)        => api.post('/compliance-tracker/obligations', d),
+  updateObligation: (id, d)    => api.put(`/compliance-tracker/obligations/${id}`, d),
+  deleteObligation: (id)       => api.delete(`/compliance-tracker/obligations/${id}`),
+  entries:          (p)        => api.get('/compliance-tracker/entries', { params: p }),
+  createEntry:      (d)        => api.post('/compliance-tracker/entries', d),
+  updateEntry:      (id, d)    => api.put(`/compliance-tracker/entries/${id}`, d),
+  deleteEntry:      (id)       => api.delete(`/compliance-tracker/entries/${id}`),
+  summary:          ()         => api.get('/compliance-tracker/summary'),
+  reportConfig:     ()         => api.get('/compliance-tracker/report-config'),
+  createReportConfig: (d)      => api.post('/compliance-tracker/report-config', d),
+  updateReportConfig: (id, d)  => api.put(`/compliance-tracker/report-config/${id}`, d),
+  deleteReportConfig: (id)     => api.delete(`/compliance-tracker/report-config/${id}`),
+  sendReportNow:    ()         => api.post('/compliance-tracker/report-config/send-now'),
+};
+
 export const mailAPI = {
   status:         ()     => api.get('/mail/status'),
   test:           (to)   => api.post('/mail/test', { to }),
