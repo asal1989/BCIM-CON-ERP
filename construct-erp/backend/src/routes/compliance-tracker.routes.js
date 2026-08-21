@@ -436,4 +436,39 @@ router.post('/report-config/send-now', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── One-time: migrate the 2 items that were already logged in the old
+// "Compliance Tracker" Dashboard tab (hr_compliance_items, no attachment
+// support) into this newer, project/HO-scoped tracker with document
+// attachments and the weekly Monday report. Guarded by name so re-runs
+// (or a later manual copy of the same items) are a no-op.
+runSchemaInit('compliance-tracker-migrate-legacy-shop-est-2026-08', async () => {
+  const legacy = await query(
+    `SELECT * FROM hr_compliance_items WHERE name IN
+       ('Shop & Est. License - Hyderabad', 'Shop & Est. License - Head Office')`
+  );
+  for (const item of legacy.rows) {
+    const exists = await query(
+      `SELECT id FROM compliance_obligations WHERE company_id=$1 AND title=$2`,
+      [item.company_id, item.name]
+    );
+    if (exists.rows.length) continue;
+
+    const ob = await query(
+      `INSERT INTO compliance_obligations
+         (company_id, project_id, category, title, frequency, responsible_person, legal_reference, created_by)
+       VALUES ($1,NULL,'Shop & Establishment Registration',$2,'Annual',$3,$4,$5) RETURNING id`,
+      [item.company_id, item.name, item.owner || 'HR', item.legal_ref || null, item.created_by]
+    );
+
+    await query(
+      `INSERT INTO compliance_entries
+         (obligation_id, company_id, due_date, due_amount, amount_paid, outstanding_amount,
+          validity_expiry_date, status, responsible_person, created_by)
+       VALUES ($1,$2,$3,0,0,0,$4,'Paid',$5,$6)`,
+      [ob.rows[0].id, item.company_id, item.due_date, item.renewal_date, item.owner || 'HR', item.created_by]
+    );
+  }
+  console.log(`[migration] compliance-tracker-migrate-legacy-shop-est: migrated ${legacy.rows.length} legacy item(s)`);
+});
+
 module.exports = router;
