@@ -188,13 +188,18 @@ runSchemaInit('compliance-tracker-legacy-link-column-v1', async () => {
 // This closes that gap: dedupe anything already double-inserted, then add
 // the constraint so the sync's ON CONFLICT DO NOTHING can rely on it.
 runSchemaInit('compliance-tracker-legacy-unique-index-v1', async () => {
+  // Postgres has no built-in MIN()/MAX() aggregate for uuid (it does support
+  // comparison operators and ORDER BY on it, just not those two aggregates),
+  // so the obvious "keep the MIN(id)" approach 500s with "function min(uuid)
+  // does not exist" — DISTINCT ON does the same job without needing one.
   await query(`
     DELETE FROM compliance_obligations o
     WHERE o.legacy_hr_item_id IS NOT NULL
       AND o.id NOT IN (
-        SELECT MIN(o2.id) FROM compliance_obligations o2
-        WHERE o2.legacy_hr_item_id = o.legacy_hr_item_id
-        GROUP BY o2.legacy_hr_item_id
+        SELECT DISTINCT ON (legacy_hr_item_id) id
+        FROM compliance_obligations
+        WHERE legacy_hr_item_id IS NOT NULL
+        ORDER BY legacy_hr_item_id, created_at ASC
       )
   `);
   await query(`
