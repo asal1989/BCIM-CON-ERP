@@ -472,7 +472,6 @@ export default function StatutoryTracker() {
                       <Paperclip size={13} /> {e.document_count > 0 ? e.document_count : ''}
                     </button>
                     <button onClick={() => handlePrintEntry(e)} title="Print"><Printer size={13} className="text-slate-400 hover:text-blue-600" /></button>
-                    <button onClick={() => deleteEntryMut.mutate(e.id)} title="Delete"><Trash2 size={13} className="text-slate-400 hover:text-red-500" /></button>
                   </div>
                 </td>
               </tr>
