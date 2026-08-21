@@ -1505,6 +1505,25 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const trackerDaysUntil = (d) => { if (!d) return null; const t = new Date(); t.setHours(0,0,0,0); return Math.ceil((new Date(d) - t) / 86400000); };
 const priorityFromDays = (days) => days === null ? 'Medium' : days < 0 ? 'Critical' : days <= 15 ? 'High' : days <= 45 ? 'Medium' : 'Low';
 
+// BCIM-<PROJECT>-COM-001 style code — HO for Head Office / unassigned,
+// otherwise the first alphabetic word of the project/location name.
+function projectToken(text) {
+  const t = (text || '').trim();
+  if (!t || /head office/i.test(t)) return 'HO';
+  const word = t.match(/[A-Za-z]+/)?.[0] || 'GEN';
+  return word.slice(0, 6).toUpperCase();
+}
+// Assigns BCIM-<TOKEN>-COM-### sequentially within each project token, in
+// the order items are given (so numbering is stable run to run).
+function assignComplianceCodes(items, tokenOf) {
+  const counters = {};
+  return items.map(item => {
+    const token = tokenOf(item);
+    counters[token] = (counters[token] || 0) + 1;
+    return { ...item, code: `BCIM-${token}-COM-${String(counters[token]).padStart(3, '0')}` };
+  });
+}
+
 // ── GET /tracker-items — manual items + auto-derived from licences/doc-expiry
 router.get('/tracker-items', async (req, res) => {
   try {
@@ -1527,7 +1546,7 @@ router.get('/tracker-items', async (req, res) => {
       ),
     ]);
 
-    const manual = manualRes.rows.map(r => ({
+    const manual = manualRes.rows.map((r, i) => ({
       id: r.id, name: r.name, category: r.category, type: r.type || r.category,
       applicableTo: r.applicable_to || 'All Employees', department: r.department_name || '—',
       location: r.location || '—', dueDate: r.due_date, renewalDate: r.renewal_date,
@@ -1536,7 +1555,7 @@ router.get('/tracker-items', async (req, res) => {
       readOnly: false,
     }));
 
-    const licenses = licenseRes.rows.map(r => {
+    const licenses = licenseRes.rows.map((r, i) => {
       const days = trackerDaysUntil(r.expiry_date);
       const isExpired = days !== null && days < 0;
       const expiringSoon = days !== null && days >= 0 && days <= (r.alert_days || 30);
@@ -1552,7 +1571,7 @@ router.get('/tracker-items', async (req, res) => {
       };
     });
 
-    const docs = docRes.rows.map(r => {
+    const docs = docRes.rows.map((r, i) => {
       const days = trackerDaysUntil(r.expiry_date);
       const isExpired = days !== null && days < 0;
       const expiringSoon = days !== null && days >= 0 && days <= (r.alert_days || 30);
@@ -1568,7 +1587,9 @@ router.get('/tracker-items', async (req, res) => {
       };
     });
 
-    res.json({ data: [...manual, ...licenses, ...docs] });
+    const combined = [...manual, ...licenses, ...docs];
+    const withCodes = assignComplianceCodes(combined, item => projectToken(item.applicableTo || item.location));
+    res.json({ data: withCodes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

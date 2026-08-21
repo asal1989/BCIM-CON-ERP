@@ -123,6 +123,36 @@ runSchemaInit('compliance-tracker-documents-v1', async () => {
   await query(`CREATE INDEX IF NOT EXISTS idx_compliance_documents_entry ON compliance_documents(entry_id)`);
 });
 
+// BCIM-<PROJECT>-COM-001 style code, e.g. BCIM-HO-COM-001, BCIM-DQS-COM-001 —
+// HO for Head Office (project_id NULL), otherwise the first word of the
+// project name. Numbered per-project so each project's own sequence starts
+// at 001, matching how PO/MR numbering already works elsewhere in the app.
+function projectToken(projectName) {
+  const t = (projectName || '').trim();
+  if (!t) return 'HO';
+  const word = t.match(/[A-Za-z]+/)?.[0] || 'GEN';
+  return word.slice(0, 6).toUpperCase();
+}
+
+runSchemaInit('compliance-tracker-code-column-v1', async () => {
+  await query(`ALTER TABLE compliance_obligations ADD COLUMN IF NOT EXISTS code TEXT`);
+  const { rows } = await query(
+    `SELECT o.id, p.name AS project_name
+     FROM compliance_obligations o
+     LEFT JOIN projects p ON p.id = o.project_id
+     WHERE o.code IS NULL
+     ORDER BY p.name NULLS FIRST, o.created_at`
+  );
+  const counters = {};
+  for (const row of rows) {
+    const token = projectToken(row.project_name);
+    counters[token] = (counters[token] || 0) + 1;
+    await query(`UPDATE compliance_obligations SET code=$1 WHERE id=$2`,
+      [`BCIM-${token}-COM-${String(counters[token]).padStart(3, '0')}`, row.id]);
+  }
+  console.log(`[migration] compliance-tracker-code-column: assigned codes to ${rows.length} obligation(s)`);
+});
+
 const n = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
 
 // Auto-flip Pending -> Overdue for anything past due, and (re)compute
@@ -174,12 +204,26 @@ router.post('/obligations', async (req, res) => {
   try {
     const { project_id, category, title, frequency, responsible_person, legal_reference } = req.body;
     if (!category || !title) return res.status(400).json({ error: 'category and title are required' });
+
+    let projectName = null;
+    if (project_id) {
+      const p = await query(`SELECT name FROM projects WHERE id=$1`, [project_id]);
+      projectName = p.rows[0]?.name || null;
+    }
+    const token = projectToken(projectName);
+    const countRes = await query(
+      `SELECT COUNT(*) FROM compliance_obligations o
+       WHERE o.company_id=$1 AND ${project_id ? 'o.project_id=$2' : 'o.project_id IS NULL'}`,
+      project_id ? [req.user.company_id, project_id] : [req.user.company_id]
+    );
+    const code = `BCIM-${token}-COM-${String(parseInt(countRes.rows[0].count, 10) + 1).padStart(3, '0')}`;
+
     const { rows } = await query(
       `INSERT INTO compliance_obligations
-         (company_id, project_id, category, title, frequency, responsible_person, legal_reference, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+         (company_id, project_id, category, title, frequency, responsible_person, legal_reference, created_by, code)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.user.company_id, project_id || null, category, title, frequency || 'Monthly',
-       responsible_person || null, legal_reference || null, req.user.id]
+       responsible_person || null, legal_reference || null, req.user.id, code]
     );
     res.status(201).json({ data: rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -220,7 +264,7 @@ router.get('/entries', async (req, res) => {
     if (status) { params.push(status); where += ` AND e.status = $${params.length}`; }
     if (category) { params.push(category); where += ` AND o.category = $${params.length}`; }
     const { rows } = await query(
-      `SELECT e.*, o.category, o.title AS obligation_title, o.project_id, o.frequency,
+      `SELECT e.*, o.category, o.title AS obligation_title, o.project_id, o.frequency, o.code AS obligation_code,
               p.name AS project_name,
               COALESCE((SELECT COUNT(*) FROM compliance_documents d WHERE d.entry_id = e.id), 0) AS document_count
        FROM compliance_entries e

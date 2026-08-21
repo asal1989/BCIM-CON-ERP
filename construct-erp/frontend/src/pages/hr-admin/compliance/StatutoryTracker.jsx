@@ -396,16 +396,17 @@ export default function StatutoryTracker() {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 uppercase text-[10px]">
-              {['Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible', 'Docs', ''].map(h => (
+              {['Compliance ID', 'Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible', 'Docs', ''].map(h => (
                 <th key={h} className="text-left font-semibold px-3 py-2 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={18} className="text-center py-6 text-slate-400">Loading…</td></tr>}
-            {!isLoading && !rows.length && <tr><td colSpan={18} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
+            {isLoading && <tr><td colSpan={19} className="text-center py-6 text-slate-400">Loading…</td></tr>}
+            {!isLoading && !rows.length && <tr><td colSpan={19} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
             {rows.map(e => (
               <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                <td className="px-3 py-2 font-semibold text-blue-600 whitespace-nowrap">{e.obligation_code || '—'}</td>
                 <td className="px-3 py-2">{e.project_name || 'Head Office'}</td>
                 <td className="px-3 py-2">{e.category}</td>
                 <td className="px-3 py-2">{e.obligation_title}{e.period ? ` (${e.period})` : ''}</td>
