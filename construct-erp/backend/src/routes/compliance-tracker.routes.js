@@ -153,6 +153,99 @@ runSchemaInit('compliance-tracker-code-column-v1', async () => {
   console.log(`[migration] compliance-tracker-code-column: assigned codes to ${rows.length} obligation(s)`);
 });
 
+// ── Legacy sync — the old Dashboard tab (hr_compliance_items) has no
+// document attachments and its items kept getting renamed/added after
+// each one-off manual migration, so title-based matching missed renames
+// and would have started creating duplicates. This links each obligation
+// to its source row by ID (stable across renames) and reconciles on every
+// read: new legacy items get an obligation+entry created, renamed ones get
+// their title/category updated in place. Entry-level fields (amounts,
+// documents, status) are never overwritten once created, since the user
+// may have since enriched them here independently of the old tracker.
+runSchemaInit('compliance-tracker-legacy-link-column-v1', async () => {
+  await query(`ALTER TABLE compliance_obligations ADD COLUMN IF NOT EXISTS legacy_hr_item_id UUID`);
+  // Backfill the 5 items already migrated by earlier one-off scripts, so
+  // the ID link exists retroactively and reconciliation doesn't duplicate them.
+  const KNOWN = [
+    ['Shop & Est. License - Head Office', '6048af6b-860e-4c96-8ea0-f88b5f4a2873'],
+    ['Shop & Est. License - Hyderabad', '7f5ed73d-6664-4962-a4e6-dba6c2a72bd3'],
+    ['BOCW License - DQS', 'f7fcf295-813b-4a78-8ec3-038471925665'],
+    ['WC Policy - 45 Employees -DQS', '2012ac67-f565-4ef3-a7cd-9474d702bd04'],
+    ['CLRA License - DQS', 'd5150771-258c-42cb-be85-147a8c94707d'],
+  ];
+  for (const [title, hrId] of KNOWN) {
+    await query(
+      `UPDATE compliance_obligations SET legacy_hr_item_id=$1 WHERE title=$2 AND legacy_hr_item_id IS NULL`,
+      [hrId, title]
+    );
+  }
+});
+
+function categorizeLegacyItem(name, type) {
+  const s = `${name || ''} ${type || ''}`;
+  if (/shop.*establishment|establishment.*shop/i.test(s)) return 'Shop & Establishment Registration';
+  if (/\bpf\b|provident fund/i.test(s)) return 'PF Compliance';
+  if (/professional tax|\bpt\b/i.test(s)) return 'Professional Tax';
+  if (/workmen compensation|\bwc\b.*polic/i.test(s)) return 'Workmen Compensation Policy';
+  if (/clra/i.test(s)) return 'CLRA Licence';
+  if (/bocw|building.*construction workers/i.test(s)) return 'BOCW Registration/Licence';
+  if (/labour welfare|\blwf\b/i.test(s)) return 'Labour Welfare Fund';
+  if (/rental agreement/i.test(s)) return 'Rental Agreements';
+  if (/vehicle insurance/i.test(s)) return 'Vehicle Insurance';
+  if (/labour licen/i.test(s)) return 'Labour Licence and other labour registrations';
+  return 'Other HR/Admin Statutory Compliance';
+}
+
+async function syncLegacyComplianceItems(companyId) {
+  const legacy = await query(
+    `SELECT ci.*, o.id AS obligation_id, o.title AS current_title, o.category AS current_category, o.project_id AS current_project_id
+     FROM hr_compliance_items ci
+     LEFT JOIN compliance_obligations o ON o.legacy_hr_item_id = ci.id
+     WHERE ci.company_id = $1`,
+    [companyId]
+  );
+  for (const item of legacy.rows) {
+    const proj = item.location
+      ? await query(`SELECT id, name FROM projects WHERE company_id=$1 AND name=$2`, [companyId, item.location])
+      : { rows: [] };
+    const projectId = proj.rows[0]?.id || null;
+    const category = categorizeLegacyItem(item.name, item.type);
+
+    if (!item.obligation_id) {
+      // New legacy item never synced before — create obligation + entry.
+      const token = projectToken(proj.rows[0]?.name);
+      const countRes = await query(
+        `SELECT COUNT(*) FROM compliance_obligations o WHERE o.company_id=$1 AND ${projectId ? 'o.project_id=$2' : 'o.project_id IS NULL'}`,
+        projectId ? [companyId, projectId] : [companyId]
+      );
+      const code = `BCIM-${token}-COM-${String(parseInt(countRes.rows[0].count, 10) + 1).padStart(3, '0')}`;
+      const ob = await query(
+        `INSERT INTO compliance_obligations
+           (company_id, project_id, category, title, frequency, responsible_person, legal_reference, created_by, code, legacy_hr_item_id)
+         VALUES ($1,$2,$3,$4,'Annual',$5,$6,$7,$8,$9) RETURNING id`,
+        [companyId, projectId, category, item.name, item.owner || 'HR', item.legal_ref || null, item.created_by, code, item.id]
+      );
+      await query(
+        `INSERT INTO compliance_entries
+           (obligation_id, company_id, due_date, due_amount, amount_paid, outstanding_amount,
+            validity_expiry_date, status, responsible_person, created_by)
+         VALUES ($1,$2,$3,0,0,0,$4,$5,$6,$7)`,
+        [ob.rows[0].id, companyId, item.due_date, item.renewal_date,
+         item.status === 'Compliant' ? 'Paid' : 'Pending', item.owner || 'HR', item.created_by]
+      );
+      console.log(`[compliance-sync] new legacy item synced: ${item.name} -> ${code}`);
+    } else if (item.current_title !== item.name || item.current_category !== category || String(item.current_project_id) !== String(projectId)) {
+      // Renamed / recategorized / moved on the old tracker — sync the label,
+      // not the entry's own tracked amounts/status (may differ intentionally).
+      await query(
+        `UPDATE compliance_obligations SET title=$1, category=$2, project_id=$3, updated_at=NOW() WHERE id=$4`,
+        [item.name, category, projectId, item.obligation_id]
+      );
+      console.log(`[compliance-sync] legacy item renamed/updated: ${item.name}`);
+    }
+  }
+}
+
 const n = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
 
 // Auto-flip Pending -> Overdue for anything past due, and (re)compute
@@ -183,6 +276,7 @@ router.get('/categories', (req, res) => res.json({ data: CATEGORIES }));
 // ── Obligations (master list) ───────────────────────────────────────────
 router.get('/obligations', async (req, res) => {
   try {
+    await syncLegacyComplianceItems(req.user.company_id).catch(e => console.error('[compliance-sync] failed:', e.message));
     const { project_id } = req.query;
     const params = [req.user.company_id];
     let where = 'o.company_id = $1 AND o.active = TRUE';
@@ -256,6 +350,7 @@ router.delete('/obligations/:id', async (req, res) => {
 // ── Entries (per-period occurrences carrying the 13 tracked fields) ──────
 router.get('/entries', async (req, res) => {
   try {
+    await syncLegacyComplianceItems(req.user.company_id).catch(e => console.error('[compliance-sync] failed:', e.message));
     const { project_id, status, category } = req.query;
     const params = [req.user.company_id];
     let where = 'e.company_id = $1';
