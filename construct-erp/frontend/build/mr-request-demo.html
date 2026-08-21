@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>New Material Request — BillQuantix</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<style>
+  :root{
+    --navy:#0f2744;
+    --navy2:#1a3c6e;
+    --navy3:#2a5191;
+    --blue:#2563eb;
+    --green:#16a34a;
+    --red:#dc2626;
+    --orange:#ea580c;
+    --border:#e5e7eb;
+    --bg:#eef2f7;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    font-family:"Segoe UI", Arial, sans-serif;
+    background:var(--bg);
+    color:#1f2937;
+  }
+
+  /* ── Top Navbar ─────────────────────────────────────────── */
+  .navbar{
+    position:sticky;
+    top:0;
+    z-index:100;
+    height:56px;
+    background:var(--navy);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 24px;
+    box-shadow:0 2px 6px rgba(0,0,0,.15);
+  }
+  .navbar .logo{
+    font-size:19px;
+    font-weight:800;
+    letter-spacing:.3px;
+    white-space:nowrap;
+  }
+  .navbar .logo span{ color:#5b9dff; }
+
+  .navbar .nav-links{
+    display:flex;
+    align-items:center;
+    gap:22px;
+    list-style:none;
+    margin:0;
+    padding:0;
+    flex:1;
+    justify-content:center;
+  }
+  .navbar .nav-links a{
+    color:#c8d4e6;
+    text-decoration:none;
+    font-size:13px;
+    font-weight:600;
+    padding:8px 4px;
+    border-bottom:2px solid transparent;
+    transition:.15s;
+  }
+  .navbar .nav-links a:hover{ color:#fff; }
+  .navbar .nav-links a.active{
+    color:#fff;
+    border-bottom-color:var(--blue);
+  }
+
+  .navbar .nav-right{
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+  .project-pill{
+    background:var(--navy2);
+    border:1px solid var(--navy3);
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+    padding:6px 14px;
+    border-radius:20px;
+    white-space:nowrap;
+  }
+  .bell-wrap{
+    position:relative;
+    font-size:19px;
+    color:#c8d4e6;
+    cursor:pointer;
+  }
+  .bell-wrap .dot{
+    position:absolute;
+    top:-2px;
+    right:-2px;
+    width:9px;
+    height:9px;
+    background:var(--red);
+    border:2px solid var(--navy);
+    border-radius:50%;
+  }
+  .avatar{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    background:var(--blue);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:700;
+    flex-shrink:0;
+  }
+
+  /* ── Sub-header ─────────────────────────────────────────── */
+  .subheader{
+    height:44px;
+    background:#fff;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 24px;
+    position:sticky;
+    top:56px;
+    z-index:90;
+  }
+  .breadcrumb{
+    font-size:12.5px;
+    color:#6b7280;
+    font-weight:600;
+  }
+  .breadcrumb span.current{ color:#111827; }
+  .breadcrumb i{ font-size:13px; vertical-align:-1px; margin:0 4px; color:#9ca3af; }
+
+  .subheader-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:11.5px;
+    font-weight:700;
+    padding:4px 10px;
+    border-radius:14px;
+    text-transform:uppercase;
+    letter-spacing:.4px;
+  }
+  .badge-draft{ background:#fef3c7; color:#92400e; }
+  .badge-green{ background:#dcfce7; color:#166534; }
+  .badge-orange{ background:#ffedd5; color:#9a3412; }
+
+  /* ── Layout grid ────────────────────────────────────────── */
+  .layout{
+    display:grid;
+    grid-template-columns:1fr 300px;
+    gap:20px;
+    padding:20px 24px 60px;
+    max-width:1440px;
+    margin:0 auto;
+    align-items:start;
+  }
+
+  @media (max-width: 1024px){
+    .layout{ grid-template-columns:1fr; }
+    .navbar .nav-links{ display:none; }
+  }
+
+  /* ── Cards ──────────────────────────────────────────────── */
+  .card{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:12px;
+    box-shadow:0 1px 3px rgba(15,39,68,.06);
+    padding:20px;
+    margin-bottom:20px;
+  }
+  .card-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .card-header h2{
+    font-size:16px;
+    font-weight:800;
+    color:var(--navy);
+    margin:0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .mr-number{
+    background:#eff6ff;
+    border:1px solid #bfdbfe;
+    color:var(--blue);
+    font-weight:800;
+    font-family:"Consolas", monospace;
+    font-size:13px;
+    padding:7px 14px;
+    border-radius:8px;
+    letter-spacing:.5px;
+  }
+
+  /* ── Form grid ──────────────────────────────────────────── */
+  .form-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:16px;
+    margin-top:16px;
+  }
+  @media (max-width: 760px){
+    .form-grid{ grid-template-columns:1fr 1fr; }
+  }
+
+  .field label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    color:#374151;
+    margin-bottom:5px;
+  }
+  input, select, textarea{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid #d1d5db;
+    border-radius:8px;
+    font-size:13px;
+    font-family:inherit;
+    color:#111827;
+    background:#fff;
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:none;
+    border-color:var(--blue);
+    box-shadow:0 0 0 3px rgba(37,99,235,.15);
+  }
+
+  /* Priority + remarks row */
+  .priority-row{
+    display:flex;
+    gap:16px;
+    margin-top:16px;
+    flex-wrap:wrap;
+  }
+  .priority-group{
+    display:flex;
+    flex-direction:column;
+  }
+  .priority-group label{
+    font-size:12px;
+    font-weight:700;
+    color:#374151;
+    margin-bottom:5px;
+  }
+  .priority-btns{
+    display:flex;
+    gap:8px;
+  }
+  .priority-btn{
+    padding:9px 18px;
+    border:1px solid #d1d5db;
+    border-radius:8px;
+    background:#fff;
+    cursor:pointer;
+    font-weight:700;
+    font-size:13px;
+    color:#6b7280;
+    transition:.15s;
+  }
+  .priority-btn:hover{ border-color:#9ca3af; }
+  .priority-btn.active.low{ background:var(--green); color:#fff; border-color:var(--green); }
+  .priority-btn.active.medium{ background:var(--orange); color:#fff; border-color:var(--orange); }
+  .priority-btn.active.urgent{ background:var(--red); color:#fff; border-color:var(--red); }
+
+  .remarks-field{ flex:1; min-width:240px; }
+
+  /* ── Table ──────────────────────────────────────────────── */
+  .table-wrap{
+    overflow-x:auto;
+    border:1px solid var(--border);
+    border-radius:10px;
+    margin-top:14px;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:11.5px;
+    min-width:920px;
+  }
+  thead th{
+    background:var(--navy);
+    color:#fff;
+    padding:9px 10px;
+    text-align:left;
+    font-weight:700;
+    text-transform:uppercase;
+    font-size:10.5px;
+    letter-spacing:.4px;
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:7px 10px;
+    border-bottom:1px solid #f1f5f9;
+    vertical-align:middle;
+  }
+  tbody tr:hover{ background:#f8fafc; }
+  tbody tr:nth-child(even){ background:#fcfdfe; }
+  tbody tr:nth-child(even):hover{ background:#f8fafc; }
+
+  td.sl{ text-align:center; font-weight:700; color:#6b7280; width:34px; }
+  td.qty-cell input{ text-align:right; font-weight:700; }
+  td.stock-cell{ text-align:center; font-weight:800; }
+  .stock-ok{ color:var(--green); }
+  .stock-low{ color:var(--orange); }
+  .stock-out{ color:var(--red); }
+
+  td.del-cell{ text-align:center; width:40px; }
+  .delete-btn{
+    border:none;
+    background:none;
+    color:var(--red);
+    cursor:pointer;
+    font-size:15px;
+    padding:4px;
+    border-radius:6px;
+    transition:.15s;
+  }
+  .delete-btn:hover{ background:#fee2e2; }
+
+  tfoot td{
+    font-weight:800;
+    background:#f1f5f9;
+    border-top:2px solid var(--border);
+    color:var(--navy);
+  }
+  tfoot td.total-label{ text-align:right; }
+  tfoot td.total-qty{ text-align:right; color:var(--blue); font-size:13px; }
+
+  table td input, table td select{
+    padding:6px 8px;
+    font-size:11.5px;
+    border-radius:6px;
+  }
+
+  .add-row-btn{
+    width:100%;
+    margin-top:12px;
+    padding:11px;
+    border:2px dashed var(--blue);
+    background:#f5f8ff;
+    color:var(--blue);
+    font-weight:700;
+    font-size:13px;
+    border-radius:8px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    transition:.15s;
+  }
+  .add-row-btn:hover{ background:#eaf1ff; }
+
+  /* ── Dividers / notes / attachments ────────────────────── */
+  .divider{
+    border:none;
+    border-top:1px solid var(--border);
+    margin:22px 0;
+  }
+  .section-title{
+    font-size:13px;
+    font-weight:800;
+    color:var(--navy);
+    margin:0 0 10px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  textarea{ resize:vertical; min-height:70px; }
+
+  .dropzone{
+    margin-top:10px;
+    border:2px dashed #d1d5db;
+    border-radius:10px;
+    padding:30px;
+    text-align:center;
+    color:#6b7280;
+    background:#fafbfc;
+    transition:.15s;
+  }
+  .dropzone:hover{ border-color:var(--blue); background:#f5f8ff; }
+  .dropzone i{ font-size:30px; color:#9ca3af; display:block; margin-bottom:8px; }
+  .dropzone .dz-title{ font-weight:700; color:#374151; font-size:13px; }
+  .dropzone .dz-sub{ font-size:11.5px; margin-top:4px; }
+
+  /* ── Action bar ─────────────────────────────────────────── */
+  .action-bar{
+    background:#f3f4f6;
+    margin:20px -20px -20px;
+    padding:16px 20px;
+    border-radius:0 0 12px 12px;
+    border-top:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .action-bar .group{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  .btn{
+    padding:10px 18px;
+    border-radius:8px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    border:1px solid transparent;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition:.15s;
+  }
+  .btn-outline{ background:#fff; border:1px solid #d1d5db; color:#374151; }
+  .btn-outline:hover{ background:#f3f4f6; }
+  .btn-primary{ background:var(--navy); color:#fff; }
+  .btn-primary:hover{ background:var(--navy2); }
+  .btn-success{ background:var(--green); color:#fff; }
+  .btn-success:hover{ background:#15803d; }
+  .btn-danger{ background:var(--red); color:#fff; }
+  .btn-danger:hover{ background:#b91c1c; }
+
+  /* ── Sidebar ────────────────────────────────────────────── */
+  .sidebar .card{ padding:16px 18px; }
+  .sidebar-title{
+    font-size:12.5px;
+    font-weight:800;
+    color:var(--navy);
+    text-transform:uppercase;
+    letter-spacing:.5px;
+    margin:0 0 12px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .summary-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:6px 0;
+    font-size:12.5px;
+    border-bottom:1px solid #f3f4f6;
+  }
+  .summary-row:last-child{ border-bottom:none; }
+  .summary-row .label{ color:#6b7280; font-weight:600; }
+  .summary-row .value{ font-weight:800; color:#111827; }
+  .value.green{ color:var(--green); }
+  .value.red{ color:var(--red); }
+  .value.orange{ color:var(--orange); }
+
+  /* Approval timeline */
+  .timeline{ list-style:none; margin:0; padding:0; }
+  .timeline li{
+    position:relative;
+    padding:0 0 22px 32px;
+    font-size:12.5px;
+  }
+  .timeline li:last-child{ padding-bottom:0; }
+  .timeline li::before{
+    content:"";
+    position:absolute;
+    left:11px;
+    top:24px;
+    bottom:0;
+    width:2px;
+    background:#e5e7eb;
+  }
+  .timeline li:last-child::before{ display:none; }
+  .timeline .dot{
+    position:absolute;
+    left:0;
+    top:0;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+  }
+  .timeline li.done .dot{ background:var(--navy); color:#fff; }
+  .timeline li.active .dot{ background:#fff; color:var(--blue); border:2px solid var(--blue); box-shadow:0 0 0 4px rgba(37,99,235,.12); }
+  .timeline li.pending .dot{ background:#f3f4f6; color:#9ca3af; border:2px solid #e5e7eb; }
+  .timeline .t-title{ font-weight:700; color:#111827; }
+  .timeline li.pending .t-title{ color:#9ca3af; }
+  .timeline .t-sub{ font-size:11px; color:#9ca3af; margin-top:2px; }
+  .timeline li.active .t-sub{ color:var(--blue); font-weight:600; }
+
+  /* Checklist */
+  .checklist{ display:flex; flex-direction:column; gap:10px; }
+  .checklist label{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    font-size:12.5px;
+    font-weight:600;
+    color:#374151;
+    cursor:pointer;
+  }
+  .checklist input[type="checkbox"]{
+    width:16px;
+    height:16px;
+    margin-top:1px;
+    accent-color:var(--blue);
+    flex-shrink:0;
+  }
+
+  /* Info box */
+  .info-box{
+    background:#eff6ff;
+    border-left:4px solid var(--blue);
+    border-radius:8px;
+    padding:12px 14px;
+    font-size:12px;
+    color:#1e3a5f;
+    line-height:1.5;
+    display:flex;
+    gap:8px;
+    margin-bottom:20px;
+  }
+  .info-box i{ font-size:18px; color:var(--blue); flex-shrink:0; margin-top:1px; }
+
+  /* Recent MRs */
+  .recent-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:9px 0;
+    border-bottom:1px solid #f3f4f6;
+    font-size:12px;
+  }
+  .recent-item:last-child{ border-bottom:none; }
+  .recent-item .mr-id{ font-weight:800; color:var(--navy); font-family:"Consolas", monospace; font-size:11.5px; }
+  .recent-item .mr-meta{ color:#9ca3af; font-size:11px; margin-top:2px; }
+  .status-pill{
+    font-size:10.5px;
+    font-weight:800;
+    padding:3px 9px;
+    border-radius:12px;
+    text-transform:uppercase;
+    letter-spacing:.3px;
+    white-space:nowrap;
+  }
+  .status-issued{ background:#dcfce7; color:#166534; }
+  .status-partial{ background:#ffedd5; color:#9a3412; }
+
+  /* ── Print ──────────────────────────────────────────────── */
+  @media print{
+    .navbar, .subheader, .action-bar, .add-row-btn, .delete-btn, .sidebar{ display:none !important; }
+    th .del-th{ display:none; }
+    body{ background:#fff; }
+    .layout{ grid-template-columns:1fr; padding:0; }
+    .card{ box-shadow:none; border:1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ══════════ TOP NAVBAR ══════════ -->
+  <header class="navbar">
+    <div class="logo">Bill<span>Quantix</span></div>
+    <ul class="nav-links">
+      <li><a href="#">Dashboard</a></li>
+      <li><a href="#" class="active">Stores</a></li>
+      <li><a href="#">Procurement</a></li>
+      <li><a href="#">Billing</a></li>
+      <li><a href="#">Planning</a></li>
+      <li><a href="#">QA/QC</a></li>
+      <li><a href="#">Reports</a></li>
+    </ul>
+    <div class="nav-right">
+      <span class="project-pill">DQS Towers</span>
+      <span class="bell-wrap"><i class="ti ti-bell"></i><span class="dot"></span></span>
+      <div class="avatar">SK</div>
+    </div>
+  </header>
+
+  <!-- ══════════ SUB-HEADER ══════════ -->
+  <div class="subheader">
+    <div class="breadcrumb">
+      Stores <i class="ti ti-chevron-right"></i> Material Requests <i class="ti ti-chevron-right"></i> <span class="current">New Request</span>
+    </div>
+    <div class="subheader-right">
+      <span class="badge badge-draft"><i class="ti ti-edit"></i> Draft</span>
+      <button class="btn btn-outline" onclick="window.print()"><i class="ti ti-printer"></i> Print</button>
+    </div>
+  </div>
+
+  <!-- ══════════ MAIN LAYOUT ══════════ -->
+  <div class="layout">
+
+    <!-- ───────────── MAIN COLUMN ───────────── -->
+    <div class="main-col">
+
+      <!-- CARD 1 — Request Details -->
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="ti ti-clipboard-list"></i> Material Request</h2>
+          <div class="mr-number">MR/DQS/2025-26/0047</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label>Project</label>
+            <select id="project">
+              <option>DQS Towers</option>
+              <option>Lanco Hills Phase 2</option>
+              <option>Metro Corridor — Pkg 4</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Request Date</label>
+            <input type="date" id="reqDate" value="2026-06-13" />
+          </div>
+          <div class="field">
+            <label>Required By Date</label>
+            <input type="date" id="reqByDate" value="2026-06-20" />
+          </div>
+          <div class="field">
+            <label>Requested By</label>
+            <input type="text" value="Suresh Kumar — Site Engineer" />
+          </div>
+          <div class="field">
+            <label>Work Location / Area</label>
+            <input type="text" value="Tower B — 8th Floor Slab" />
+          </div>
+          <div class="field">
+            <label>Work Order / Activity Ref</label>
+            <input type="text" value="WO/DQS/CIVIL/0021 — Slab Casting" />
+          </div>
+        </div>
+
+        <div class="priority-row">
+          <div class="priority-group">
+            <label>Priority</label>
+            <div class="priority-btns" id="priorityBtns">
+              <button type="button" class="priority-btn low" data-priority="low">Low</button>
+              <button type="button" class="priority-btn medium active" data-priority="medium">Medium</button>
+              <button type="button" class="priority-btn urgent" data-priority="urgent">Urgent</button>
+            </div>
+          </div>
+          <div class="field remarks-field">
+            <label>Purpose / Remarks</label>
+            <input type="text" id="purposeRemark" value="Materials required for 8th floor slab casting scheduled on 20-Jun. Please expedite shuttering and reinforcement items." />
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 2 — Material Items Table (+ Notes/Attachments + Action bar) -->
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="ti ti-list-details"></i> Material Items</h2>
+          <div style="display:flex; gap:8px;">
+            <span class="badge badge-orange"><i class="ti ti-package"></i> <span id="itemCount">6</span> Items</span>
+            <span class="badge" style="background:#fee2e2; color:#991b1b;"><i class="ti ti-alert-triangle"></i> <span id="outOfStockCount">2</span> Out of Stock</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Sl No</th>
+                <th>Category</th>
+                <th>Major Head</th>
+                <th>Material Description</th>
+                <th>Unit</th>
+                <th style="text-align:right;">Req. Qty</th>
+                <th style="text-align:center;">Stock</th>
+                <th>Remark</th>
+                <th class="del-th"></th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody">
+              <!-- Rows injected via JS template + initial markup below -->
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="5" class="total-label">Total Requested Quantity</td>
+                <td class="total-qty" id="totalQty">0</td>
+                <td colspan="3"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <button class="add-row-btn" id="addRowBtn"><i class="ti ti-plus"></i> Add Material Item</button>
+
+        <hr class="divider" />
+
+        <h3 class="section-title"><i class="ti ti-notes"></i> Additional Notes</h3>
+        <textarea id="notes">Please deliver shuttering plywood and Cuplock standards directly to the Tower B hoist landing on the 8th floor. Reinforcement steel to be unloaded near the rebar yard and tagged with bar bender's cutting list ref. Coordinate with site store-in-charge (Mr. Ramesh, 98xxxxxx10) before dispatch — slab pour is scheduled for 20-Jun morning shift.</textarea>
+
+        <hr class="divider" />
+
+        <h3 class="section-title"><i class="ti ti-paperclip"></i> Attachments</h3>
+        <div class="dropzone" id="dropzone">
+          <i class="ti ti-cloud-upload"></i>
+          <div class="dz-title">Drag &amp; drop files here, or click to browse</div>
+          <div class="dz-sub">Supported formats: PDF, JPG, PNG, XLSX &nbsp;·&nbsp; Max 10 MB per file</div>
+          <input type="file" id="fileInput" multiple style="display:none;" accept=".pdf,.jpg,.jpeg,.png,.xlsx" />
+        </div>
+
+        <!-- CARD 4 — Action Bar -->
+        <div class="action-bar">
+          <div class="group">
+            <button class="btn btn-outline"><i class="ti ti-x"></i> Cancel</button>
+            <button class="btn btn-outline"><i class="ti ti-device-floppy"></i> Save Draft</button>
+          </div>
+          <div class="group">
+            <button class="btn btn-danger"><i class="ti ti-arrow-back-up"></i> Return</button>
+            <button class="btn btn-primary"><i class="ti ti-send"></i> Submit for Approval</button>
+            <button class="btn btn-success"><i class="ti ti-check"></i> Approve &amp; Issue</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ───────────── SIDEBAR ───────────── -->
+    <div class="sidebar">
+
+      <!-- Request Summary -->
+      <div class="card">
+        <h3 class="sidebar-title"><i class="ti ti-clipboard-text"></i> Request Summary</h3>
+        <div class="summary-row"><span class="label">Total Items</span><span class="value" id="sumTotal">6</span></div>
+        <div class="summary-row"><span class="label">In Stock</span><span class="value green" id="sumInStock">4</span></div>
+        <div class="summary-row"><span class="label">Out of Stock</span><span class="value red" id="sumOutStock">2</span></div>
+        <div class="summary-row"><span class="label">Low Stock</span><span class="value orange" id="sumLowStock">2</span></div>
+        <div class="summary-row"><span class="label">Priority</span><span class="value" id="sumPriority">Medium</span></div>
+        <div class="summary-row"><span class="label">Required By</span><span class="value">20 Jun 2026</span></div>
+        <div class="summary-row"><span class="label">Days Remaining</span><span class="value orange">7 days</span></div>
+      </div>
+
+      <!-- Approval Workflow -->
+      <div class="card">
+        <h3 class="sidebar-title"><i class="ti ti-route"></i> Approval Workflow</h3>
+        <ul class="timeline">
+          <li class="done">
+            <span class="dot"><i class="ti ti-check"></i></span>
+            <div class="t-title">Request Created</div>
+            <div class="t-sub">Suresh Kumar · 13 Jun, 09:42 AM</div>
+          </li>
+          <li class="active">
+            <span class="dot"><i class="ti ti-clock"></i></span>
+            <div class="t-title">Store Verification</div>
+            <div class="t-sub">In progress — checking stock availability</div>
+          </li>
+          <li class="pending">
+            <span class="dot"><i class="ti ti-point"></i></span>
+            <div class="t-title">QS / Engineer Approval</div>
+            <div class="t-sub">Pending</div>
+          </li>
+          <li class="pending">
+            <span class="dot"><i class="ti ti-point"></i></span>
+            <div class="t-title">Project Manager Sign-off</div>
+            <div class="t-sub">Pending</div>
+          </li>
+          <li class="pending">
+            <span class="dot"><i class="ti ti-point"></i></span>
+            <div class="t-title">Issue from Store</div>
+            <div class="t-sub">Pending</div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Submission Checklist -->
+      <div class="card">
+        <h3 class="sidebar-title"><i class="ti ti-list-check"></i> Submission Checklist</h3>
+        <div class="checklist">
+          <label><input type="checkbox" checked /> Required by date filled</label>
+          <label><input type="checkbox" checked /> Work order / BOQ ref added</label>
+          <label><input type="checkbox" checked /> All quantities entered</label>
+          <label><input type="checkbox" /> Out-of-stock items acknowledged</label>
+          <label><input type="checkbox" /> Attachments uploaded</label>
+          <label><input type="checkbox" /> Site engineer signature</label>
+        </div>
+      </div>
+
+      <!-- Info box -->
+      <div class="info-box">
+        <i class="ti ti-info-circle"></i>
+        <div>Items marked <strong>Out of Stock</strong> will automatically generate a <strong>Purchase Request</strong> once this MR is approved by the Project Manager.</div>
+      </div>
+
+      <!-- Recent MRs -->
+      <div class="card">
+        <h3 class="sidebar-title"><i class="ti ti-history"></i> Recent MRs</h3>
+        <div class="recent-item">
+          <div>
+            <div class="mr-id">MR/DQS/2025-26/0046</div>
+            <div class="mr-meta">10 Jun 2026 · 8 items</div>
+          </div>
+          <span class="status-pill status-issued">Issued</span>
+        </div>
+        <div class="recent-item">
+          <div>
+            <div class="mr-id">MR/DQS/2025-26/0045</div>
+            <div class="mr-meta">07 Jun 2026 · 5 items</div>
+          </div>
+          <span class="status-pill status-partial">Partial</span>
+        </div>
+        <div class="recent-item">
+          <div>
+            <div class="mr-id">MR/DQS/2025-26/0044</div>
+            <div class="mr-meta">03 Jun 2026 · 11 items</div>
+          </div>
+          <span class="status-pill status-issued">Issued</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+<script>
+  // ── Reference data for dropdowns ─────────────────────────────
+  const CATEGORIES = [
+    'Concrete', 'Formwork', 'Reinforcement', 'Equipment (P&M)', 'Safety',
+    'Consumables', 'Electrical', 'Infra (Camp & Office)', 'QAQC Lab & Survey', 'Other Materials'
+  ];
+  const HEADS = ['MATERIAL', 'P&M', 'INFRA'];
+  const UNITS = ['Nos', 'MT', 'CuM', 'Kg', 'Rmt', 'Ltr', 'Set'];
+
+  // ── Initial sample rows ───────────────────────────────────────
+  const INITIAL_ITEMS = [
+    { category: 'Concrete',       head: 'MATERIAL', desc: 'RMC M30',                       unit: 'CuM', qty: 25,  stock: 40, stockState: 'ok',  remark: 'Pour scheduled 20-Jun' },
+    { category: 'Formwork',       head: 'MATERIAL', desc: '12mm Shuttering Plywood',        unit: 'Nos', qty: 50,  stock: 0,  stockState: 'out', remark: 'Urgent — none in store' },
+    { category: 'Reinforcement',  head: 'MATERIAL', desc: 'Reinforcement Steel 16mm',       unit: 'MT',  qty: 5,   stock: 2,  stockState: 'low', remark: 'Balance to be procured' },
+    { category: 'Equipment (P&M)',head: 'P&M',      desc: 'Cuplock Vertical Standards',     unit: 'Nos', qty: 100, stock: 0,  stockState: 'out', remark: 'Hire from vendor' },
+    { category: 'Safety',         head: 'MATERIAL', desc: 'Safety Helmet — Labour',         unit: 'Nos', qty: 20,  stock: 35, stockState: 'ok',  remark: '' },
+    { category: 'Consumables',    head: 'MATERIAL', desc: 'GI Binding Wire 18G',            unit: 'Kg',  qty: 50,  stock: 8,  stockState: 'low', remark: 'Top-up stock' },
+  ];
+
+  const tbody = document.getElementById('itemsBody');
+
+  function optionList(arr, selected){
+    return arr.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+  }
+
+  function buildRow(item, slNo){
+    const tr = document.createElement('tr');
+
+    const stockLabel = (item.stockState === 'out') ? 'Out of Stock' : item.stock;
+    const stockClass = item.stockState === 'ok' ? 'stock-ok' : (item.stockState === 'low' ? 'stock-low' : 'stock-out');
+
+    tr.innerHTML = `
+      <td class="sl">${slNo}</td>
+      <td>
+        <select class="cat-select">${optionList(CATEGORIES, item.category)}</select>
+      </td>
+      <td>
+        <select class="head-select">${optionList(HEADS, item.head)}</select>
+      </td>
+      <td>
+        <input type="text" class="desc-input" value="${item.desc}" placeholder="Material description" />
+      </td>
+      <td>
+        <select class="unit-select">${optionList(UNITS, item.unit)}</select>
+      </td>
+      <td class="qty-cell">
+        <input type="number" class="qty-input" min="0" step="1" value="${item.qty}" />
+      </td>
+      <td class="stock-cell ${stockClass}">${stockLabel}</td>
+      <td>
+        <input type="text" class="remark-input" value="${item.remark}" placeholder="Remark" />
+      </td>
+      <td class="del-cell">
+        <button type="button" class="delete-btn" title="Remove item"><i class="ti ti-trash"></i></button>
+      </td>
+    `;
+    return tr;
+  }
+
+  // ── Initial render ──────────────────────────────────────────
+  INITIAL_ITEMS.forEach((item, i) => tbody.appendChild(buildRow(item, i + 1)));
+
+  // ── Renumber Sl No column ──────────────────────────────────
+  function renumberRows(){
+    tbody.querySelectorAll('tr').forEach((tr, i) => {
+      tr.querySelector('.sl').textContent = i + 1;
+    });
+  }
+
+  // ── Recalculate total qty ──────────────────────────────────
+  function recalcTotal(){
+    let total = 0;
+    tbody.querySelectorAll('.qty-input').forEach(inp => {
+      total += parseFloat(inp.value) || 0;
+    });
+    document.getElementById('totalQty').textContent =
+      total % 1 === 0 ? total.toString() : total.toFixed(2);
+  }
+
+  // ── Update item / out-of-stock counters ────────────────────
+  function updateCounters(){
+    const rows = tbody.querySelectorAll('tr');
+    document.getElementById('itemCount').textContent = rows.length;
+
+    let outCount = 0, lowCount = 0, okCount = 0;
+    rows.forEach(tr => {
+      const cell = tr.querySelector('.stock-cell');
+      if (cell.classList.contains('stock-out')) outCount++;
+      else if (cell.classList.contains('stock-low')) lowCount++;
+      else okCount++;
+    });
+
+    document.getElementById('outOfStockCount').textContent = outCount;
+    document.getElementById('sumTotal').textContent = rows.length;
+    document.getElementById('sumInStock').textContent = okCount;
+    document.getElementById('sumOutStock').textContent = outCount;
+    document.getElementById('sumLowStock').textContent = lowCount;
+  }
+
+  // ── Add new row ─────────────────────────────────────────────
+  document.getElementById('addRowBtn').addEventListener('click', () => {
+    const blank = { category: CATEGORIES[0], head: HEADS[0], desc: '', unit: UNITS[0], qty: 0, stock: '—', stockState: 'ok', remark: '' };
+    const tr = buildRow(blank, tbody.children.length + 1);
+    // Blank stock cell for a new (unverified) item — neutral styling
+    const stockCell = tr.querySelector('.stock-cell');
+    stockCell.textContent = '—';
+    stockCell.className = 'stock-cell';
+
+    tbody.appendChild(tr);
+    renumberRows();
+    recalcTotal();
+    updateCounters();
+
+    const descInput = tr.querySelector('.desc-input');
+    descInput.focus();
+  });
+
+  // ── Delete row (event delegation) ──────────────────────────
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('.delete-btn');
+    if (!btn) return;
+    const tr = btn.closest('tr');
+    if (tbody.children.length === 1){
+      // Keep at least one row — just clear it instead of removing
+      return;
+    }
+    tr.remove();
+    renumberRows();
+    recalcTotal();
+    updateCounters();
+  });
+
+  // ── Live total recalculation on qty input ──────────────────
+  tbody.addEventListener('input', (e) => {
+    if (e.target.classList.contains('qty-input')) {
+      recalcTotal();
+    }
+  });
+
+  // ── Priority toggle ─────────────────────────────────────────
+  document.getElementById('priorityBtns').addEventListener('click', (e) => {
+    const btn = e.target.closest('.priority-btn');
+    if (!btn) return;
+    document.querySelectorAll('.priority-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const label = btn.textContent.trim();
+    document.getElementById('sumPriority').textContent = label;
+  });
+
+  // ── Drop-zone interactions ──────────────────────────────────
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#2563eb';
+      dropzone.style.background = '#f5f8ff';
+    })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#d1d5db';
+      dropzone.style.background = '#fafbfc';
+    })
+  );
+  dropzone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length) handleFiles(files);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFiles(fileInput.files);
+  });
+
+  function handleFiles(files){
+    const names = Array.from(files).map(f => f.name).join(', ');
+    dropzone.querySelector('.dz-title').textContent = `${files.length} file(s) selected: ${names}`;
+  }
+
+  // ── Initial calculations ────────────────────────────────────
+  recalcTotal();
+  updateCounters();
+</script>
+
+</body>
+</html>
