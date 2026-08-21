@@ -56,7 +56,7 @@ export default function CompliancePrintTemplate({ entry, documents = [], company
   const st = STATUS_STYLE[entry.status] || STATUS_STYLE.Pending;
 
   return (
-    <div style={{ width: '190mm', margin: '8mm auto', fontFamily: "'Georgia', 'Times New Roman', serif", color: INK }}>
+    <div style={{ width: '190mm', margin: '8mm auto', fontFamily: "'Times New Roman', Times, serif", color: INK }}>
       {/* Outer certificate frame */}
       <div style={{ border: `1.5px solid ${NAVY}`, padding: '3px' }}>
         <div style={{ border: `0.75px solid ${GOLD}`, padding: '18px 22px 16px' }}>
