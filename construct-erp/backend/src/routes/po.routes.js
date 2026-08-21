@@ -1699,8 +1699,11 @@ router.patch('/:id/submit-for-approval', authorize(...PROCUREMENT_ROLES), async 
     if (po.status !== 'draft') {
       return res.status(400).json({ error: `Only a draft PO can be submitted for approval (current status: ${po.status}).` });
     }
-    const items = await query(`SELECT id FROM po_items WHERE po_id = $1`, [req.params.id]);
-    if (!po.vendor_id || !items.rows.length) {
+    const [vendorRes, items] = await Promise.all([
+      query(`SELECT vendor_id FROM purchase_orders WHERE id = $1`, [req.params.id]),
+      query(`SELECT id FROM po_items WHERE po_id = $1`, [req.params.id]),
+    ]);
+    if (!vendorRes.rows[0]?.vendor_id || !items.rows.length) {
       return res.status(400).json({ error: 'Vendor and at least one line item are required before submitting for approval.' });
     }
     const result = await query(
