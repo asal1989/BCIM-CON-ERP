@@ -2462,6 +2462,9 @@ export const complianceTrackerAPI = {
   updateReportConfig: (id, d)  => api.put(`/compliance-tracker/report-config/${id}`, d),
   deleteReportConfig: (id)     => api.delete(`/compliance-tracker/report-config/${id}`),
   sendReportNow:    ()         => api.post('/compliance-tracker/report-config/send-now'),
+  documents:        (entryId)  => api.get(`/compliance-tracker/entries/${entryId}/documents`),
+  uploadDocument:   (entryId, fd) => api.post(`/compliance-tracker/entries/${entryId}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteDocument:   (id)       => api.delete(`/compliance-tracker/documents/${id}`),
 };
 
 export const mailAPI = {

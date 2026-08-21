@@ -10,14 +10,38 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
+const fs      = require('fs');
+const path    = require('path');
+const multer  = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { uploadToSharePoint, deleteFromOneDrive } = require('../services/azureService');
 
 const ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
 
 router.use(authenticate);
 router.use(authorize(...ROLES));
+
+// ─── Attachments (proof of filing/payment — challans, receipts, licence
+// copies, agreements) — same pattern as HR Documents: local disk first,
+// mirrored to SharePoint when configured (persists across redeploys; the
+// app's own filesystem does not). ─────────────────────────────────────────
+const SHAREPOINT_ENABLED = !!(
+  process.env.ONEDRIVE_TENANT_ID &&
+  process.env.ONEDRIVE_CLIENT_ID &&
+  process.env.ONEDRIVE_CLIENT_SECRET &&
+  process.env.SHAREPOINT_SITE_ID
+);
+const uploadDir = path.join(__dirname, '../../uploads/compliance-docs');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename:    (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`),
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 const CATEGORIES = [
   'Shop & Establishment Registration',
@@ -77,6 +101,26 @@ runSchemaInit('compliance-tracker-tables-v1', async () => {
   await query(`CREATE INDEX IF NOT EXISTS idx_compliance_obligations_company ON compliance_obligations(company_id, project_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_compliance_entries_obligation ON compliance_entries(obligation_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_compliance_entries_company ON compliance_entries(company_id, status, due_date)`);
+});
+
+// Separate key — compliance-tracker-tables-v1 above has already run in prod,
+// and runSchemaInit only ever fires a given key once, so new tables must go
+// under a fresh key or they'd silently never get created.
+runSchemaInit('compliance-tracker-documents-v1', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS compliance_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entry_id UUID NOT NULL REFERENCES compliance_entries(id) ON DELETE CASCADE,
+      company_id UUID NOT NULL,
+      doc_name TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      sharepoint_id TEXT,
+      sharepoint_url TEXT,
+      uploaded_by UUID REFERENCES users(id),
+      uploaded_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_compliance_documents_entry ON compliance_documents(entry_id)`);
 });
 
 const n = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
@@ -177,7 +221,8 @@ router.get('/entries', async (req, res) => {
     if (category) { params.push(category); where += ` AND o.category = $${params.length}`; }
     const { rows } = await query(
       `SELECT e.*, o.category, o.title AS obligation_title, o.project_id, o.frequency,
-              p.name AS project_name
+              p.name AS project_name,
+              COALESCE((SELECT COUNT(*) FROM compliance_documents d WHERE d.entry_id = e.id), 0) AS document_count
        FROM compliance_entries e
        JOIN compliance_obligations o ON o.id = e.obligation_id
        LEFT JOIN projects p ON p.id = o.project_id
@@ -260,6 +305,65 @@ router.put('/entries/:id', async (req, res) => {
 router.delete('/entries/:id', async (req, res) => {
   try {
     await query(`DELETE FROM compliance_entries WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Documents (challans, receipts, licence/agreement copies, etc.) ───────
+router.get('/entries/:id/documents', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT d.*, u.name AS uploaded_by_name FROM compliance_documents d
+       LEFT JOIN users u ON u.id = d.uploaded_by
+       WHERE d.entry_id=$1 AND d.company_id=$2 ORDER BY d.uploaded_at DESC`,
+      [req.params.id, req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/entries/:id/documents', upload.single('file'), async (req, res) => {
+  try {
+    const entryRes = await query(`SELECT id FROM compliance_entries WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]);
+    if (!entryRes.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+
+    let spId = null, spUrl = null, fileUrl = `/uploads/compliance-docs/${req.file.filename}`;
+    if (SHAREPOINT_ENABLED) {
+      try {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const sp = await uploadToSharePoint(req.file.originalname, fileBuffer, 'Compliance Documents');
+        spId = sp.id;
+        spUrl = sp.webUrl;
+        fileUrl = sp.downloadUrl || sp.webUrl;
+        fs.unlink(req.file.path, () => {});
+      } catch (spErr) {
+        console.error('[compliance-tracker] SharePoint upload failed, keeping local copy:', spErr.message);
+      }
+    }
+
+    const { rows } = await query(
+      `INSERT INTO compliance_documents (entry_id, company_id, doc_name, file_url, sharepoint_id, sharepoint_url, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, req.user.company_id, req.body.doc_name || req.file.originalname, fileUrl, spId, spUrl, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/documents/:id', async (req, res) => {
+  try {
+    const docRes = await query(`SELECT * FROM compliance_documents WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]);
+    if (!docRes.rows.length) return res.status(404).json({ error: 'Not found' });
+    const doc = docRes.rows[0];
+    if (doc.sharepoint_id) {
+      deleteFromOneDrive(doc.sharepoint_id).catch(e => console.error('[compliance-tracker] OneDrive delete failed:', e.message));
+    } else if (doc.file_url?.startsWith('/uploads/compliance-docs/')) {
+      fs.unlink(path.join(__dirname, '../..', doc.file_url), () => {});
+    }
+    await query(`DELETE FROM compliance_documents WHERE id=$1`, [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

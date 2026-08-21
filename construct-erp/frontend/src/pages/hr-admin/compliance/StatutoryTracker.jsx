@@ -6,7 +6,7 @@
 // Monday-morning email report configuration.
 import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, Mail } from 'lucide-react';
+import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { complianceTrackerAPI, projectAPI } from '../../../api/client';
 
@@ -160,6 +160,63 @@ function EntryForm({ obligations, onClose, onSaved }) {
   );
 }
 
+function DocumentsPanel({ entryId, onClose }) {
+  const qc = useQueryClient();
+  const fileRef = React.useRef(null);
+  const { data: docs, isLoading } = useQuery({
+    queryKey: ['ct-documents', entryId],
+    queryFn: () => complianceTrackerAPI.documents(entryId).then(r => r.data.data),
+  });
+  const uploadMut = useMutation({
+    mutationFn: (file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return complianceTrackerAPI.uploadDocument(entryId, fd);
+    },
+    onSuccess: () => { toast.success('Document uploaded'); qc.invalidateQueries({ queryKey: ['ct-documents', entryId] }); qc.invalidateQueries({ queryKey: ['ct-entries'] }); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Upload failed'),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => complianceTrackerAPI.deleteDocument(id),
+    onSuccess: () => { toast.success('Document removed'); qc.invalidateQueries({ queryKey: ['ct-documents', entryId] }); qc.invalidateQueries({ queryKey: ['ct-entries'] }); },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><Paperclip size={16} /> Attachments</h3>
+          <button onClick={onClose}><X size={18} className="text-slate-400 hover:text-slate-600" /></button>
+        </div>
+
+        <input ref={fileRef} type="file" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) uploadMut.mutate(f); e.target.value = ''; }} />
+        <button onClick={() => fileRef.current?.click()} disabled={uploadMut.isPending}
+          className="w-full h-10 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50 mb-4"
+          style={{ background: '#1B3A6B' }}>
+          <Upload size={14} /> {uploadMut.isPending ? 'Uploading…' : 'Upload Document (challan, receipt, licence copy, agreement…)'}
+        </button>
+
+        {isLoading && <p className="text-sm text-slate-400 text-center py-4">Loading…</p>}
+        {!isLoading && !(docs || []).length && <p className="text-sm text-slate-400 text-center py-4">No documents attached yet.</p>}
+        <div className="space-y-2">
+          {(docs || []).map(d => (
+            <div key={d.id} className="flex items-center gap-2.5 bg-slate-50 rounded-xl p-3">
+              <FileText size={16} className="text-slate-400 flex-shrink-0" />
+              <a href={d.sharepoint_url || d.file_url} target="_blank" rel="noreferrer"
+                className="flex-1 min-w-0 text-sm font-semibold text-slate-700 truncate hover:text-blue-600" title={d.doc_name}>
+                {d.doc_name}
+              </a>
+              <span className="text-[11px] text-slate-400 flex-shrink-0">{fmtDate(d.uploaded_at)}</span>
+              <button onClick={() => deleteMut.mutate(d.id)}><Trash2 size={13} className="text-slate-400 hover:text-red-500 flex-shrink-0" /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportConfigPanel({ configs, onRefresh }) {
   const [recipients, setRecipients] = useState('');
   const createMut = useMutation({
@@ -211,6 +268,7 @@ export default function StatutoryTracker() {
   const [statusFilter, setStatusFilter] = useState('');
   const [obForm, setObForm] = useState(false);
   const [enForm, setEnForm] = useState(false);
+  const [docsEntry, setDocsEntry] = useState(null);
 
   const { data: categories } = useQuery({ queryKey: ['ct-categories'], queryFn: () => complianceTrackerAPI.categories().then(r => r.data.data) });
   const { data: projects } = useQuery({ queryKey: ['ct-projects'], queryFn: () => projectAPI.list().then(r => r.data?.data || []) });
@@ -266,14 +324,14 @@ export default function StatutoryTracker() {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 uppercase text-[10px]">
-              {['Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible', ''].map(h => (
+              {['Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible', 'Docs', ''].map(h => (
                 <th key={h} className="text-left font-semibold px-3 py-2 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={17} className="text-center py-6 text-slate-400">Loading…</td></tr>}
-            {!isLoading && !rows.length && <tr><td colSpan={17} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
+            {isLoading && <tr><td colSpan={18} className="text-center py-6 text-slate-400">Loading…</td></tr>}
+            {!isLoading && !rows.length && <tr><td colSpan={18} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
             {rows.map(e => (
               <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                 <td className="px-3 py-2">{e.project_name || 'Head Office'}</td>
@@ -295,6 +353,12 @@ export default function StatutoryTracker() {
                 <td className="px-3 py-2 max-w-[140px] truncate" title={e.action_required}>{e.action_required || '—'}</td>
                 <td className="px-3 py-2">{e.responsible_person || '—'}</td>
                 <td className="px-3 py-2">
+                  <button onClick={() => setDocsEntry(e.id)}
+                    className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-semibold">
+                    <Paperclip size={13} /> {e.document_count > 0 ? e.document_count : ''}
+                  </button>
+                </td>
+                <td className="px-3 py-2">
                   <button onClick={() => deleteEntryMut.mutate(e.id)}><Trash2 size={13} className="text-slate-400 hover:text-red-500" /></button>
                 </td>
               </tr>
@@ -305,6 +369,7 @@ export default function StatutoryTracker() {
 
       {obForm && <ObligationForm projects={projects || []} categories={categories || []} onClose={() => setObForm(false)} onSaved={refreshAll} />}
       {enForm && <EntryForm obligations={obligations || []} onClose={() => setEnForm(false)} onSaved={refreshAll} />}
+      {docsEntry && <DocumentsPanel entryId={docsEntry} onClose={() => setDocsEntry(null)} />}
     </div>
   );
 }
