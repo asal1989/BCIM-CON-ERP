@@ -445,6 +445,20 @@ const navGroups = [
     { to: '/tqs/vendor-certifications', icon: FileSignature,   label: 'QS Certification' },
     { to: '/tqs/documents',             icon: FolderSearch,    label: 'Documents' },
   ]},
+  // All Stores / Procurement / Bill Tracker tracker pages in one place —
+  // same routes as their home modules (no duplicate pages), just gathered
+  // here so nobody has to remember which module a given tracker lives under.
+  { label: 'Trackers', items: [
+    { to: '/procurement/advance-tracker',    icon: Wallet,          label: 'Advance Tracker (Procurement)' },
+    { to: '/stores/material-tracker',        icon: BarChart2,       label: 'Material Tracker (Stores)' },
+    { to: '/stores/supply-tracker',          icon: Layers,          label: 'Supply Tracker (Stores)' },
+    { to: '/stores/client-approval-tracker', icon: ClipboardCheck,  label: 'Client Approval Tracker (Stores)' },
+    { to: '/stores/petty-cash',              icon: Wallet,          label: 'Petty Cash Tracker (Stores)' },
+    { to: '/tqs/material-tracker',           icon: Package,         label: 'Material Tracker (Bill Tracker)' },
+    { to: '/tqs/concrete-tracker',           icon: Layers,          label: 'Concrete Tracker (Bill Tracker)' },
+    { to: '/tqs/liability-register',         icon: BookOpen,        label: 'Liability Register (Bill Tracker)' },
+    { to: '/tqs/deduction-register',         icon: CircleSlash,     label: 'Deduction Register (Bill Tracker)' },
+  ]},
   { label: 'Quality (QA/QC)', items: [
     { to: '/quality',                    icon: LayoutDashboard, label: 'QA/QC Dashboard' },
     { to: '/quality/itp',                icon: ClipboardList, label: 'ITP Register' },
@@ -569,6 +583,7 @@ const GROUP_COLORS = {
   'Setup & Tools':     '#78716C',
   'Project Controls':  '#0B2E59',
   'Bill Tracker':      '#6366F1',
+  'Trackers':          '#DB2777',
   'Quality (QA/QC)':   '#3B82F6',
   'HSE & Safety':      '#EF4444',
   'Assets & IT':       '#64748B',
@@ -2426,6 +2441,7 @@ export default function Layout() {
       // If no modules configured at all, show everything (fallback for unconfigured accounts)
       if (!user?.accessible_modules?.length) return true;
       const aliases = g.label === 'Bill Tracker'      ? ['Bill Tracker', 'DQS Tracker']
+        : g.label === 'Trackers'         ? ['Trackers', 'Stores', 'Stores Petty Cash', 'Procurement', 'Bill Tracker', 'DQS Tracker']
         : g.label === 'Stores'           ? ['Stores', 'Stores Petty Cash']
         : g.label === 'Accounts'         ? ['Accounts', 'Finance']
         : g.label === 'Plant & Machinery'? ['Plant & Machinery', 'Assets & IT']
