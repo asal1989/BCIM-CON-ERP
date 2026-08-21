@@ -1,0 +1,1 @@
+import{j as s}from"./vendor-react-QqYhfoRR.js";import{c as i}from"./zohoStyles-DrxC6LiO.js";function c({label:r,children:e,className:a}){return s.jsxs("div",{className:`space-y-1 ${a||""}`,children:[s.jsx("label",{className:i,children:r}),e]})}export{c as F};
