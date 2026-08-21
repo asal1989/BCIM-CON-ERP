@@ -227,7 +227,13 @@ async function syncLegacyComplianceItems(companyId) {
     [companyId]
   );
   for (const item of legacy.rows) {
-    const proj = item.location
+    // The item's own title is a more reliable signal than `location` —
+    // location tends to carry over whatever value was left in the form
+    // from the last item created, so e.g. "Shop & Est. License - Head
+    // Office" had ended up with location="Tech-P3" from an unrelated
+    // earlier entry and got wrongly reassigned there. If the title itself
+    // says "Head Office", trust that over location outright.
+    const proj = (!/head office/i.test(item.name || '') && item.location)
       ? await query(`SELECT id, name FROM projects WHERE company_id=$1 AND name=$2`, [companyId, item.location])
       : { rows: [] };
     const projectId = proj.rows[0]?.id || null;
