@@ -1688,6 +1688,31 @@ router.patch('/:id/terminate', authorize('super_admin', 'admin', 'project_manage
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// Submit an existing draft PO for approval — must be before /:id/:stage.
+// A PO saved as 'draft' had no way back to 'pending': PATCH /:id never
+// touches status, and /send-to-vendor only stamps po_sent_at, so a draft PO
+// could be emailed to the vendor yet never reach the approve screen (its
+// approval requires status='pending'). This closes that gap.
+router.patch('/:id/submit-for-approval', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    const po = await getAccessiblePo(req, req.params.id);
+    if (po.status !== 'draft') {
+      return res.status(400).json({ error: `Only a draft PO can be submitted for approval (current status: ${po.status}).` });
+    }
+    const items = await query(`SELECT id FROM po_items WHERE po_id = $1`, [req.params.id]);
+    if (!po.vendor_id || !items.rows.length) {
+      return res.status(400).json({ error: 'Vendor and at least one line item are required before submitting for approval.' });
+    }
+    const result = await query(
+      `UPDATE purchase_orders SET status = 'pending', updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    res.json({ message: 'PO submitted for approval', data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Reject PO — must be before /:id/:stage to avoid being swallowed by the generic route
 router.patch('/:id/reject', async (req, res) => {
   try {

@@ -342,7 +342,7 @@ function Field({ label, children }) {
 const INP = Z_INP;
 
 /* ─── New PO Modal ─── */
-function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpdate, isPending, prefill, editingPO, company }) {
+function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpdate, isPending, prefill, editingPO, company, onSubmitForApproval, isSubmittingForApproval }) {
   const queryClient = useQueryClient();
   const isEditing = !!editingPO;
   const [form, setForm] = useState({
@@ -1136,6 +1136,12 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
             ) : (
               <>
                 {!isEditing && <button onClick={() => handleSubmit(true)} disabled={isPending} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"><Mail className="w-4 h-4" /> Send to Vendor</button>}
+                {isEditing && editingPO?.status === 'draft' && onSubmitForApproval && (
+                  <button onClick={onSubmitForApproval} disabled={isSubmittingForApproval || isPending}
+                    className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    <Check className="w-4 h-4" /> {isSubmittingForApproval ? 'Submitting…' : 'Submit for Approval'}
+                  </button>
+                )}
                 <button onClick={() => handleSubmit(false)} disabled={isPending}
                   className="inline-flex items-center gap-2 px-5 h-9 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50">
                   <Check className="w-4 h-4" />
@@ -2393,6 +2399,18 @@ export default function POPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
   });
 
+  const submitForApprovalMutation = useMutation({
+    mutationFn: (id) => poAPI.submitForApproval(id),
+    onSuccess: (res) => {
+      toast.success('PO submitted for approval');
+      setEditingPO(null);
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      qc.invalidateQueries({ queryKey: ['purchase-orders', selectedPO?.id] });
+      if (selectedPO && res?.data?.data) setSelectedPO(res.data.data);
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to submit for approval'),
+  });
+
   const isRecvUnbilled = p => {
     const recv = parseFloat(p.received_value) || 0;
     const billed = parseFloat(p.billed_amount) || 0;
@@ -2806,6 +2824,8 @@ export default function POPage() {
           isPending={updateMutation.isPending}
           editingPO={editingPO}
           company={companyData}
+          onSubmitForApproval={() => submitForApprovalMutation.mutate(editingPO.id)}
+          isSubmittingForApproval={submitForApprovalMutation.isPending}
         />
       )}
 

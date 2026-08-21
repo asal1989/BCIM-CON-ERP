@@ -498,6 +498,7 @@ export const poAPI = {
   update:  (id, data) => api.patch(`/purchase-orders/${id}`, data),
   delete:  (id)        => api.delete(`/purchase-orders/${id}`),
   approve: (id, stage, data) => api.patch(`/purchase-orders/${id}/${stage}`, data),
+  submitForApproval: (id) => api.patch(`/purchase-orders/${id}/submit-for-approval`),
   mailPreview:  (id)     => api.get(`/purchase-orders/${id}/mail-preview`),
   sendToVendor: (id, d)  => api.post(`/purchase-orders/${id}/send-to-vendor`, d),
   receive: (id, data) => api.patch(`/purchase-orders/${id}/receive`, data),
