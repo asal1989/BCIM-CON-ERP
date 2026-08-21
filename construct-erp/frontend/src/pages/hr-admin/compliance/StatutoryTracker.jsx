@@ -435,16 +435,17 @@ export default function StatutoryTracker() {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 uppercase text-[10px]">
-              {['Compliance ID', 'Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible', 'Docs', ''].map(h => (
+              {['Compliance ID', 'Project', 'Category', 'Item', 'Due Date', 'Actual Date', 'Due', 'Paid', 'Outstanding', 'Penalty/Int', 'Damages', 'Delay Days', 'Validity', 'Status', 'Reason', 'Action Req.', 'Responsible'].map(h => (
                 <th key={h} className="text-left font-semibold px-3 py-2 whitespace-nowrap">{h}</th>
               ))}
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap sticky right-0 bg-slate-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={19} className="text-center py-6 text-slate-400">Loading…</td></tr>}
-            {!isLoading && !rows.length && <tr><td colSpan={19} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
+            {isLoading && <tr><td colSpan={18} className="text-center py-6 text-slate-400">Loading…</td></tr>}
+            {!isLoading && !rows.length && <tr><td colSpan={18} className="text-center py-6 text-slate-400">No compliance entries yet.</td></tr>}
             {rows.map(e => (
-              <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+              <tr key={e.id} className="group border-t border-slate-100 hover:bg-slate-50/60">
                 <td className="px-3 py-2 font-semibold text-blue-600 whitespace-nowrap">{e.obligation_code || '—'}</td>
                 <td className="px-3 py-2">{e.project_name || 'Head Office'}</td>
                 <td className="px-3 py-2">{e.category}</td>
@@ -464,14 +465,12 @@ export default function StatutoryTracker() {
                 <td className="px-3 py-2 max-w-[140px] truncate" title={e.reason_for_delay}>{e.reason_for_delay || '—'}</td>
                 <td className="px-3 py-2 max-w-[140px] truncate" title={e.action_required}>{e.action_required || '—'}</td>
                 <td className="px-3 py-2">{e.responsible_person || '—'}</td>
-                <td className="px-3 py-2">
-                  <button onClick={() => setDocsEntry(e.id)}
-                    className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-semibold">
-                    <Paperclip size={13} /> {e.document_count > 0 ? e.document_count : ''}
-                  </button>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
+                <td className="px-3 py-2 sticky right-0 bg-white group-hover:bg-slate-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
+                  <div className="flex items-center gap-2.5">
+                    <button onClick={() => setDocsEntry(e.id)} title="Attachments"
+                      className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-semibold">
+                      <Paperclip size={13} /> {e.document_count > 0 ? e.document_count : ''}
+                    </button>
                     <button onClick={() => handlePrintEntry(e)} title="Print"><Printer size={13} className="text-slate-400 hover:text-blue-600" /></button>
                     <button onClick={() => deleteEntryMut.mutate(e.id)} title="Delete"><Trash2 size={13} className="text-slate-400 hover:text-red-500" /></button>
                   </div>

@@ -156,7 +156,7 @@ export default function ComplianceTable({ rows, loading, onView, onAction, onCre
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.03 * i }}
                   className="border-b border-slate-50 hover:bg-blue-50/40 transition-colors cursor-pointer"
                   onClick={() => onView(row)}>
-                  <td className="px-4 py-3.5 font-semibold text-blue-600 whitespace-nowrap">{row.id}</td>
+                  <td className="px-4 py-3.5 font-semibold text-blue-600 whitespace-nowrap">{row.code || row.id}</td>
                   <td className="px-4 py-3.5 min-w-[220px]">
                     <div className="font-semibold text-slate-900">{row.name}</div>
                     <div className="text-xs text-slate-400 mt-0.5">{row.type}</div>

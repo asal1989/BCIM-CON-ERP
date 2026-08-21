@@ -50,7 +50,7 @@ export default function ComplianceDrawer({ item, onClose }) {
             <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-3"
               style={{ background: 'linear-gradient(135deg,#EFF6FF, #ffffff)' }}>
               <div>
-                <p className="text-xs font-semibold text-blue-600">{item.id} · {item.type}</p>
+                <p className="text-xs font-semibold text-blue-600">{item.code || item.id} · {item.type}</p>
                 <h2 className="text-lg font-bold text-slate-900 mt-0.5 leading-snug">{item.name}</h2>
                 <div className="flex items-center gap-2 mt-2">
                   <StatusBadge status={item.status} />

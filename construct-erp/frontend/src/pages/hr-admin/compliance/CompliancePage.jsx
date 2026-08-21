@@ -126,7 +126,7 @@ export default function CompliancePage() {
 
   const exportReport = () => {
     const header = ['Compliance ID', 'Name', 'Category', 'Type', 'Applicable To', 'Department', 'Location', 'Due Date', 'Renewal Date', 'Status', 'Priority', 'Owner', 'Documents', 'Last Updated'];
-    const lines = filtered.map(r => [r.id, r.name, r.category, r.type, r.applicableTo, r.department, r.location, r.dueDate, r.renewalDate, r.status, r.priority, r.owner, r.documents, r.lastUpdated]
+    const lines = filtered.map(r => [r.code || r.id, r.name, r.category, r.type, r.applicableTo, r.department, r.location, r.dueDate, r.renewalDate, r.status, r.priority, r.owner, r.documents, r.lastUpdated]
       .map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
