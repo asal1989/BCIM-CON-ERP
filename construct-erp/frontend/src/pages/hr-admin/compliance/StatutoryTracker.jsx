@@ -5,10 +5,19 @@
 // Other) with the full due/paid/penalty/delay trail, plus the weekly
 // Monday-morning email report configuration.
 import React, { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText } from 'lucide-react';
+import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText, UploadCloud, Download, File as FileIcon, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { complianceTrackerAPI, projectAPI } from '../../../api/client';
+
+function fileMeta(name = '') {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  if (['pdf'].includes(ext))                          return { Icon: FileText,       color: '#DC2626', bg: '#FEF2F2' };
+  if (['xls', 'xlsx', 'csv'].includes(ext))            return { Icon: FileSpreadsheet, color: '#15803D', bg: '#F0FDF4' };
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return { Icon: ImageIcon,   color: '#7C3AED', bg: '#F5F3FF' };
+  return { Icon: FileIcon, color: '#475569', bg: '#F1F5F9' };
+}
 
 const STATUS_COLORS = {
   Pending: '#b45309', Overdue: '#dc2626', Paid: '#16a34a', Closed: '#64748b', 'Not Applicable': '#94a3b8',
@@ -163,6 +172,7 @@ function EntryForm({ obligations, onClose, onSaved }) {
 function DocumentsPanel({ entryId, onClose }) {
   const qc = useQueryClient();
   const fileRef = React.useRef(null);
+  const [dragOver, setDragOver] = useState(false);
   const { data: docs, isLoading } = useQuery({
     queryKey: ['ct-documents', entryId],
     queryFn: () => complianceTrackerAPI.documents(entryId).then(r => r.data.data),
@@ -181,39 +191,101 @@ function DocumentsPanel({ entryId, onClose }) {
     onSuccess: () => { toast.success('Document removed'); qc.invalidateQueries({ queryKey: ['ct-documents', entryId] }); qc.invalidateQueries({ queryKey: ['ct-entries'] }); },
   });
 
+  const docList = docs || [];
+  const handleFile = (f) => { if (f) uploadMut.mutate(f); };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><Paperclip size={16} /> Attachments</h3>
-          <button onClick={onClose}><X size={18} className="text-slate-400 hover:text-slate-600" /></button>
-        </div>
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
+        <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+          onClick={e => e.stopPropagation()} style={{ boxShadow: '0 1px 3px rgba(15,23,42,.06), 0 20px 40px rgba(15,23,42,.16)' }}>
 
-        <input ref={fileRef} type="file" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) uploadMut.mutate(f); e.target.value = ''; }} />
-        <button onClick={() => fileRef.current?.click()} disabled={uploadMut.isPending}
-          className="w-full h-10 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50 mb-4"
-          style={{ background: '#1B3A6B' }}>
-          <Upload size={14} /> {uploadMut.isPending ? 'Uploading…' : 'Upload Document (challan, receipt, licence copy, agreement…)'}
-        </button>
-
-        {isLoading && <p className="text-sm text-slate-400 text-center py-4">Loading…</p>}
-        {!isLoading && !(docs || []).length && <p className="text-sm text-slate-400 text-center py-4">No documents attached yet.</p>}
-        <div className="space-y-2">
-          {(docs || []).map(d => (
-            <div key={d.id} className="flex items-center gap-2.5 bg-slate-50 rounded-xl p-3">
-              <FileText size={16} className="text-slate-400 flex-shrink-0" />
-              <a href={d.sharepoint_url || d.file_url} target="_blank" rel="noreferrer"
-                className="flex-1 min-w-0 text-sm font-semibold text-slate-700 truncate hover:text-blue-600" title={d.doc_name}>
-                {d.doc_name}
-              </a>
-              <span className="text-[11px] text-slate-400 flex-shrink-0">{fmtDate(d.uploaded_at)}</span>
-              <button onClick={() => deleteMut.mutate(d.id)}><Trash2 size={13} className="text-slate-400 hover:text-red-500 flex-shrink-0" /></button>
+          {/* Header */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg,#2563EB,#1E3A8A)', boxShadow: '0 4px 12px rgba(37,99,235,.3)' }}>
+              <Paperclip size={17} className="text-white" />
             </div>
-          ))}
-        </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-slate-900">Attachments</h3>
+              <p className="text-[11px] text-slate-400">{docList.length ? `${docList.length} document${docList.length > 1 ? 's' : ''} attached` : 'Challans, receipts, licence copies, agreements'}</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="px-5 py-4 overflow-y-auto flex-1">
+            <input ref={fileRef} type="file" className="hidden"
+              onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+            <div
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]); }}
+              className="rounded-xl border-2 border-dashed cursor-pointer transition-colors flex flex-col items-center justify-center gap-1.5 py-6 px-4 text-center mb-4"
+              style={{
+                borderColor: dragOver ? '#2563EB' : '#CBD5E1',
+                background: dragOver ? '#EFF6FF' : uploadMut.isPending ? '#F8FAFC' : '#FAFBFC',
+                opacity: uploadMut.isPending ? 0.6 : 1,
+                pointerEvents: uploadMut.isPending ? 'none' : 'auto',
+              }}
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mb-1">
+                <UploadCloud size={18} className="text-blue-600" />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">
+                {uploadMut.isPending ? 'Uploading…' : 'Click to upload or drag & drop'}
+              </p>
+              <p className="text-[11px] text-slate-400">Challan, receipt, licence copy, agreement…</p>
+            </div>
+
+            {isLoading && (
+              <div className="flex items-center justify-center py-8 text-sm text-slate-400">Loading…</div>
+            )}
+
+            {!isLoading && !docList.length && (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-2">
+                  <FileText size={20} className="text-slate-300" />
+                </div>
+                <p className="text-sm font-medium text-slate-400">No documents attached yet</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {docList.map(d => {
+                const { Icon, color, bg } = fileMeta(d.doc_name);
+                return (
+                  <div key={d.id} className="group flex items-center gap-3 bg-slate-50/70 hover:bg-slate-50 rounded-xl p-2.5 transition-colors">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+                      <Icon size={16} style={{ color }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate" title={d.doc_name}>{d.doc_name}</p>
+                      <p className="text-[11px] text-slate-400">{fmtDate(d.uploaded_at)}{d.uploaded_by_name ? ` · ${d.uploaded_by_name}` : ''}</p>
+                    </div>
+                    <a href={d.sharepoint_url || d.file_url} target="_blank" rel="noreferrer"
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors flex-shrink-0" title="Open">
+                      <Download size={14} />
+                    </a>
+                    <button onClick={() => deleteMut.mutate(d.id)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100" title="Remove">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
       </div>
-    </div>
+    </AnimatePresence>
   );
 }
 
