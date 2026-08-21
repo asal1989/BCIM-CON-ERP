@@ -1,7 +1,8 @@
 // src/pages/hr-admin/compliance/ComplianceTable.jsx
 // Premium data grid: 13 columns, sticky header, skeleton loaders, row kebab
 // with full action set, pagination, animated empty state.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   Eye, Pencil, Upload, RefreshCw, UserPlus, History, Trash2, MoreVertical,
@@ -29,14 +30,42 @@ function OwnerCell({ name }) {
   );
 }
 
+const MENU_WIDTH = 192; // w-48
+
 function RowMenu({ row, onAction }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const place = () => {
+      const r = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - r.bottom;
+      const openUpward = spaceBelow < 180 && r.top > 180;
+      setPos({
+        left: Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8),
+        top: openUpward ? undefined : r.bottom + 4,
+        bottom: openUpward ? window.innerHeight - r.top + 4 : undefined,
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+  }, [open]);
+
   useEffect(() => {
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onDoc = (e) => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
+
   const items = row.readOnly
     ? [{ key: 'history', label: 'History', Icon: History }]
     : [
@@ -46,23 +75,25 @@ function RowMenu({ row, onAction }) {
         { key: 'delete',  label: 'Delete',          Icon: Trash2, danger: true },
       ];
   return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)}
+    <>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
         className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors">
         <MoreVertical className="w-4 h-4" />
       </button>
-      {open && (
-        <motion.div initial={{ opacity: 0, scale: 0.96, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.12 }}
-          className="absolute right-0 mt-1 w-48 bg-white rounded-xl border border-slate-100 shadow-xl z-30 py-1.5 overflow-hidden">
+      {open && pos && createPortal(
+        <motion.div ref={menuRef} initial={{ opacity: 0, scale: 0.96, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.12 }}
+          className="fixed w-48 bg-white rounded-xl border border-slate-100 shadow-xl z-[9999] py-1.5 overflow-hidden"
+          style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}>
           {items.map(({ key, label, Icon, danger }) => (
             <button key={key} onClick={() => { setOpen(false); onAction(key, row); }}
               className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-medium transition-colors ${danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-blue-50'}`}>
               <Icon className={`w-3.5 h-3.5 ${danger ? 'text-red-400' : 'text-slate-400'}`} /> {label}
             </button>
           ))}
-        </motion.div>
+        </motion.div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
