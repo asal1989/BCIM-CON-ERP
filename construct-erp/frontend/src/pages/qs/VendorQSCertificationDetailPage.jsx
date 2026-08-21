@@ -109,7 +109,7 @@ function Masthead({ docTitle, badge, dateLabel }) {
           onError={e => { e.target.style.display = 'none'; }} />
         <div>
           <div style={T.coName}>BCIM Engineering Private Limited</div>
-          <div style={T.coSub}>Infrastructure &amp; Construction Management</div>
+          <div style={T.coSub}>Build with Dreams</div>
         </div>
       </div>
       <div>

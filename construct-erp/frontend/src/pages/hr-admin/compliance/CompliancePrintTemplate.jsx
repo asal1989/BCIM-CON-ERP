@@ -67,7 +67,7 @@ export default function CompliancePrintTemplate({ entry, documents = [], company
               <img src="/bcim-logo.png" alt="BCIM" style={{ height: 36, objectFit: 'contain' }} />
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, letterSpacing: 0.2 }}>{company.name || 'BCIM ENGINEERING PRIVATE LIMITED'}</div>
-                <div style={{ fontSize: 9, fontStyle: 'italic', color: MUTED }}>Infrastructure &amp; Construction Management</div>
+                <div style={{ fontSize: 9, fontStyle: 'italic', color: MUTED }}>Build with Dreams</div>
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
