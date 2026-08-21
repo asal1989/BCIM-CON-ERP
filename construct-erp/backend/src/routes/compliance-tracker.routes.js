@@ -208,6 +208,21 @@ runSchemaInit('compliance-tracker-legacy-unique-index-v1', async () => {
   `);
 });
 
+// The location-vs-title fix above only corrects data the next time
+// syncLegacyComplianceItems() actually runs (i.e. someone loads the
+// tracker page) — this applies the same correction once immediately so
+// the 2 already-misassigned Shop & Est. items don't sit wrong until then.
+runSchemaInit('compliance-tracker-fix-ho-title-project-2026-08', async () => {
+  const r = await query(`
+    UPDATE compliance_obligations
+    SET project_id = NULL, updated_at = NOW()
+    WHERE legacy_hr_item_id IS NOT NULL
+      AND title ILIKE '%head office%'
+      AND project_id IS NOT NULL
+  `);
+  console.log(`[migration] compliance-tracker-fix-ho-title-project: corrected ${r.rowCount} obligation(s)`);
+});
+
 function categorizeLegacyItem(name, type) {
   const s = `${name || ''} ${type || ''}`;
   if (/shop.*establishment|establishment.*shop/i.test(s)) return 'Shop & Establishment Registration';
