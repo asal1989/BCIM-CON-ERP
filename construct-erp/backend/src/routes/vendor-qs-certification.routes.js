@@ -948,16 +948,18 @@ router.post('/', async (req, res) => {
       const gross = round0(certifiedInvoiceTotal - billTax);
 
       // ── TDS auto-calculation ────────────────────────────────────────────
-      // TDS base = certified invoice total (what's actually being paid, incl. GST),
-      // matching the frontend useEffect.
-      // Priority: explicit tds_amount > (tds_rate % × certifiedInvoiceTotal) > vendor default tds_rate
+      // TDS base = gross (basic, excl. GST) per CBDT Circular 23/2017 — GST
+      // shown separately on the invoice is excluded from the TDS base.
+      // Matches the frontend useEffect (tdsBase = sum of basic_amount, scaled
+      // by certifiedFraction), NOT the GST-inclusive certifiedInvoiceTotal.
+      // Priority: explicit tds_amount > (tds_rate % × gross) > vendor default tds_rate
       let appliedTdsRate = 0;
       let tds_amount = 0;
       if (tds_amount_input !== undefined && tds_amount_input !== '' && tds_amount_input !== null) {
         // Frontend explicitly provided amount — use as-is
         tds_amount = round0(tds_amount_input);
         // back-calculate rate for storage
-        appliedTdsRate = certifiedInvoiceTotal > 0 ? round2((tds_amount / certifiedInvoiceTotal) * 100) : 0;
+        appliedTdsRate = gross > 0 ? round2((tds_amount / gross) * 100) : 0;
       } else {
         // Look up vendor's tds_rate
         const rateToUse = (tds_rate_input !== undefined && tds_rate_input !== '')
@@ -970,7 +972,7 @@ router.post('/', async (req, res) => {
               return 0;
             })();
         appliedTdsRate = rateToUse;
-        tds_amount = round0(certifiedInvoiceTotal * appliedTdsRate / 100);
+        tds_amount = round0(gross * appliedTdsRate / 100);
       }
       // ───────────────────────────────────────────────────────────────────
 
@@ -1511,13 +1513,14 @@ router.patch('/:id/amounts', async (req, res) => {
       const finalTax = wantsGstChange ? n(gst_tax) : n(cert.tax_amount);
 
       // Recalc TDS amount from rate if rate supplied, else use explicit amount.
-      // TDS base = invoiceBillTotal (matches frontend useEffect and POST handler).
+      // TDS base = gross (basic, excl. GST) per CBDT Circular 23/2017 — matches
+      // the frontend useEffect and the POST handler's create-time calculation.
       const finalTdsAmount = (tds_rate_edit !== undefined && tds_rate_edit !== '')
-        ? round2(invoiceBillTotal * n(tds_rate_edit) / 100)
+        ? round2(gross * n(tds_rate_edit) / 100)
         : n(tds_amount);
       const finalTdsRate = (tds_rate_edit !== undefined && tds_rate_edit !== '')
         ? n(tds_rate_edit)
-        : (invoiceBillTotal > 0 ? round2((n(tds_amount) / invoiceBillTotal) * 100) : n(cert.tds_rate));
+        : (gross > 0 ? round2((n(tds_amount) / gross) * 100) : n(cert.tds_rate));
       const totalDed = finalTdsAmount + n(advance_recovered) + n(retention_amount) + n(other_deductions);
       // Net base: when GST is explicitly edited, use gross + edited-tax (matches the
       // on-screen preview the approver confirms — WYSIWYG). Otherwise keep the
