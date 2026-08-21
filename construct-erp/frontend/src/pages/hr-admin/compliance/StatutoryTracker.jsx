@@ -7,9 +7,10 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText, UploadCloud, Download, File as FileIcon, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { Plus, Send, Trash2, Mail, Paperclip, Upload, X, FileText, UploadCloud, Download, File as FileIcon, FileSpreadsheet, Image as ImageIcon, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { complianceTrackerAPI, projectAPI } from '../../../api/client';
+import CompliancePrintTemplate from './CompliancePrintTemplate';
 
 function fileMeta(name = '') {
   const ext = name.split('.').pop()?.toLowerCase() || '';
@@ -341,6 +342,8 @@ export default function StatutoryTracker() {
   const [obForm, setObForm] = useState(false);
   const [enForm, setEnForm] = useState(false);
   const [docsEntry, setDocsEntry] = useState(null);
+  const [printData, setPrintData] = useState(null); // { entry, documents }
+  const printZoneRef = React.useRef(null);
 
   const { data: categories } = useQuery({ queryKey: ['ct-categories'], queryFn: () => complianceTrackerAPI.categories().then(r => r.data.data) });
   const { data: projects } = useQuery({ queryKey: ['ct-projects'], queryFn: () => projectAPI.list().then(r => r.data?.data || []) });
@@ -365,6 +368,42 @@ export default function StatutoryTracker() {
   });
 
   const rows = entries || [];
+
+  // ── Print — hidden zone + new isolated window, same pattern used across
+  // the app's other print templates (PO, payslip, etc.) ────────────────────
+  const handlePrintEntry = async (entry) => {
+    try {
+      const docs = await complianceTrackerAPI.documents(entry.id).then(r => r.data.data);
+      setPrintData({ entry, documents: docs || [] });
+    } catch (e) {
+      toast.error('Failed to load documents for print');
+    }
+  };
+  React.useEffect(() => {
+    if (!printData || !printZoneRef.current) return;
+    const html = printZoneRef.current.innerHTML;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { window.print(); setPrintData(null); return; }
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title></title>
+  <style>
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: white; }
+    @page { size: A4 portrait; margin: 10mm; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`);
+    win.document.close();
+    let printed = false;
+    const doPrint = () => { if (printed) return; printed = true; win.focus(); win.print(); win.close(); };
+    win.onload = doPrint;
+    setTimeout(doPrint, 600);
+    setPrintData(null);
+  }, [printData]);
 
   return (
     <div>
@@ -432,7 +471,10 @@ export default function StatutoryTracker() {
                   </button>
                 </td>
                 <td className="px-3 py-2">
-                  <button onClick={() => deleteEntryMut.mutate(e.id)}><Trash2 size={13} className="text-slate-400 hover:text-red-500" /></button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handlePrintEntry(e)} title="Print"><Printer size={13} className="text-slate-400 hover:text-blue-600" /></button>
+                    <button onClick={() => deleteEntryMut.mutate(e.id)} title="Delete"><Trash2 size={13} className="text-slate-400 hover:text-red-500" /></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -443,6 +485,11 @@ export default function StatutoryTracker() {
       {obForm && <ObligationForm projects={projects || []} categories={categories || []} onClose={() => setObForm(false)} onSaved={refreshAll} />}
       {enForm && <EntryForm obligations={obligations || []} onClose={() => setEnForm(false)} onSaved={refreshAll} />}
       {docsEntry && <DocumentsPanel entryId={docsEntry} onClose={() => setDocsEntry(null)} />}
+
+      {/* Hidden print zone — content captured via ref, printed in new window */}
+      <div ref={printZoneRef} style={{ display: 'none' }} aria-hidden="true">
+        {printData && <CompliancePrintTemplate entry={printData.entry} documents={printData.documents} />}
+      </div>
     </div>
   );
 }
