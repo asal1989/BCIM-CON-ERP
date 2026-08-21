@@ -2517,4 +2517,39 @@ runSchemaInit('sukkali_ramesh_wo480_cert_paid_catchup_2026_07', async () => {
   console.log(`[migration] P25/WO09/5722/SUR (WO-480): cert status → paid (${r.rowCount} row updated)`);
 });
 
+// ── One-time: correct RA-01 (P25/WO12/5785/NJM, Nur Jamal Mondal, LANCO
+// Hills WOLANLH10012) — certified 2026-08-19, one day before the TDS-base
+// fix landed, so it was deducted at 1% of the GST-inclusive total (₹4,132.67)
+// instead of 1% of the gross/basic amount (₹3,502) per CBDT Circular
+// 23/2017. Verified via a read-only prod audit that this is the ONLY
+// non-paid/non-cancelled certification affected (2 others carry tds_rate>0:
+// one already paid at the correct figure, one uses a custom manual rate
+// unrelated to this bug) — guarded by cert_number + status<>'paid' so this
+// is a no-op if anything about the row changes before deploy.
+runSchemaInit('fix_njm_ra01_gst_inclusive_tds_2026_08', async () => {
+  const certRes = await query(
+    `UPDATE vendor_qs_certifications
+     SET tds_amount = 3502, net_payable = 144754.00, cumulative_certified_amount = 144754.00, updated_at = NOW()
+     WHERE cert_number = 'P25/WO12/5785/NJM' AND status <> 'paid' AND tds_amount = 4132.67
+     RETURNING id`
+  );
+  if (!certRes.rows.length) {
+    console.log('[migration] fix_njm_ra01_gst_inclusive_tds_2026_08: no matching row (already corrected or state changed) — skipped');
+    return;
+  }
+  const bills = await query(
+    `SELECT bill_id FROM vendor_qs_certification_bills WHERE certification_id = $1`,
+    [certRes.rows[0].id]
+  );
+  for (const b of bills.rows) {
+    await query(
+      `UPDATE tqs_bill_updates
+       SET tds_deduction = 3502, total_deductions = 268513.00, certified_net = 144754.00, balance_to_pay = 144754.00, updated_at = NOW()
+       WHERE bill_id = $1`,
+      [b.bill_id]
+    );
+  }
+  console.log(`[migration] P25/WO12/5785/NJM: TDS corrected 4132.67 -> 3502, net_payable 144123.33 -> 144754.00 (${bills.rows.length} bill(s) synced)`);
+});
+
 module.exports = router;
