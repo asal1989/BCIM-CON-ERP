@@ -126,7 +126,15 @@ const attachProjectSpend = async (projects) => {
 // GET /api/v1/projects
 const getProjects = async (req, res) => {
   try {
-    const { status, type, search } = req.query;
+    const { status, type, search, scoped } = req.query;
+    // hr/hr_admin/hr_manager are in GLOBAL_ROLES above for the Employee Edit
+    // Project Assignment dropdown, but that same bypass was leaking into the
+    // login project-picker, showing restricted HR staff (e.g. project_members
+    // -scoped users like Sonu Kushawaha / Bikram Ram) every project in the
+    // company instead of just the ones they were explicitly assigned to.
+    // The login page passes scoped=true to force project_members filtering
+    // for hr roles too; every other caller of this endpoint is unaffected.
+    const forceScopeHr = scoped === 'true' && ['hr', 'hr_admin', 'hr_manager'].includes(req.user.role);
     let sql = `
       SELECT p.*,
         pm.name as pm_name, pm.phone as pm_phone,
@@ -154,7 +162,7 @@ const getProjects = async (req, res) => {
     let i = 2;
 
     // Project-level scoping: non-global roles see only assigned projects
-    if (!GLOBAL_ROLES.includes(req.user.role)) {
+    if (!GLOBAL_ROLES.includes(req.user.role) || forceScopeHr) {
       sql += ` AND (
         p.project_manager_id = $${i} OR p.site_engineer_id = $${i} OR p.qs_engineer_id = $${i}
         OR EXISTS (SELECT 1 FROM project_members pmx WHERE pmx.project_id = p.id AND pmx.user_id = $${i})

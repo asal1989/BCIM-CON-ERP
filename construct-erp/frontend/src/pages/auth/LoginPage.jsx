@@ -135,7 +135,7 @@ export default function LoginPage() {
     setLoginStep('project');
     try {
       sessionStorage.removeItem('selectedProjectId');
-      const { data: projectResponse } = await projectAPI.list({ status: 'active' });
+      const { data: projectResponse } = await projectAPI.list({ status: 'active', scoped: 'true' });
       const list = projectResponse?.data || projectResponse || [];
       setProjects(Array.isArray(list) ? list : []);
       toast.success('Welcome back. Select your project.');
