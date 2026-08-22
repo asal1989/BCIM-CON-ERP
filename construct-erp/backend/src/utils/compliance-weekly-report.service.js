@@ -65,7 +65,29 @@ async function fetchOpenEntries(companyId) {
   return rows;
 }
 
-function buildEmailHtml({ companyName, dateStr, entries }) {
+// Licences/registrations whose validity is about to lapse within 30 days —
+// a separate concern from Pending/Overdue: a compliance can be fully paid
+// up and "Closed" for the current cycle while its licence itself is still
+// due for renewal, so this checks validity_expiry_date regardless of the
+// entry's payment status (only excluding items already marked Not
+// Applicable, since those were deliberately opted out of tracking).
+async function fetchUpcomingRenewals(companyId) {
+  const { rows } = await query(`
+    SELECT e.*, o.category, o.title AS obligation_title, p.name AS project_name,
+           (e.validity_expiry_date - CURRENT_DATE) AS days_remaining
+    FROM compliance_entries e
+    JOIN compliance_obligations o ON o.id = e.obligation_id
+    LEFT JOIN projects p ON p.id = o.project_id
+    WHERE e.company_id = $1
+      AND e.status <> 'Not Applicable'
+      AND e.validity_expiry_date IS NOT NULL
+      AND e.validity_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 30
+    ORDER BY e.validity_expiry_date ASC
+  `, [companyId]);
+  return rows;
+}
+
+function buildEmailHtml({ companyName, dateStr, entries, renewals }) {
   const th = `padding:7px 9px;background:#1B3A6B;color:#fff;font-size:10px;font-weight:700;text-align:left;white-space:nowrap;border:1px solid #16305a`;
   const td = `padding:6px 9px;font-size:11px;color:#1e293b;border:1px solid #e2e8f0;vertical-align:middle`;
 
@@ -122,7 +144,7 @@ function buildEmailHtml({ companyName, dateStr, entries }) {
     <td style="background:#1B3A6B;padding:20px 28px">
       <p style="color:rgba(255,255,255,0.7);font-size:10px;margin:0 0 2px;letter-spacing:0.08em;text-transform:uppercase">HR / Admin — Legal &amp; Statutory Compliance</p>
       <p style="color:#fff;font-size:16px;font-weight:800;margin:0">WEEKLY COMPLIANCE STATUS REPORT</p>
-      <p style="color:rgba(255,255,255,0.65);font-size:11px;margin:2px 0 0;font-style:italic">All Projects &amp; Head Office — Pending &amp; Overdue Items</p>
+      <p style="color:rgba(255,255,255,0.65);font-size:11px;margin:2px 0 0;font-style:italic">All Projects &amp; Head Office — Pending, Overdue &amp; Upcoming Renewals</p>
     </td>
   </tr>
   <tr>
@@ -134,6 +156,7 @@ function buildEmailHtml({ companyName, dateStr, entries }) {
           <th style="${th};text-align:center">Overdue</th>
           <th style="${th};text-align:center">Total Outstanding</th>
           <th style="${th};text-align:center">Total Penalty/Damages</th>
+          <th style="${th};text-align:center">Renewals Due (30d)</th>
         </tr>
         <tr>
           <td style="${td};text-align:center;font-weight:700">${dateStr}</td>
@@ -141,10 +164,36 @@ function buildEmailHtml({ companyName, dateStr, entries }) {
           <td style="${td};text-align:center;font-weight:900;color:#dc2626">${overdueCount}</td>
           <td style="${td};text-align:center;font-weight:900;color:#dc2626">₹${inr(totalOutstanding)}</td>
           <td style="${td};text-align:center;font-weight:900;color:#b45309">₹${inr(totalPenalty)}</td>
+          <td style="${td};text-align:center;font-weight:900;color:${renewals.length ? '#b45309' : '#16a34a'}">${renewals.length}</td>
         </tr>
       </table>
       ${sections || `<p style="color:#94a3b8;font-size:13px">No pending or overdue compliance items — everything is closed.</p>`}
-      <p style="font-size:12px;color:#64748b;margin:20px 0 0">Please ensure pending amounts, penalties, damages, interest and delay days are followed up until closure.</p>
+
+      ${renewals.length ? `
+      <p style="font-size:14px;font-weight:800;color:#b45309;margin:26px 0 8px;border-top:2px solid #fde68a;padding-top:16px">
+        ⚠ Upcoming Renewals — Due Within 30 Days (${renewals.length})
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+        <tr>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')}">Project</th>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')}">Category</th>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')}">Item</th>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')}">Validity / Expiry Date</th>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')};text-align:center">Days Remaining</th>
+          <th style="${th.replace('#1B3A6B', '#b45309').replace('#16305a', '#92400e')}">Responsible</th>
+        </tr>
+        ${renewals.map((r, i) => `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#fffbeb'}">
+          <td style="${td}">${r.project_name || 'Head Office'}</td>
+          <td style="${td}">${r.category}</td>
+          <td style="${td}">${r.obligation_title}${r.period ? ` (${r.period})` : ''}</td>
+          <td style="${td};font-weight:700">${fmtDate(r.validity_expiry_date)}</td>
+          <td style="${td};text-align:center;font-weight:800;color:${Number(r.days_remaining) <= 7 ? '#dc2626' : '#b45309'}">${r.days_remaining}d</td>
+          <td style="${td}">${r.responsible_person || '—'}</td>
+        </tr>`).join('')}
+      </table>` : ''}
+
+      <p style="font-size:12px;color:#64748b;margin:20px 0 0">Please ensure pending amounts, penalties, damages, interest and delay days are followed up until closure, and renewals are actioned well ahead of expiry.</p>
     </td>
   </tr>
   <tr>
@@ -177,14 +226,19 @@ async function runComplianceWeeklyReport({ manual = false, recipients: recipient
   const companyRes = await query(`SELECT name FROM companies WHERE id=$1`, [companyId]);
   const companyName = companyRes.rows[0]?.name || 'BCIM';
 
-  const entries = await fetchOpenEntries(companyId);
-  const html = buildEmailHtml({ companyName, dateStr, entries });
-  const subject = `Weekly Compliance Status Report — ${dateStr}`;
+  const [entries, renewals] = await Promise.all([
+    fetchOpenEntries(companyId),
+    fetchUpcomingRenewals(companyId),
+  ]);
+  const html = buildEmailHtml({ companyName, dateStr, entries, renewals });
+  const subject = renewals.length
+    ? `Weekly Compliance Status Report — ${dateStr} (${renewals.length} renewal${renewals.length > 1 ? 's' : ''} due within 30 days)`
+    : `Weekly Compliance Status Report — ${dateStr}`;
 
   const mailResult = await sendMail({ to: recipients, subject, html }).catch(e => ({ sent: false, error: e.message }));
 
-  logger.info(`Compliance weekly report ${dateStr}: ${entries.length} open items → ${recipients.join(', ')}`);
-  return { ok: true, ran_at: new Date().toISOString(), date: dateStr, entry_count: entries.length, recipients, mail: mailResult, manual };
+  logger.info(`Compliance weekly report ${dateStr}: ${entries.length} open items, ${renewals.length} renewals due within 30d → ${recipients.join(', ')}`);
+  return { ok: true, ran_at: new Date().toISOString(), date: dateStr, entry_count: entries.length, renewal_count: renewals.length, recipients, mail: mailResult, manual };
 }
 
 function initComplianceWeeklyReport() {
