@@ -28,6 +28,17 @@ async function initConfigTable() {
 }
 runSchemaInit('compliance-report-configs-v1', initConfigTable);
 
+runSchemaInit('compliance-report-add-vijay-2026-08', async () => {
+  const exists = await query(
+    `SELECT id FROM compliance_report_configs WHERE recipients ILIKE 'vijaymurugesan@bcim.in'`
+  );
+  if (exists.rows.length) return;
+  await query(
+    `INSERT INTO compliance_report_configs (company_id, recipients, enabled) VALUES ($1,$2,true)`,
+    [DEFAULT_COMPANY_ID, 'vijaymurugesan@bcim.in']
+  );
+});
+
 function parseList(value) {
   return String(value || '').split(/[;,]/).map(v => v.trim()).filter(Boolean);
 }
