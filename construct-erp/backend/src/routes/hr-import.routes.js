@@ -764,4 +764,13 @@ runSchemaInit('hr-fix-p3-lanco-workers-category-2026-08', async () => {
   console.log(`[seed-workers] recategorized ${r.rowCount} as workman`);
 });
 
+// Bikram Ram (employee_code 214) is designated "Asst. HR/Admin" but was on
+// the generic 'employee' role with no HR admin menu access — bring his
+// role in line with his actual job, same as Sonu Kushawaha (HR & Admin
+// Officer, role='hr').
+runSchemaInit('hr-promote-bikram-ram-to-hr-2026-08', async () => {
+  const r = await query(`UPDATE users SET role='hr', updated_at=NOW() WHERE employee_code='214' AND role='employee'`);
+  console.log(`[promote-bikram] updated ${r.rowCount} row(s)`);
+});
+
 module.exports = router;
