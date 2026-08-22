@@ -3836,4 +3836,40 @@ runSchemaInit('sc-seed-p3-lanco-workers-2026-08', async () => {
   console.log(`[seed-sc-workers] created ${created}, skipped ${skipped} (of ${SC_WORKERS_2026_08.length})`);
 });
 
+// The batch above landed 323 of 332 — cross-checked source vs DB directly
+// and found exactly 5 genuinely missing (none of them logged an insert
+// error, so whatever skipped them wasn't a thrown exception); all 5 are
+// under "Dayashankar" for Tech-P3. Adding them directly rather than
+// re-diagnosing further for 5 records.
+runSchemaInit('sc-seed-p3-dayashankar-remainder-2026-08', async () => {
+  const companyRes = await query(`SELECT id FROM companies LIMIT 1`);
+  const companyId = companyRes.rows[0]?.id;
+  if (!companyId) return;
+  const proj = await query(`SELECT id FROM projects WHERE company_id=$1 AND name='Tech-P3'`, [companyId]);
+  const projectId = proj.rows[0]?.id || null;
+  const sc = await query(`SELECT id FROM sc_subcontractors WHERE company_id=$1 AND name ILIKE '%Dayashankar%' LIMIT 1`, [companyId]);
+  const scId = sc.rows[0]?.id || null;
+
+  const REMAINDER = [
+    ['Ramnath Korwa', 'Helper'],
+    ['Rabindra Korwa', 'Helper'],
+    ['Muklesh Korwa', 'Mason-Helper'],
+    ['Pramod Korwa', 'Helper'],
+    ['Suraj Mal Kumar', 'Helper'],
+  ];
+  let created = 0;
+  for (const [name, skill] of REMAINDER) {
+    const dup = await query(`SELECT id FROM sc_workers WHERE company_id=$1 AND sc_id=$2 AND worker_name=$3`, [companyId, scId, name]);
+    if (dup.rows.length) continue;
+    const worker_code = await nextWorkerCode(companyId);
+    await query(
+      `INSERT INTO sc_workers (company_id, project_id, sc_id, worker_code, worker_name, skill_type, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'active')`,
+      [companyId, projectId, scId, worker_code, name, skill]
+    );
+    created++;
+  }
+  console.log(`[seed-sc-workers-remainder] created ${created} of ${REMAINDER.length}`);
+});
+
 module.exports = router;
