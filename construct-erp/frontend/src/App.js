@@ -514,6 +514,10 @@ function getHomeRoute(user) {
   const role = String(user.role || '').toLowerCase();
   // Individual landing overrides (curated quick-access nav, dashboard hidden from menu)
   if (String(user.email || '').toLowerCase() === 'murugesan@bcim.in') return '/procurement/po';
+  // Sonu Kushawaha, Bikram Ram, Yuvraj Kumar — restricted HR & Admin access
+  // (attendance/reports/import only, no employee master data). HR Dashboard
+  // isn't relevant to their job, so land them on Attendance Dashboard instead.
+  if (['211', '214', '3250013'].includes(String(user.employee_code || ''))) return '/hr-admin/attendance/dashboard';
   // Stores-specific roles → direct to their section
   if (role === 'security_guard') return '/stores/ign';
   if (role === 'store_keeper')   return '/stores';
