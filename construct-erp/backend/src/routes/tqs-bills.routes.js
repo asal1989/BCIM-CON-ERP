@@ -1301,7 +1301,10 @@ router.get('/deduction-register', async (req, res) => {
     const { project_id, vendor_id, from_date, to_date } = req.query;
     const params = [req.user.company_id];
     let idx = 2;
-    const conds = [`b.company_id = $1`, `b.is_deleted = FALSE`];
+    // Rejected bills carry no real liability and are excluded from every
+    // other liability/outstanding query in this file (see ap-aging,
+    // liability register, etc.) - this query was missing the same guard.
+    const conds = [`b.company_id = $1`, `b.is_deleted = FALSE`, `b.workflow_status NOT IN ('rejected')`];
 
     applyProjectScope(req, conds, params, 'b', project_id);
     idx = params.length + 1;
