@@ -658,35 +658,28 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
       const res = await vendorAPI.create({ name });
       const newVendor = res.data?.data || res.data;
       await queryClient.invalidateQueries({ queryKey: ['vendors'] });
-      if (newVendor?.id) f('vendor_id', newVendor.id);
+      if (newVendor?.id) {
+        f('vendor_id', newVendor.id);
+        // Keep project_vendors in sync for anything else that still reads
+        // it (reporting, other screens) — this screen itself no longer
+        // needs the mapping to let the vendor be selected.
+        if (form.project_id) {
+          vendorAPI.mapToProject({ project_id: form.project_id, vendor_ids: [newVendor.id] }).catch(() => {});
+        }
+      }
       toast.success(`Vendor "${name}" added`);
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Failed to add vendor');
     }
   };
 
-  // Contractors mapped to the selected project — restricts the vendor dropdown
-  // so users only pick contractors approved for that project.
-  const { data: projectVendors } = useQuery({
-    queryKey: ['project-vendors-for-wo', form.project_id],
-    queryFn: () => vendorAPI.projectMap({ project_id: form.project_id }).then(r => r.data?.data || []),
-    enabled: !!form.project_id,
-  });
-  let vendorOptions = form.project_id && projectVendors?.length ? projectVendors : (vendors || []);
-  // Always keep the WO's original vendor selectable, even if not mapped, so
-  // editing an older WO never hides its current contractor.
-  if (editingWO?.vendor_id && !vendorOptions.some(v => String(v.id) === String(editingWO.vendor_id))) {
-    const original = (vendors || []).find(v => String(v.id) === String(editingWO.vendor_id));
-    if (original) vendorOptions = [...vendorOptions, original];
-  }
-
-  // Clear the chosen contractor if it isn't valid for a newly-selected project.
-  useEffect(() => {
-    if (form.project_id && form.vendor_id && String(form.vendor_id) !== String(editingWO?.vendor_id || '')
-        && projectVendors?.length && !projectVendors.some(v => String(v.id) === String(form.vendor_id))) {
-      setForm(p => ({ ...p, vendor_id: '' }));
-    }
-  }, [form.project_id, projectVendors]);
+  // Previously restricted to only vendors explicitly "mapped" to the
+  // selected project (project_vendors) — a real, active vendor with no
+  // mapping (e.g. never billed against that project before) would silently
+  // vanish from this dropdown with no way to add it from here. Always show
+  // every active vendor now; project_vendors stays available for reporting
+  // but no longer gates who's selectable.
+  const vendorOptions = vendors || [];
 
   const vendor = (vendors || []).find(v => String(v.id) === String(form.vendor_id));
   const project = (projects || []).find(p => String(p.id) === String(form.project_id));
