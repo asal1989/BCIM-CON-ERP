@@ -1,1 +1,0 @@
-const e=["Sub Con","Supervision","Concrete Material","Steel","Blocks","Cement","Sand","Materials / Consumables","Safety Items","Testing","Debris Disposal","Equipment & Rentals","Power & Water","Overhead","Profit","Contingency"];export{e as B};
