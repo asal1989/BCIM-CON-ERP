@@ -749,4 +749,19 @@ runSchemaInit('hr-seed-bcim-p3-lanco-workers-2026-08', async () => {
   console.log(`[seed-workers] created ${created}, skipped ${skipped} (of ${BCIM_MISSING_WORKERS_2026_08.length})`);
 });
 
+// These 44 defaulted to employee_category='staff' (the import logic's
+// fallback when no Category column is present in the source sheet) — but
+// the source file is literally titled "Active workers list" and every role
+// on it (Camp Cleaner, Security Guard, drivers, helpers, fitters,
+// carpenters, etc.) is workman-type site labour, not office staff.
+runSchemaInit('hr-fix-p3-lanco-workers-category-2026-08', async () => {
+  const codes = BCIM_MISSING_WORKERS_2026_08.map(w => w.emp_code);
+  const r = await query(
+    `UPDATE employee_profiles ep SET employee_category='workman'
+     FROM users u WHERE ep.user_id = u.id AND u.employee_code = ANY($1)`,
+    [codes]
+  );
+  console.log(`[seed-workers] recategorized ${r.rowCount} as workman`);
+});
+
 module.exports = router;
