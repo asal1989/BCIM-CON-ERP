@@ -773,4 +773,41 @@ runSchemaInit('hr-promote-bikram-ram-to-hr-2026-08', async () => {
   console.log(`[promote-bikram] updated ${r.rowCount} row(s)`);
 });
 
+// Give Bikram Ram and Sonu Kushawaha the same restricted HR & Admin menu
+// as Yuvraj Kumar (attendance/reports/import — no employee master data,
+// payroll, compliance, etc.), and scope both to just Tech-P3 and
+// LANCO Hills - LH 10 via project_members (project-level access is driven
+// by that table, not a column on users — see middleware/projectScope.js).
+runSchemaInit('hr-clone-yuvraj-access-to-bikram-sonu-2026-08', async () => {
+  const YUVRAJ_MENUS = {
+    'HR & Admin': [
+      '/ess', '/hr-admin/documents', '/hr-admin/attendance', '/hr-admin/attendance/dashboard',
+      '/hr-admin/attendance/biometric', '/hr-admin/attendance/regularization', '/hr-admin/attendance/timesheet',
+      '/hr-admin/shifts', '/hr-admin/reports', '/hr-admin/reports/daily-attendance',
+      '/hr-admin/reports/monthly-status', '/hr-admin/reports/yearly-summary', '/hr-admin/reports/attendance-summary',
+      '/hr-admin/reports/leave-summary', '/hr-admin/reports/manpower', '/hr-admin/reports/employee-details',
+      '/hr-admin/reports/shift-schedule', '/hr-admin/reports/department-summary', '/hr-admin/reports/log-records',
+      '/hr-admin/reports/random-check', '/hr-admin/import',
+    ],
+  };
+
+  const usersRes = await query(`SELECT id, employee_code, name, company_id FROM users WHERE employee_code IN ('211','214')`);
+  const projRes = await query(`SELECT id, name, company_id FROM projects WHERE name IN ('Tech-P3','LANCO Hills - LH 10')`);
+
+  for (const u of usersRes.rows) {
+    await query(
+      `UPDATE users SET accessible_modules=$1, accessible_menus=$2, updated_at=NOW() WHERE id=$3`,
+      [['HR & Admin'], JSON.stringify(YUVRAJ_MENUS), u.id]
+    );
+
+    const myProjects = projRes.rows.filter(p => p.company_id === u.company_id);
+    for (const p of myProjects) {
+      const exists = await query(`SELECT id FROM project_members WHERE project_id=$1 AND user_id=$2`, [p.id, u.id]);
+      if (exists.rows.length) continue;
+      await query(`INSERT INTO project_members (project_id, user_id, role) VALUES ($1,$2,'member')`, [p.id, u.id]);
+    }
+    console.log(`[clone-yuvraj-access] ${u.name} (${u.employee_code}): menus cloned, mapped to ${myProjects.length} project(s)`);
+  }
+});
+
 module.exports = router;
