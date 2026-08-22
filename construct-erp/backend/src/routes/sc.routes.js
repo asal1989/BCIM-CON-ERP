@@ -3813,14 +3813,25 @@ runSchemaInit('sc-seed-p3-lanco-workers-2026-08', async () => {
     );
     if (dup.rows.length) { skipped++; continue; }
 
-    const worker_code = await nextWorkerCode(companyId);
-    await query(
-      `INSERT INTO sc_workers
-         (company_id, project_id, sc_id, worker_code, worker_name, skill_type, essl_emp_code, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'active')`,
-      [companyId, projectId, scId, worker_code, w.name, w.designation || 'Unskilled', w.emp_id || null]
-    );
-    created++;
+    // essl_emp_code carries a unique constraint per company (it's meant to
+    // link to a real biometric device code) — this sheet's "Emp ID" column
+    // isn't guaranteed unique/non-blank across 332 rows and isn't actually
+    // an ESSL code, so leaving it null avoids collisions entirely; per-row
+    // try/catch means one bad row can no longer abort the whole batch like
+    // it did the first time (49 of 332 got created before that happened).
+    try {
+      const worker_code = await nextWorkerCode(companyId);
+      await query(
+        `INSERT INTO sc_workers
+           (company_id, project_id, sc_id, worker_code, worker_name, skill_type, status)
+         VALUES ($1,$2,$3,$4,$5,$6,'active')`,
+        [companyId, projectId, scId, worker_code, w.name, w.designation || 'Unskilled']
+      );
+      created++;
+    } catch (e) {
+      console.error(`[seed-sc-workers] failed for ${w.name} (${w.con_name}):`, e.message);
+      skipped++;
+    }
   }
   console.log(`[seed-sc-workers] created ${created}, skipped ${skipped} (of ${SC_WORKERS_2026_08.length})`);
 });
