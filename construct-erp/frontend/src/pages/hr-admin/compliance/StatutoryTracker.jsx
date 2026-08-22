@@ -356,11 +356,17 @@ export default function StatutoryTracker() {
   const { data: categories } = useQuery({ queryKey: ['ct-categories'], queryFn: () => complianceTrackerAPI.categories().then(r => r.data.data) });
   const { data: projects } = useQuery({ queryKey: ['ct-projects'], queryFn: () => projectAPI.list().then(r => r.data?.data || []) });
   const { data: summary } = useQuery({ queryKey: ['ct-summary'], queryFn: () => complianceTrackerAPI.summary().then(r => r.data.data) });
-  const { data: obligations } = useQuery({ queryKey: ['ct-obligations'], queryFn: () => complianceTrackerAPI.obligations().then(r => r.data.data) });
+  // 'ALL' is an explicit sentinel, not just an absent param — the axios
+  // interceptor auto-injects the globally-selected project onto any request
+  // with no project_id, which was silently defeating this page's own "All
+  // Projects + HO" filter (and the obligations call wasn't even passing the
+  // filter at all). See matching comment server-side in compliance-tracker
+  // routes.
+  const { data: obligations } = useQuery({ queryKey: ['ct-obligations', projectFilter], queryFn: () => complianceTrackerAPI.obligations({ project_id: projectFilter || 'ALL' }).then(r => r.data.data) });
   const { data: configs } = useQuery({ queryKey: ['ct-report-config'], queryFn: () => complianceTrackerAPI.reportConfig().then(r => r.data.data) });
   const { data: entries, isLoading } = useQuery({
     queryKey: ['ct-entries', projectFilter, statusFilter],
-    queryFn: () => complianceTrackerAPI.entries({ project_id: projectFilter || undefined, status: statusFilter || undefined }).then(r => r.data.data),
+    queryFn: () => complianceTrackerAPI.entries({ project_id: projectFilter || 'ALL', status: statusFilter || undefined }).then(r => r.data.data),
   });
 
   const refreshAll = () => {

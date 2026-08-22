@@ -32,6 +32,15 @@ const PROJECT_INJECT_SKIP = [
   // is the common case. The page/modal already send project_id/project_ids
   // explicitly when a project-scoped view is actually wanted.
   /\/tqs\/transmittals/,
+  // Statutory Compliance Tracker items can belong to a specific project OR
+  // Head Office (project_id NULL) OR be viewed across "All Projects + HO" —
+  // it always sends its own explicit project_id (a real UUID, 'HO', or the
+  // 'ALL' sentinel). Auto-injection here silently broke both directions:
+  // reading with "All Projects + HO" selected actually only returned the
+  // globally-selected project's items, and creating a new Head Office item
+  // (project_id: null) got silently reassigned to whatever project was
+  // globally selected, since `null == null` still triggers the injection.
+  /\/compliance-tracker/,
 ];
 
 function shouldInjectProject(url) {

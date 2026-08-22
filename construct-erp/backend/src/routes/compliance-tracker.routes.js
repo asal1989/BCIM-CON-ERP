@@ -361,8 +361,13 @@ router.get('/obligations', async (req, res) => {
     const { project_id } = req.query;
     const params = [req.user.company_id];
     let where = 'o.company_id = $1 AND o.active = TRUE';
+    // 'ALL' is an explicit "don't scope to a single project" signal from the
+    // frontend, needed because the axios interceptor auto-injects the
+    // globally-selected project_id onto any request missing one - without
+    // this, the page's own "All Projects + HO" filter was silently
+    // overridden and could never actually show every project's items.
     if (project_id === 'HO') { where += ' AND o.project_id IS NULL'; }
-    else if (project_id) { params.push(project_id); where += ` AND o.project_id = $${params.length}`; }
+    else if (project_id && project_id !== 'ALL') { params.push(project_id); where += ` AND o.project_id = $${params.length}`; }
     const { rows } = await query(
       `SELECT o.*, p.name AS project_name
        FROM compliance_obligations o
@@ -435,8 +440,9 @@ router.get('/entries', async (req, res) => {
     const { project_id, status, category } = req.query;
     const params = [req.user.company_id];
     let where = 'e.company_id = $1';
+    // See matching comment in GET /obligations above re: 'ALL' sentinel.
     if (project_id === 'HO') where += ' AND o.project_id IS NULL';
-    else if (project_id) { params.push(project_id); where += ` AND o.project_id = $${params.length}`; }
+    else if (project_id && project_id !== 'ALL') { params.push(project_id); where += ` AND o.project_id = $${params.length}`; }
     // Filters against the live-computed status below, not the possibly-stale
     // stored column — otherwise an "Overdue" filter would miss anything that
     // passed its due date without ever being re-saved.
