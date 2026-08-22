@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import {
   Users, Plus, X, Phone, Mail, Star, MapPin, CreditCard,
   Shield, Search, Building2, ChevronDown, ChevronUp,
-  Banknote, FileText, Filter, FolderOpen, ShoppingCart, Wrench
+  Banknote, FileText, Filter, FolderOpen, ShoppingCart, Wrench, Trash2
 } from 'lucide-react';
 import { vendorAPI, projectAPI, default as api } from '../../api/client';
 import toast from 'react-hot-toast';
@@ -381,6 +381,26 @@ export default function VendorList() {
     onError: () => toast.error('Delete failed'),
   });
 
+  // Bulk delete — same soft-delete endpoint as the per-row action, run
+  // sequentially so a partial failure doesn't stop the rest, then report
+  // how many actually succeeded.
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const bulkDeleteMut = useMutation({
+    mutationFn: async (ids) => {
+      const results = await Promise.allSettled(ids.map(id => api.delete(`/vendors/${id}`)));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      return { total: ids.length, failed };
+    },
+    onSuccess: ({ total, failed }) => {
+      setBulkConfirm(false);
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ['vendors'] });
+      if (failed) toast.error(`Removed ${total - failed} of ${total} — ${failed} failed`);
+      else toast.success(`${total} vendor${total > 1 ? 's' : ''} removed`);
+    },
+  });
+
   const importMut = useMutation({
     mutationFn: file => { const fd = new FormData(); fd.append('file', file); return vendorAPI.import(fd); },
     onSuccess: res => { toast.success(res.data.message || 'Import complete'); qc.invalidateQueries({ queryKey: ['vendors'] }); },
@@ -392,6 +412,14 @@ export default function VendorList() {
     if (filterType !== 'all' && normalizeType(v.vendor_type) !== normalizeType(filterType)) return false;
     if (search && !`${v.name} ${v.vendor_code} ${v.city} ${v.contact_person}`.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
+  });
+
+  const allVisibleSelected = vendors.length > 0 && vendors.every(v => selectedIds.has(v.id));
+  const toggleSelectAll = () => setSelectedIds(allVisibleSelected ? new Set() : new Set(vendors.map(v => v.id)));
+  const toggleSelectOne = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
   });
 
   // One count per canonical type, so the tiles always add up to Total.
@@ -540,8 +568,35 @@ export default function VendorList() {
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              {selectedIds.size > 0 && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-red-50 border-b border-red-100">
+                  <span className="text-xs font-semibold text-red-700">{selectedIds.size} selected</span>
+                  {bulkConfirm ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-red-700">Delete {selectedIds.size} vendor{selectedIds.size > 1 ? 's' : ''}?</span>
+                      <button onClick={() => bulkDeleteMut.mutate([...selectedIds])} disabled={bulkDeleteMut.isPending}
+                        className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-500 font-semibold disabled:opacity-50">
+                        {bulkDeleteMut.isPending ? 'Removing…' : 'Yes, delete'}
+                      </button>
+                      <button onClick={() => setBulkConfirm(false)} className="text-xs px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 font-semibold">Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setSelectedIds(new Set())} className="text-xs px-3 py-1.5 text-slate-500 hover:text-slate-700 font-medium">Clear</button>
+                      <button onClick={() => setBulkConfirm(true)}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-500 font-semibold">
+                        <Trash2 size={13} /> Delete Selected
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
-                <div className="col-span-4">Vendor</div>
+                <div className="col-span-1 flex items-center">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-red-600 focus:ring-red-500" title="Select all" />
+                </div>
+                <div className="col-span-3">Vendor</div>
                 <div className="col-span-2">Type</div>
                 <div className="col-span-2">GSTIN</div>
                 <div className="col-span-1 text-center">Credit</div>
@@ -560,7 +615,11 @@ export default function VendorList() {
                         className="grid grid-cols-12 gap-3 px-4 py-3.5 items-center hover:bg-slate-50 transition-colors cursor-pointer group"
                         onClick={() => setExpanded(isOpen ? null : v.id)}
                       >
-                        <div className="col-span-4 flex items-center gap-3 min-w-0">
+                        <div className="col-span-1 flex items-center" onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" checked={selectedIds.has(v.id)} onChange={() => toggleSelectOne(v.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                        </div>
+                        <div className="col-span-3 flex items-center gap-3 min-w-0">
                           <div className={clsx('w-2 h-2 rounded-full shrink-0', vt.dot)} />
                           <div className="min-w-0">
                             <div className="text-sm font-medium text-slate-900 truncate">{(v.name || '').toUpperCase()}</div>
