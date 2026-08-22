@@ -7,6 +7,7 @@ const { parse } = require('csv-parse');
 const XLSX     = require('xlsx');
 const { query, pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { runSchemaInit } = require('../utils/schemaInit');
 
 const router = express.Router();
 router.use(authenticate);
@@ -646,6 +647,106 @@ router.post('/dedup-execute', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── One-time: seed the 44 BCIM-direct staff from "P3 Active workers list" /
+// "Lanco Active workers list" who were missing from HR & Admin, cross-checked
+// against the existing employee_code/name records (only 1 of 45 already
+// existed — Samala Venkatesh). Uses the exact same create-path logic as the
+// bulk-import endpoint above (placeholder @hr.local email + bcrypt(empCode)
+// password, no welcome email — this path never sends one, unlike the
+// single-employee-creation UI flow), so this is safe to run unattended.
+const BCIM_MISSING_WORKERS_2026_08 = [
+  {"emp_code":"18016","name":"Renjarla Peda Narasaiah","designation":"Asst. QC","project":"Tech-P3"},
+  {"emp_code":"1191472","name":"Md Ajijur Rahaman","designation":"P&M Charghend","project":"Tech-P3"},
+  {"emp_code":"1201752","name":"Pankaj Kumar Thakur","designation":"Store Asst.","project":"Tech-P3"},
+  {"emp_code":"1212066","name":"Indal Raut","designation":"Camp Cleaner","project":"Tech-P3"},
+  {"emp_code":"1222193","name":"Muthyala Devendar","designation":"Store Asst.","project":"Tech-P3"},
+  {"emp_code":"1222212","name":"Lankadasari Gangarajam","designation":"Camp Cleaner","project":"Tech-P3"},
+  {"emp_code":"1222259","name":"Syed Akber","designation":"Security Guard","project":"Tech-P3"},
+  {"emp_code":"1232312","name":"Bathala Srinewash","designation":"Tracktor Driver","project":"Tech-P3"},
+  {"emp_code":"1232318","name":"K Mohan Das","designation":"Qc Tech","project":"Tech-P3"},
+  {"emp_code":"1232347","name":"Nikesh Singh","designation":"JCB Driver","project":"Tech-P3"},
+  {"emp_code":"1232549","name":"Bishwajit Giri","designation":"Charghend","project":"Tech-P3"},
+  {"emp_code":"1232589","name":"Sultan Ahmed","designation":"Plant Helper","project":"Tech-P3"},
+  {"emp_code":"1242596","name":"Pintu kumar","designation":"Qc Helper","project":"Tech-P3"},
+  {"emp_code":"1242668","name":"Gulab Singh","designation":"Cook","project":"Tech-P3"},
+  {"emp_code":"1242681","name":"Munakala Rama Rao","designation":"Plant Mechanic","project":"Tech-P3"},
+  {"emp_code":"1242699","name":"Pradip Paswan","designation":"Welder","project":"Tech-P3"},
+  {"emp_code":"1242700","name":"Narendra Mali","designation":"Asst Cook","project":"Tech-P3"},
+  {"emp_code":"1252726","name":"Shambhu vishwakarma","designation":"TC.Operator","project":"Tech-P3"},
+  {"emp_code":"1252729","name":"Rajesh Mandal","designation":"Plant Helper","project":"Tech-P3"},
+  {"emp_code":"1252730","name":"Layek Ahmed","designation":"T M Driver","project":"Tech-P3"},
+  {"emp_code":"1252739","name":"Poovarasan K","designation":"Charghend","project":"Tech-P3"},
+  {"emp_code":"1252740","name":"Avijit Debnath","designation":"Time Keeper","project":"Tech-P3"},
+  {"emp_code":"1252745","name":"Vijay Kumar Mandal","designation":"P&M Helper","project":"Tech-P3"},
+  {"emp_code":"1252746","name":"Karan Kumar Mandal","designation":"Plant Helper","project":"Tech-P3"},
+  {"emp_code":"1252750","name":"Bhim Yadav","designation":"Electrician","project":"Tech-P3"},
+  {"emp_code":"1252759","name":"Deebakar Pradhan","designation":"Charghend","project":"Tech-P3"},
+  {"emp_code":"1252771","name":"Soumya Ranjan Mallick","designation":"Safety Steward","project":"Tech-P3"},
+  {"emp_code":"1252776","name":"Manas Pradhan","designation":"Store Helper","project":"Tech-P3"},
+  {"emp_code":"1252779","name":"Ashok Ch. Mandal","designation":"T M Driver","project":"Tech-P3"},
+  {"emp_code":"1252782","name":"Vinay Prasad","designation":"Electrician","project":"Tech-P3"},
+  {"emp_code":"1252788","name":"Nanda Maity","designation":"Store Helper","project":"Tech-P3"},
+  {"emp_code":"1252793","name":"Shatrudhan Kumar","designation":"JCB Driver","project":"Tech-P3"},
+  {"emp_code":"1262803","name":"Anil Yadav","designation":"Carpenter","project":"Tech-P3"},
+  {"emp_code":"1262804","name":"Vinay Yadav","designation":"Carpenter","project":"Tech-P3"},
+  {"emp_code":"1262805","name":"Mahendra Chaudhary","designation":"Steel Fitter","project":"Tech-P3"},
+  {"emp_code":"1262806","name":"Rosane Kumar","designation":"Carpenter","project":"Tech-P3"},
+  {"emp_code":"1262807","name":"Amit Kumar","designation":"Electrician","project":"Tech-P3"},
+  {"emp_code":"1262814","name":"Bhola Dom","designation":"Camp Cleaner","project":"Tech-P3"},
+  {"emp_code":"1211955","name":"Chandramani Prasad Upadhyay","designation":"Security Guard","project":"LANCO Hills - LH 10"},
+  {"emp_code":"1252763","name":"Ranjit Behera","designation":"Safety Steward","project":"LANCO Hills - LH 10"},
+  {"emp_code":"1262800","name":"Subrata Debnath","designation":"Store Asst.","project":"LANCO Hills - LH 10"},
+  {"emp_code":"1262810","name":"Md Umar","designation":"Mason","project":"LANCO Hills - LH 10"},
+  {"emp_code":"1262811","name":"Sujit Kumar Malik","designation":"Engineer","project":"LANCO Hills - LH 10"},
+  {"emp_code":"1262812","name":"Atikur Rahaman","designation":"Steel Fitter","project":"LANCO Hills - LH 10"},
+];
+
+runSchemaInit('hr-seed-bcim-p3-lanco-workers-2026-08', async () => {
+  const companyRes = await query(`SELECT id FROM companies LIMIT 1`);
+  const companyId = companyRes.rows[0]?.id;
+  if (!companyId) { console.error('[seed-workers] no company found'); return; }
+
+  const projRes = await query(`SELECT id, name FROM projects WHERE company_id=$1`, [companyId]);
+  const projByName = Object.fromEntries(projRes.rows.map(r => [r.name.toLowerCase(), r.id]));
+
+  let created = 0, skipped = 0;
+  for (const w of BCIM_MISSING_WORKERS_2026_08) {
+    const existing = await query(`SELECT id FROM users WHERE employee_code=$1 AND company_id=$2`, [w.emp_code, companyId]);
+    if (existing.rows.length) { skipped++; continue; }
+
+    const projectId = projByName[w.project.toLowerCase()] || null;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const defaultPwd = await bcrypt.hash(w.emp_code, 10);
+      const userEmail = `${w.emp_code}@hr.local`;
+      const userRes = await client.query(
+        `INSERT INTO users (company_id, employee_code, name, email, role, designation, is_active, password_hash)
+         VALUES ($1,$2,$3,$4,'employee',$5,true,$6)
+         ON CONFLICT (email) DO NOTHING
+         RETURNING id`,
+        [companyId, w.emp_code, w.name, userEmail, w.designation, defaultPwd]
+      );
+      if (!userRes.rows.length) { await client.query('ROLLBACK'); skipped++; continue; }
+      const userId = userRes.rows[0].id;
+      await client.query(
+        `INSERT INTO employee_profiles
+           (user_id, company_id, employment_type, employee_category, employment_status, work_location, project_id)
+         VALUES ($1,$2,'permanent','staff','active',$3,$4)`,
+        [userId, companyId, w.project, projectId]
+      );
+      await client.query('COMMIT');
+      created++;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error(`[seed-workers] failed for ${w.emp_code} ${w.name}:`, e.message);
+    } finally {
+      client.release();
+    }
+  }
+  console.log(`[seed-workers] created ${created}, skipped ${skipped} (of ${BCIM_MISSING_WORKERS_2026_08.length})`);
 });
 
 module.exports = router;
