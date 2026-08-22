@@ -26,7 +26,11 @@ export default function SelectProjectPage() {
     setLoading(true); setError('');
     // Temporarily clear any stale selected project so this fetch is unscoped
     sessionStorage.removeItem('selectedProjectId');
-    projectAPI.list({ status: 'active' })
+    // scoped=true forces project_members-based filtering even for hr/hr_admin
+    // roles, which GET /projects otherwise treats as global (they need the
+    // full list for the Employee Edit Project Assignment dropdown) — without
+    // it, restricted HR staff saw every project here instead of just theirs.
+    projectAPI.list({ status: 'active', scoped: 'true' })
       .then(({ data }) => {
         if (!alive) return;
         const list = data?.data || data || [];
