@@ -173,17 +173,25 @@ export default function CompliancePage() {
             <p className="text-sm text-slate-500 mt-0.5">Monitor statutory compliance, licenses, employee obligations, and legal requirements.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
-          <button onClick={exportReport}
-            className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-2 transition-colors">
-            <Download className="w-4 h-4" /> Export Report
-          </button>
-          <button onClick={() => { setEditItem(null); setFormOpen(true); }}
-            className="h-10 px-5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 transition-transform active:scale-[0.98]"
-            style={{ background: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,.30)' }}>
-            <Plus className="w-4 h-4" /> Add Compliance
-          </button>
-        </div>
+        {/* These act on the Dashboard tab's own legacy compliance items — hidden
+            on the other tabs so their own "+ Compliance Item"/"+ Entry" buttons
+            aren't shadowed by a second "Add" button that opens the wrong form
+            (confirmed real user confusion: no "Rental Agreements" category in
+            this dialog, because it's the old License/Legal/Audit/Insurance/
+            Vendor/Welfare form, not the Statutory Tracker's 11-category one). */}
+        {tab === 'dashboard' && (
+          <div className="flex items-center gap-2.5">
+            <button onClick={exportReport}
+              className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-2 transition-colors">
+              <Download className="w-4 h-4" /> Export Report
+            </button>
+            <button onClick={() => { setEditItem(null); setFormOpen(true); }}
+              className="h-10 px-5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 transition-transform active:scale-[0.98]"
+              style={{ background: '#2563EB', boxShadow: '0 4px 14px rgba(37,99,235,.30)' }}>
+              <Plus className="w-4 h-4" /> Add Compliance
+            </button>
+          </div>
+        )}
       </motion.div>
 
       {/* ── Tabs ── */}
@@ -201,13 +209,12 @@ export default function CompliancePage() {
         ))}
       </div>
 
-      {/* ── KPI cards (shared across tabs) ── */}
-      <div className="mb-4">
-        <ComplianceKpiCards stats={stats} />
-      </div>
-
       {tab === 'dashboard' ? (
         <>
+          {/* ── KPI cards (legacy dashboard items only) ── */}
+          <div className="mb-4">
+            <ComplianceKpiCards stats={stats} />
+          </div>
           {/* ── Filters ── */}
           <div className="mb-4">
             <ComplianceFilters onApply={setFilters} departments={departments} locations={locations} />
