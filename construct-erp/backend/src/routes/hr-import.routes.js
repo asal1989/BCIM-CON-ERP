@@ -810,4 +810,25 @@ runSchemaInit('hr-clone-yuvraj-access-to-bikram-sonu-2026-08', async () => {
   }
 });
 
+// These 5 (Ramnath Korwa, Rabindra Korwa, Muklesh Korwa, Pramod Korwa,
+// Suraj Mal Kumar - Dayashankar contractor) already existed in sc_workers
+// since 28 July 2026, but under LANCO Hills - LH 10. The source spreadsheet
+// ("P3 Active workers list.xlsx") lists them under Tech-P3, so the LANCO
+// assignment is stale - correct it to match the source of truth.
+runSchemaInit('sc-fix-dayashankar-workers-project-2026-08', async () => {
+  const NAMES = ['Ramnath Korwa', 'Rabindra Korwa', 'Muklesh Korwa', 'Pramod Korwa', 'Suraj Mal Kumar'];
+  const p3 = await query(`SELECT id, company_id FROM projects WHERE name = 'Tech-P3' LIMIT 1`);
+  if (!p3.rows.length) { console.log('[fix-dayashankar] Tech-P3 project not found, skipping'); return; }
+  const { id: p3Id, company_id: cid } = p3.rows[0];
+
+  const r = await query(
+    `UPDATE sc_workers w SET project_id=$1
+     FROM projects p
+     WHERE w.project_id = p.id AND p.name = 'LANCO Hills - LH 10'
+       AND w.company_id = $2 AND w.worker_name = ANY($3)`,
+    [p3Id, cid, NAMES]
+  );
+  console.log(`[fix-dayashankar] moved ${r.rowCount} worker(s) from LANCO to Tech-P3`);
+});
+
 module.exports = router;
